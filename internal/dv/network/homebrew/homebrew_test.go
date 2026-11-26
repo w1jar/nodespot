@@ -530,8 +530,16 @@ func TestTXCall(t *testing.T) {
 		ds := dmrdTo(m, 0)
 		return len(ds) > base && ds[len(ds)-1].DType == dtTerminator && ds[len(ds)-1].FrameTyp == ftDataSync
 	})
-	ds := dmrdTo(m, 0)[base:]
-	stream := ds[0].Stream
+	// The tune kerchunk can still be on the wire when base is read, so
+	// keep only the packets of the call's own stream (the last one).
+	all := dmrdTo(m, 0)[base:]
+	stream := all[len(all)-1].Stream
+	var ds []dmrd
+	for _, d := range all {
+		if d.Stream == stream {
+			ds = append(ds, d)
+		}
+	}
 	rx := dmr.NewRX()
 	var got []dmr.AMBE
 	voiceBursts := 0
