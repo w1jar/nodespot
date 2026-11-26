@@ -170,3 +170,29 @@ func TestModesNeedsAmbeFollowsTheCodec(t *testing.T) {
 		t.Error("codec gsm needs AMBE")
 	}
 }
+
+// Saving a new codec while the echo test is active rebuilds it on the same
+// mode, so the next recording uses the new codec, and the saved playback
+// delay survives a save that carries it along.
+func TestSaveCodecRestartsTheActiveEchoTest(t *testing.T) {
+	g := newEchoRig(t, map[string]string{"playback_delay_ms": "1500"})
+	g.sel(mode.EchoTest, nil)
+	if c := g.echo.Codec(); c != echotest.CodecPlain {
+		t.Fatalf("codec %q at the start", c)
+	}
+	vals := map[string]string{"codec": "gsm", "playback_delay_ms": "1500"}
+	if err := g.e.SaveMode(mode.EchoTest, mode.Settings{Values: vals}); err != nil {
+		t.Fatal(err)
+	}
+	if st := g.e.Status(); st.Active != mode.EchoTest {
+		t.Fatalf("active %q after the save, want the echo test", st.Active)
+	}
+	if c := g.echo.Codec(); c != echotest.CodecGSM {
+		t.Fatalf("codec %q after the save, want gsm", c)
+	}
+	for _, mi := range g.e.Modes() {
+		if mi.Name == mode.EchoTest && mi.Settings.Values["playback_delay_ms"] != "1500" {
+			t.Fatalf("saved values %v lost the playback delay", mi.Settings.Values)
+		}
+	}
+}

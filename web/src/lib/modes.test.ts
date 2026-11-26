@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { draftOf, savePayload, missingField, dirty, targetText, targetBody, favoritesOf, recentTargets, stateText, linkStatsText, sortModes, modeTitle, needsVocoder, vocoderBusy, stationValue, stationHint, notReadyText, notReadyShort } from './modes.ts';
+import { draftOf, savePayload, missingField, dirty, targetText, targetBody, favoritesOf, recentTargets, stateText, linkStatsText, sortModes, modeTitle, needsVocoder, vocoderBusy, stationValue, stationHint, notReadyText, notReadyShort, ECHO_CODECS, echoCodec, echoCodecValues } from './modes.ts';
 import type { ModeInfo, Favorite, Heard, NowCall } from './types';
 
 const bm: ModeInfo = {
@@ -224,4 +224,15 @@ test('a favorite is active when its mode is active and the target matches', () =
   assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'bm', undefined), false);
   assert.equal(favoriteActive({ mode: 'm17', target: 'M17-XXX C' }, 'm17', { id: 'M17-XXX' }), true);
   assert.equal(favoriteActive({ mode: 'ysf', target: 'ysf-test' }, 'ysf', { id: 'YSF-TEST' }), true);
+});
+
+test('echo test codec: choices, saved value and the values to save', () => {
+  assert.deepEqual(ECHO_CODECS.map((o) => o.value), ['plain', 'ambe', 'imbe', 'codec2', 'gsm', 'ulaw']);
+  assert.equal(ECHO_CODECS.find((o) => o.value === 'ulaw')?.label, 'µ-law (AllStar)');
+  const m = { name: 'echotest', title: 'Echo test', configured: true, active: false, settings: { values: { codec: 'AMBE', playback_delay_ms: '1500' } } } as ModeInfo;
+  assert.equal(echoCodec(m), 'ambe');
+  assert.equal(echoCodec(undefined), 'plain');
+  assert.equal(echoCodec({ ...m, settings: { values: { codec: 'bogus' } } }), 'plain');
+  assert.deepEqual(echoCodecValues(m, 'gsm'), { codec: 'gsm', playback_delay_ms: '1500' });
+  assert.deepEqual(echoCodecValues(undefined, 'imbe'), { codec: 'imbe' });
 });

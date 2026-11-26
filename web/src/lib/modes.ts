@@ -274,3 +274,24 @@ export function favoriteActive(f: Pick<Favorite, 'mode' | 'target'>, active: str
   return a === b || (f.mode === 'm17' && b.startsWith(a + ' '));
 }
 
+
+/** The echo test's codec choices: the stored value and the label the picker shows. */
+export const ECHO_CODECS: { value: string; label: string }[] = [
+  { value: 'plain', label: 'Plain (no codec)' },
+  { value: 'ambe', label: 'AMBE (DMR, YSF, NXDN)' },
+  { value: 'imbe', label: 'IMBE (P25)' },
+  { value: 'codec2', label: 'Codec 2 (M17)' },
+  { value: 'gsm', label: 'GSM (EchoLink)' },
+  { value: 'ulaw', label: 'µ-law (AllStar)' },
+];
+
+/** The echo test's saved codec ("plain" when none is stored or the stored one is unknown). */
+export function echoCodec(m: ModeInfo | undefined): string {
+  const c = (m?.settings?.values?.codec ?? '').trim().toLowerCase();
+  return ECHO_CODECS.some((o) => o.value === c) ? c : 'plain';
+}
+
+/** The values to save for a new echo test codec. The server replaces a mode's values, so the stored ones (the playback delay) go along. */
+export function echoCodecValues(m: ModeInfo | undefined, codec: string): Record<string, string> {
+  return { ...(m?.settings?.values ?? {}), codec };
+}

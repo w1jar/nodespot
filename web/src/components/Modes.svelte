@@ -9,7 +9,7 @@
   import {
     CONFIRM_MS, defaultFavName, favoriteActive, favoriteBlock, favoritesInOrder, findFavorite, hasTarget, linkStatsText, m17Split, modeChip, modeTitle, movedIds,
     needsVocoder, notReadyShort, pendingOutcome, pickerKind, recentTargets, M17_MODULES, sortModes, stateText, targetBody, targetPlaceholder, targetText, targetValue,
-    validFavName, vocoderBusy, targetLabel,
+    validFavName, vocoderBusy, targetLabel, ECHO_CODECS, echoCodec, echoCodecValues,
   } from '../lib/modes';
   import type { Pending } from '../lib/modes';
   import type { Favorite, HostItem, HostList, NodeInfo, Vocoder } from '../lib/types';
@@ -131,6 +131,20 @@
   $effect(() => { if (!app.modes.length) refreshModes().catch(() => {}); });
 
   let voc = $state<Vocoder | null>(null);
+  // ---- The echo test's codec: saved at once, used by the next recording (the node restarts the echo test on a save).
+  let codecBusy = $state(false);
+  const codec = $derived(echoCodec(info));
+  const ambeNote = $derived(admin && sel === 'echotest' && codec === 'ambe' && needsVocoder(info, voc));
+  async function setCodec(ev: Event) {
+    const el = ev.currentTarget as HTMLSelectElement, v = el.value;
+    if (codecBusy || v === codec) return;
+    codecBusy = true;
+    try {
+      await api.saveMode('echotest', { values: echoCodecValues(info, v) });
+      await refreshModes();
+      toast(`Echo test codec: ${ECHO_CODECS.find((o) => o.value === v)?.label ?? v}. The next recording uses it.`);
+    } catch (e) { el.value = codec; toastError(e); } finally { codecBusy = false; }
+  }
   // ---- The settings section: collapsible; a mode that is not ready opens it.
   let openFor = $state<Record<string, boolean>>({});
   const vocNeeded = $derived(admin && needsVocoder(info, voc));
@@ -201,6 +215,20 @@
             </span>
           {/if}
         </div>
+
+        {#if sel === 'echotest' && admin}
+          <div class="space-y-1.5" data-testid="echo-codec">
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="label !mb-0" for="echo-codec">Codec</label>
+              <select id="echo-codec" class="input !min-h-9 !w-auto min-w-0 max-w-full py-1" value={codec} disabled={codecBusy} onchange={setCodec}>
+                {#each ECHO_CODECS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+              </select>
+            </div>
+            {#if ambeNote}
+              <p class="text-xs text-warn" role="status" data-testid="echo-ambe-note">The AMBE codec needs the md380-emu vocoder. Until it is installed the playback is not coded. Install it in the <a class="underline hover:no-underline" href="#/modes?mode=dmr">DMR settings</a>.</p>
+            {/if}
+          </div>
+        {/if}
 
         {#if !info.configured}
           <p class="text-sm text-muted" data-testid="not-ready-line">{#if admin}This mode is not ready. Open its settings below.{:else}This mode is not set up yet. Ask an administrator.{/if}</p>
@@ -319,7 +347,7 @@
         {/if}
 
         <!-- The mode's settings, inline. Administrators only; a mode that is not ready opens them. -->
-        {#if admin}
+        {#if admin && sel !== 'echotest'}
           <div class="rounded-md border border-line" data-testid="settings-section">
             <button type="button" class="flex min-h-10 w-full items-center gap-2 px-3 text-left text-sm font-medium" aria-expanded={settingsOpen} aria-controls="mode-settings" onclick={() => (openFor[sel] = !settingsOpen)}>
               {#if settingsOpen}<ChevronDown size={16} aria-hidden="true" />{:else}<ChevronRight size={16} aria-hidden="true" />{/if}

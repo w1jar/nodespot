@@ -6,6 +6,7 @@ Release notes are taken from the section of the tag being released
 ## [0.0.1] - 2026-11-27
 
 ### Changed
+- Modes > Echo test: the Codec picker is now in the echo test card, with readable names (Plain, AMBE, IMBE, Codec 2, GSM, µ-law). It saves at once and the next recording uses it. With AMBE picked and no md380-emu vocoder, the card says so and links to the DMR settings, where the vocoder is installed. The echo test has no settings section any more; the playback delay stays at its saved value (default 1000 ms) and `playback_delay_ms` is still accepted by the API.
 - Settings > Modes is gone. `/settings/modes` redirects to `/modes`, `/settings/modes/<mode>` to `/modes?mode=<mode>` and `/settings/modes/lookup` to Settings > Station > Caller lookup. Station, Radio and the other settings stay.
 - The project is renamed from aslcp to nodespot (new repository https://github.com/w1jar/nodespot; the old one, https://github.com/w1jar/aslcp, is archived at 2.4). Packages, services, users, paths (`/etc/nodespot`, `/var/lib/nodespot`, `/run/nodespot-node`), environment variables (`NODESPOT_*`), the apt repository (https://w1jar.github.io/nodespot) and its signing key are all new. There is no upgrade path from aslcp: install nodespot fresh. This is the first nodespot release.
 - The first-run setup asks only for the station, the radio interface and the optional DMR and NXDN IDs. Modes are set up later on the Modes page.
