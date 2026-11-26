@@ -172,6 +172,42 @@ func TestControlOps(t *testing.T) {
 	}
 }
 
+// TestSaveModeClear checks that a save can delete one stored password, that
+// the rest of the settings stay, and that bad keys are refused.
+func TestSaveModeClear(t *testing.T) {
+	g, s, _ := ctlRig(t)
+	save := func(st mode.Settings) Response {
+		return do(t, s, OpSaveMode, map[string]any{"mode": mode.AllStar, "settings": st})
+	}
+	if r := save(mode.Settings{Values: map[string]string{"node": "1999", "password": "hunter2"}}); !r.OK {
+		t.Fatal(r.Error)
+	}
+	for _, bad := range []mode.Settings{
+		{Clear: []string{"node"}},
+		{Clear: []string{"nope"}},
+		{Values: map[string]string{"password": "x"}, Clear: []string{"password"}},
+	} {
+		if r := save(bad); r.OK {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+	if v := g.e.Config().Modes[mode.AllStar].Values["password"]; v != "hunter2" {
+		t.Fatalf("a refused save changed the password: %q", v)
+	}
+	if r := save(mode.Settings{Clear: []string{"password"}}); !r.OK {
+		t.Fatal(r.Error)
+	}
+	cur := g.e.Config().Modes[mode.AllStar]
+	if _, ok := cur.Values["password"]; ok || cur.Values["node"] != "1999" || cur.Clear != nil {
+		t.Fatalf("after clear: %+v", cur)
+	}
+	for _, m := range g.e.Modes() {
+		if m.Name == mode.AllStar && (m.SecretsSet["password"] || !m.Saved) {
+			t.Fatalf("after clear: %+v", m)
+		}
+	}
+}
+
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
 	b, err := json.Marshal(v)

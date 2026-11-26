@@ -7,6 +7,7 @@
   import { draftOf, missingField, savePayload, dirty, modeTitle, notReadyText, needsVocoder, vocoderBusy, type StationValues } from '../lib/modes';
   import type { ModeInfo, Vocoder } from '../lib/types';
   import ModeFields from './ModeFields.svelte';
+  import Confirm from './Confirm.svelte';
 
   let { info, vocoder = null, onvocoder }: { info: ModeInfo; vocoder?: Vocoder | null; onvocoder?: (v: Vocoder) => void } = $props();
   const mode = $derived(info.name);
@@ -15,6 +16,8 @@
   $effect(() => { api.station().then((s) => { ids = { callsign: s.callsign, dmrId: s.dmrId, nxdnId: s.nxdnId }; }).catch(() => { /* the node checks */ }); });
   let err = $state(''), busy = $state(false), seen = '';
   $effect(() => { if (seen !== info.name) { seen = info.name; draft = draftOf(info); err = ''; } });
+
+  const hasSaved = $derived(info.saved ?? info.configured);
 
   async function save(ev: Event) {
     ev.preventDefault();
@@ -30,6 +33,18 @@
       toast(`${modeTitle(mode, app.modes)} saved`);
     } catch (e) { toastError(e); } finally { busy = false; }
   }
+  // Delete one saved password; every other setting, and anything typed but not saved, stays.
+  async function clearSecret(key: string) {
+    busy = true;
+    try {
+      await api.saveMode(mode, { clear: [key] });
+      await refreshModes();
+      draft[key] = '';
+      toast('Password cleared');
+    } catch (e) { toastError(e); } finally { busy = false; }
+  }
+  let clearAll = $state(false);
+  // The node drops an active mode before it forgets the settings (and the remembered target).
   async function clear() {
     busy = true;
     try {
@@ -65,12 +80,13 @@
     <p class="text-sm text-muted">This mode has no settings.</p>
   {:else}
     <form class="space-y-3" onsubmit={save}>
-      <ModeFields mode={info} bind:draft idPrefix="mp" />
+      <ModeFields mode={info} bind:draft idPrefix="mp" {busy} onclear={clearSecret} />
       {#if err}<p class="text-sm text-danger" role="alert">{err}</p>{/if}
       <div class="flex flex-wrap gap-2">
         <button class="btn btn-primary" type="submit" disabled={busy || !dirty(info, draft)}>{busy ? 'Saving…' : 'Save'}</button>
-        {#if info.saved ?? info.configured}<button class="btn btn-bad-outline" type="button" onclick={clear} disabled={busy || info.active}>Clear settings</button>{/if}
+        <button class="btn btn-bad-outline" type="button" onclick={() => (clearAll = true)} disabled={busy || !hasSaved} title={hasSaved ? '' : 'Nothing is saved for this mode'} data-testid="clear-settings">Clear settings</button>
       </div>
     </form>
   {/if}
+  <Confirm bind:open={clearAll} title="Clear {info.title || info.name} settings?" message={info.active ? `${info.title || info.name} is active. It disconnects first, then all of its saved settings, passwords and its remembered target are removed.` : `All saved settings, passwords and the remembered target of ${info.title || info.name} are removed.`} confirmLabel="Clear settings" onconfirm={clear} />
 </div>

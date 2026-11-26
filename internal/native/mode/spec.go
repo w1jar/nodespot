@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -76,6 +77,10 @@ type Settings struct {
 	// Reflectors maps target IDs to addresses for modes that connect to a
 	// host (YSF, P25, NXDN, M17), so a target can be picked by ID alone.
 	Reflectors []Target `json:"reflectors,omitempty"`
+	// Clear names Secret fields to delete from the saved settings. It is
+	// only read by a save request (Spec.CheckClear, Spec.Merge); Merge
+	// drops it, so it is never stored.
+	Clear []string `json:"clear,omitempty"`
 }
 
 // Get returns the value of key, or def when it is unset or blank.
@@ -333,8 +338,25 @@ func (sp Spec) Redact(s Settings) (Settings, map[string]bool) {
 	return out, set
 }
 
+// CheckClear validates upd.Clear: every key must be a Secret field of the
+// spec, and upd must not set a new value for it at the same time.
+func (sp Spec) CheckClear(upd Settings) error {
+	for _, k := range upd.Clear {
+		if f, ok := sp.Field(k); !ok || !f.Secret {
+			return fmt.Errorf("%s: %q is not a saved password", sp.Title, k)
+		}
+		if strings.TrimSpace(upd.Values[k]) != "" {
+			return fmt.Errorf("%s: cannot set and clear %q in one save", sp.Title, k)
+		}
+	}
+	return nil
+}
+
 // Merge applies an update from the control API onto old: secrets left
-// blank in upd keep their old values. Favorites and Reflectors are taken
+// blank in upd keep their old values, except those named in upd.Clear
+// (checked by CheckClear; others are ignored here), which are removed. An
+// update with no values and a Clear list changes nothing else.
+// Favorites and Reflectors are taken
 // from upd when it has them (nil keeps the old list).
 func (sp Spec) Merge(old, upd Settings) Settings {
 	out := upd.Clone()
@@ -342,8 +364,17 @@ func (sp Spec) Merge(old, upd Settings) Settings {
 		out.Values = map[string]string{}
 	}
 	for _, f := range sp.Fields {
-		if f.Secret && strings.TrimSpace(out.Values[f.Key]) == "" && old.Values[f.Key] != "" {
+		if f.Secret && strings.TrimSpace(out.Values[f.Key]) == "" && old.Values[f.Key] != "" && !slices.Contains(upd.Clear, f.Key) {
 			out.Values[f.Key] = old.Values[f.Key]
+		}
+	}
+	out.Clear = nil
+	if len(upd.Values) == 0 && len(upd.Clear) > 0 {
+		// A request that only clears passwords leaves every other value as it is.
+		for k, v := range old.Values {
+			if !slices.Contains(upd.Clear, k) {
+				out.Values[k] = v
+			}
 		}
 	}
 	for k, v := range out.Values {

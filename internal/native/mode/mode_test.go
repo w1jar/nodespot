@@ -102,6 +102,40 @@ func TestRedactMerge(t *testing.T) {
 	}
 }
 
+func TestMergeClear(t *testing.T) {
+	sp := testSpec()
+	old := Settings{Values: map[string]string{"callsign": "N0CALL", "password": "hunter2", "port": "5000"}}
+	got := sp.Merge(old, Settings{Values: map[string]string{"callsign": "N1CALL"}, Clear: []string{"password"}})
+	if _, ok := got.Values["password"]; ok || got.Values["callsign"] != "N1CALL" || got.Clear != nil {
+		t.Fatalf("Merge with clear: %+v", got)
+	}
+	// A clear-only request keeps every other value.
+	if got = sp.Merge(old, Settings{Clear: []string{"password"}}); got.Values["callsign"] != "N0CALL" || got.Values["port"] != "5000" || got.Values["password"] != "" {
+		t.Fatalf("clear-only: %+v", got)
+	}
+	// Only the named secret goes; without Clear the password stays.
+	if got = sp.Merge(old, Settings{Values: map[string]string{"callsign": "N1CALL"}}); got.Values["password"] != "hunter2" {
+		t.Fatalf("Merge without clear: %+v", got)
+	}
+	tests := []struct {
+		name string
+		upd  Settings
+		ok   bool
+	}{
+		{"secret", Settings{Clear: []string{"password"}}, true},
+		{"nothing", Settings{}, true},
+		{"unknown", Settings{Clear: []string{"nope"}}, false},
+		{"not a secret", Settings{Clear: []string{"callsign"}}, false},
+		{"set and clear", Settings{Values: map[string]string{"password": "x"}, Clear: []string{"password"}}, false},
+		{"blank and clear", Settings{Values: map[string]string{"password": ""}, Clear: []string{"password"}}, true},
+	}
+	for _, tt := range tests {
+		if err := sp.CheckClear(tt.upd); (err == nil) != tt.ok {
+			t.Errorf("%s: CheckClear = %v", tt.name, err)
+		}
+	}
+}
+
 func TestSettingsHelpers(t *testing.T) {
 	s := Settings{Values: map[string]string{"n": " 12 ", "b": "true", "x": "zz"},
 		Reflectors: []Target{{ID: "Alpha", Host: "192.0.2.1", Port: 42000}}}

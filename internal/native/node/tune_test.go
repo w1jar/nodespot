@@ -35,7 +35,7 @@ func TestModesReadiness(t *testing.T) {
 	for name, want := range map[string][]string{
 		mode.EchoLink: {"password"},
 		mode.BM:       {"dmr_id", "password", "address"},
-		mode.TGIF:     {"dmr_id"},
+		mode.TGIF:     {"dmr_id", "password"},
 		mode.NXDN:     {"nxdn_id"},
 		mode.AllStar:  {"node"},
 		mode.YSF:      nil,
@@ -52,10 +52,14 @@ func TestModesReadiness(t *testing.T) {
 	c := bare()
 	c.Station.DMRID, c.Station.NXDNID = 1234567, 12345
 	g = newRig(t, c)
-	for _, name := range []string{mode.TGIF, mode.NXDN, mode.P25, mode.YSF, mode.M17, mode.EchoTest} {
+	for _, name := range []string{mode.NXDN, mode.P25, mode.YSF, mode.M17, mode.EchoTest} {
 		if mi := modeInfo(t, g, name); !mi.Configured {
 			t.Errorf("%s not ready with the station IDs: %v", name, mi.Missing)
 		}
+	}
+	// TGIF with the station DMR ID still lacks its hotspot password, until one is stored.
+	if mi := modeInfo(t, g, mode.TGIF); mi.Configured || !reflect.DeepEqual(mi.Missing, []string{"password"}) {
+		t.Errorf("tgif without a password %+v", mi)
 	}
 	if mi := modeInfo(t, g, mode.BM); mi.Configured || !reflect.DeepEqual(mi.Missing, []string{"password", "address"}) {
 		t.Errorf("bm %+v", mi)

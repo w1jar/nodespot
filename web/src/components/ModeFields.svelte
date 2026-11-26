@@ -5,7 +5,8 @@
   import { stationHint, stationValue, type StationValues } from '../lib/modes';
   import { MASTER_OTHER, masterChoice, masterLabel, masterListNote, masterPick } from '../lib/hostlists';
   import type { HostItem, ModeInfo } from '../lib/types';
-  let { mode, draft = $bindable(), idPrefix = 'mf' }: { mode: ModeInfo; draft: Record<string, string>; idPrefix?: string } = $props();
+  import Confirm from './Confirm.svelte';
+  let { mode, draft = $bindable(), idPrefix = 'mf', busy = false, onclear }: { mode: ModeInfo; draft: Record<string, string>; idPrefix?: string; busy?: boolean; onclear?: (key: string) => void } = $props();
   const fields = $derived(mode.fields ?? []);
   const basic = $derived(fields.filter((f) => !f.advanced));
   const adv = $derived(fields.filter((f) => f.advanced));
@@ -42,6 +43,9 @@
     draft[f.key] = ch.address;
     if (ch.password !== undefined) draft.password = ch.password;
   }
+  // The saved password the Clear button would delete, after the confirm dialog.
+  let clearKey = $state<string | null>(null), clearOpen = $state(false);
+  const clearLabel = $derived(fields.find((x) => x.key === clearKey)?.label ?? 'password');
   const chk = 'size-4 accent-[var(--accent)]';
 </script>
 
@@ -72,7 +76,11 @@
       {#if f.help}<p class="mt-1 text-xs text-muted">{f.help}</p>{/if}
       {#if f.hostList && lists[f.hostList] && !lists[f.hostList]?.length}<p class="mt-1 text-xs text-warn" data-testid="master-note">{masterListNote(f.hostList)}</p>{/if}
       {#if f.stationDefault}<p class="mt-1 text-xs text-muted">Leave empty to use the station value ({stationHint(f, st)}).</p>{/if}
-      {#if (f.kind === 'password' || f.secret) && mode.secretsSet?.[f.key]}<p class="mt-1 text-xs text-muted">Saved. Leave empty to keep it.</p>{/if}
+      {#if (f.kind === 'password' || f.secret) && mode.secretsSet?.[f.key]}
+        <p class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">Saved. Leave empty to keep it.
+          {#if onclear}<button type="button" class="btn btn-sm btn-bad-outline" disabled={busy} data-testid="clear-secret-{f.key}" onclick={() => { clearKey = f.key; clearOpen = true; }}>Clear</button>{/if}
+        </p>
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -86,3 +94,4 @@
     <div class="grid gap-3 p-2 sm:grid-cols-2">{#each adv as f (f.key)}{@render field(f)}{/each}</div>
   </details>
 {/if}
+<Confirm bind:open={clearOpen} title="Clear {clearLabel}?" message="The saved {clearLabel.toLowerCase()} is removed from {mode.title || mode.name}. Other settings stay. {mode.title || mode.name} will not be ready until you enter a new one." confirmLabel="Clear" onconfirm={() => { if (clearKey) onclear?.(clearKey); }} />

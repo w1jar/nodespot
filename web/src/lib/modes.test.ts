@@ -63,6 +63,7 @@ test('the not-ready text names what is missing and says login only for passwords
   assert.equal(notReadyText({ ...base, fields: [{ ...f[0], stationDefault: 'dmrId' }, f[1]], missing: ['dmrId'] }), "Set your DMR ID in Settings → Station or on this mode's page.");
   assert.equal(notReadyText({ ...base, missing: ['password'] }), 'BrandMeister needs its password.');
   assert.equal(notReadyText({ ...base, missing: ['host'] }), 'BrandMeister needs its host.');
+  assert.equal(notReadyText({ ...base, title: 'TGIF', fields: [f[0], { ...f[1], label: 'Hotspot password' }], missing: ['password'] }), 'TGIF needs its hotspot password.');
   assert.doesNotMatch(notReadyText({ ...base, missing: ['dmrId'] }), /login/);
   assert.equal(notReadyShort({ ...base, missing: ['password'] }), 'Needs password');
   assert.equal(notReadyShort({ ...base }), 'Not set up');

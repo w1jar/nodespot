@@ -624,6 +624,16 @@ func TestModesSettingsAndSecrets(t *testing.T) {
 	if err != nil || !bytes.Contains(cfg, []byte("echo-pass")) {
 		t.Fatalf("the node config should keep the password (%v)", err)
 	}
+	// clear removes only the named password
+	clr := mode.Settings{Clear: []string{"password"}}
+	var l2 []node.ModeInfo
+	if c := e.do("admin", "PUT", "/api/modes/echolink", clr, &l2); c != 200 {
+		t.Fatal(c)
+	}
+	if el = modeByName(l2, mode.EchoLink); el.Configured || el.SecretsSet["password"] || el.Settings.Values["callsign"] != "N1CALL-L" {
+		t.Fatalf("clear: %+v", el)
+	}
+	expectErr(t, e, "admin", "PUT", "/api/modes/echolink", mode.Settings{Clear: []string{"callsign"}}, 409, "node_refused")
 	expectErr(t, e, "admin", "PUT", "/api/modes/Bad%20Mode", put, 400, "bad_mode")
 	expectErr(t, e, "admin", "PUT", "/api/modes/nosuchmode", put, 409, "node_refused")
 

@@ -256,7 +256,7 @@ func channelChanged(a, b RadioConfig) bool {
 }
 
 // SaveMode merges upd into mode n's saved settings (a blank secret keeps
-// the saved one), checks, saves and applies them. The active mode is
+// the saved one unless upd.Clear names it), checks, saves and applies them. The active mode is
 // restarted on its target when its settings changed.
 func (e *Engine) SaveMode(n string, upd mode.Settings) error {
 	n = strings.ToLower(strings.TrimSpace(n))
@@ -269,8 +269,17 @@ func (e *Engine) SaveMode(n string, upd mode.Settings) error {
 	e.mu.Lock()
 	c := e.cfg.Clone()
 	e.mu.Unlock()
+	if err := sp.CheckClear(upd); err != nil {
+		return err
+	}
 	s := sp.Merge(c.Modes[n], upd)
-	if err := sp.CheckEnv(e.env(c), s); err != nil {
+	// Clearing a required password is allowed (the mode then reports not
+	// ready), so the check sees a placeholder in the cleared fields.
+	chk := s.Clone()
+	for _, k := range upd.Clear {
+		chk.Values[k] = "-"
+	}
+	if err := sp.CheckEnv(e.env(c), chk); err != nil {
 		return err
 	}
 	c.Modes[n] = s

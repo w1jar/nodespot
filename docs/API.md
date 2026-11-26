@@ -175,6 +175,8 @@ Snapshot = {
 | GET | `/api/hostlists/status` | operator: `{"busy"?, "lists": {"dmr"\|"ysf"\|"p25"\|"nxdn"\|"m17": {"entries", "updated"?, "checked"?, "error"?}}, "nextManual"?, "nodelist"?: {"count", "updated": RFC3339 \| null, "source", "error": str \| null, "busy"?}}`. `nextManual` is when a manual refresh is allowed again (absent: now) |
 | POST | `/api/hostlists/refresh` | admin: downloads the host lists, then the AllStar node list, and answers the status document above. `409 hostlists_busy` with the reason when a refresh is running, when the last manual one was less than 10 minutes ago or when digital modes are off (nothing is fetched). A download that fails is not a refusal: the answer is `200` and the list's `error` says why. Audit: `hostlists.refresh`, `hostlists.refresh.refused` |
 
+`PUT /api/modes/{mode}` (admin) saves a mode's settings `{"values": {key: value}, "favorites"?, "reflectors"?, "clear"?: [key]}`. A password that is empty or absent keeps the stored one. `clear` lists password (secret) fields to delete from the stored settings; a request with no `values` and a `clear` list changes nothing else. A key that is not a password field of the mode, or is also set in `values`, is refused with `409 node_refused`. `DELETE /api/modes/{mode}` forgets all saved settings of the mode, also while it is active (the node drops the mode first), and its remembered target.
+
 A mode field with `"hostList": "bm"` or `"dmr-other"` in `GET /api/modes` is a text field the UI offers that list for (docs/NATIVE_NODE.md "Host lists and master pickers").
 
 ## System (all roles)

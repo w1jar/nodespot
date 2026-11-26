@@ -6,6 +6,9 @@ Release notes are taken from the section of the tag being released
 ## [0.0.1] - 2026-11-27
 
 ### Changed
+- TGIF now requires the hotspot password, as BrandMeister does: without one the mode shows "Not set up" and cannot be made active. A stored password counts, so saving other fields never asks for it again.
+- Modes > settings: a saved password has a Clear button (with a confirm) that deletes only that password. `PUT /api/modes/{mode}` accepts `"clear": ["password"]` for it; unknown or non-password keys are refused with `409 node_refused`.
+- Modes > settings: "Clear settings" is always shown (disabled while nothing is saved) and asks for a confirm first. It works on the active mode too: the node drops the mode, then forgets its settings and remembered target.
 - BrandMeister and DMR (other master): the "Master server" field is a dropdown of the masters in the downloaded DMR host list, plus "Other..." for a typed `host` or `host:port`. BrandMeister masters (`BM_<id>_<Country>`) read "3104 – United States" and sort by id. A saved address that is on the list selects its entry, any other value selects "Other...". A DMR pick fills in the address and port, and the list's password when the password field is empty and none is saved. Without a downloaded list the field stays plain text with a note. BrandMeister uses port 54006 unless you type `host:port`; the list's port is never used. TGIF still uses `tgif.network` port 62031 when no address is saved: the node cannot read the host list.
 - `POST /api/hostlists/refresh` now also refreshes the AllStar node list and answers with the status of every list. A refusal (too soon, busy) is still `409`; a download that fails is `200` with the error in that list's status instead of `409`.
 - Mode fields can carry `hostList` (`"bm"` or `"dmr-other"`), which makes the Modes page draw the list picker.

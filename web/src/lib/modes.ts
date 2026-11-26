@@ -111,8 +111,7 @@ export function notReadyText(m: ModeInfo): string {
     if (f?.stationDefault) {
       const what = f.stationDefault === 'callsign' ? 'callsign' : f.stationDefault === 'nxdnId' ? 'NXDN ID' : 'DMR ID';
       out.push(`Set your ${what} in Settings → Station or on this mode's page.`);
-    } else if (f && (f.secret || f.kind === 'password')) out.push(`${title} needs its password.`);
-    else if (f) out.push(`${title} needs its ${f.label.toLowerCase()}.`);
+    } else if (f) out.push(`${title} needs its ${f.label.toLowerCase()}.`);
     else out.push(`${title} needs ${key}.`);
   }
   if (!out.length) return m.error ? `${title} cannot start: ${m.error}` : `${title} needs setting up.`;

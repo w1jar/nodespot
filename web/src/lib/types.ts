@@ -76,7 +76,8 @@ export interface ModeField {
   /** A text field the UI offers a host list picker for: "bm" (BrandMeister masters) or "dmr-other" (other Homebrew masters). The saved value stays plain text. */
   hostList?: 'bm' | 'dmr-other';
 }
-export interface ModeSettings { values?: Record<string, string>; favorites?: Target[]; reflectors?: Target[] }
+/** `clear` lists secret keys to delete from the saved settings (a save with only `clear` changes nothing else). */
+export interface ModeSettings { values?: Record<string, string>; favorites?: Target[]; reflectors?: Target[]; clear?: string[] }
 /** One mode of GET /api/modes. Operators and viewers get no fields, settings or secretsSet. */
 export interface ModeInfo {
   name: string; title: string; targetLabel?: string; targetHelp?: string; needsHost?: boolean;

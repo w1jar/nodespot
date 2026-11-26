@@ -319,7 +319,8 @@ func TestValidate(t *testing.T) {
 		{mode.DMR, map[string]string{KeyDMRID: "1234567", KeyAddress: "m.example.net:99999"}, "bad port"},
 		{mode.YSF, map[string]string{KeyOptions: "novalue"}, "not key=value"},
 		{mode.NXDN, map[string]string{}, "NXDN ID is required"},
-		{mode.TGIF, map[string]string{KeyDMRID: "1234567"}, ""},
+		{mode.TGIF, map[string]string{KeyDMRID: "1234567"}, "Hotspot password is required"},
+		{mode.TGIF, map[string]string{KeyDMRID: "1234567", KeyPassword: "p"}, ""},
 	}
 	for _, tt := range tests {
 		sp, _ := mode.Lookup(tt.mode)
@@ -418,7 +419,7 @@ func TestStationCallsignFallback(t *testing.T) {
 	}
 	// The DMR family never needs it from the mode.
 	sp, _ := mode.Lookup(mode.TGIF)
-	if err := sp.CheckEnv(mode.Env{}, mode.Settings{Values: map[string]string{KeyDMRID: "1234567"}}); err != nil {
+	if err := sp.CheckEnv(mode.Env{}, mode.Settings{Values: map[string]string{KeyDMRID: "1234567", KeyPassword: "p"}}); err != nil {
 		t.Errorf("tgif: %v", err)
 	}
 }
@@ -446,5 +447,34 @@ func TestLegacyDefaultReflector(t *testing.T) {
 	}
 	if _, err := mode.Build(mode.P25, env, mode.Settings{Values: map[string]string{KeyAddress: "p25.example.net:41000"}}); err != nil {
 		t.Errorf("build with the old key: %v", err)
+	}
+}
+
+// TestTGIFNeedsPassword checks that TGIF is not ready without a hotspot
+// password and is ready with a stored one (which satisfies Required even
+// though the control API never returns it).
+func TestTGIFNeedsPassword(t *testing.T) {
+	sp, _ := mode.Lookup(mode.TGIF)
+	env := mode.Env{Callsign: "N0CALL"}
+	without := mode.Settings{Values: map[string]string{KeyDMRID: "1234567"}}
+	if m := sp.Missing(env, without); len(m) != 1 || m[0].Key != KeyPassword {
+		t.Fatalf("Missing without password: %+v", m)
+	}
+	with := mode.Settings{Values: map[string]string{KeyDMRID: "1234567", KeyPassword: "pw-secret"}}
+	if m := sp.Missing(env, with); len(m) != 0 {
+		t.Fatalf("Missing with password: %+v", m)
+	}
+	// The API shows the stored password as set, and a save that leaves the
+	// password blank keeps it, so other fields can change.
+	red, set := sp.Redact(with)
+	if red.Values[KeyPassword] != "" || !set[KeyPassword] {
+		t.Fatalf("Redact: %+v %v", red, set)
+	}
+	upd := mode.Settings{Values: map[string]string{KeyDMRID: "7654321", KeyPassword: ""}}
+	if err := sp.CheckEnv(env, sp.Merge(with, upd)); err != nil {
+		t.Fatalf("save with a stored password: %v", err)
+	}
+	if err := sp.CheckEnv(env, sp.Merge(without, upd)); err == nil {
+		t.Fatal("save with no password was accepted")
 	}
 }

@@ -101,7 +101,7 @@ var defs = []def{
 		fields: []mode.Field{
 			dmrIDField,
 			callsignField(false),
-			{Key: KeyPassword, Label: "Hotspot password", Kind: mode.FieldPassword, Secret: true,
+			{Key: KeyPassword, Label: "Hotspot password", Kind: mode.FieldPassword, Required: true, Secret: true,
 				Help: "The hotspot security password from your TGIF profile."},
 			advanced(KeyAddress, "Master server", mode.FieldText, "", "Leave empty for the TGIF master (tgif.network, port 62031)."),
 			slotField,

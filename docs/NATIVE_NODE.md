@@ -286,6 +286,15 @@ Untested on real hardware or networks: registration against AllStarLink and the 
 - [x] Answered: our SHARI's sound chip is a CM108B (USB ID 0d8c:0012, already on chan\_simpleusb's supported list). Pins are stock: COS from the chip's inverted input (carrierfrom = usbinvert), CTCSS input off, PTT not inverted.
 - [x] Answered: no. nodespot does not use them at run time; it only switches Allmon3 off, can back up its config, and can import favorites from an AllScan or Supermon install. Its public page replaces their public pages.
 
+## Mode settings
+
+Each mode's settings are on the Modes page, below the mode's controls. Passwords are write-only: `GET /api/modes` never returns them, only `secretsSet` (`{"password": true}`).
+
+- **Ready.** A mode is ready when every Required field has a value of its own, a default or a station fallback. A stored password counts for a Required password field. BrandMeister and TGIF both require the hotspot password, so TGIF shows "Not set up" until one is saved.
+- **Saving.** `PUT /api/modes/{mode}` replaces the mode's values; a password left empty or absent keeps the stored one, so other fields can be saved without retyping it.
+- **Clear password.** A saved password has a small Clear button next to "Saved. Leave empty to keep it." After a confirm it sends `PUT /api/modes/{mode}` with `{"clear": ["password"]}`, which deletes only that stored secret. The other settings and anything typed but not yet saved stay. The mode then reports its missing password (TGIF becomes "Not set up"). An unknown key, a field that is not a password, or a key that is also given a new value is refused (`409 node_refused`) and nothing is saved.
+- **Clear settings.** Always shown with the settings; disabled (with a tooltip) while nothing is saved for the mode or while a request runs. After a confirm it calls `DELETE /api/modes/{mode}`. If the mode is active the node drops it first (the radio goes idle), then removes the saved settings, passwords and the remembered target (`tune.json` entry) of that mode. The confirm text says so for an active mode.
+
 ## Host lists and master pickers
 
 nodespot (the web app, not the node) downloads the Pi-Star host files once a day (about every 24 hours, plus or minus an hour, the first check 60 seconds after the start; a failed check, for example with no network or an unset clock at boot, is tried again after 10 minutes): `DMR_Hosts.txt`, `YSF_Hosts.txt`, `P25_Hosts.txt`, `NXDN_Hosts.txt` and `M17_Hosts.txt` from `https://www.pistar.uk/downloads/` (the setting `hostlists.base_url` overrides the base). They are kept in `<datadir>/hostlists` with conditional requests. The AllStar node list (`internal/nodelist`) is downloaded separately, from `[nodelist] url`.

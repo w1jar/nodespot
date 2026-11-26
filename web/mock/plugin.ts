@@ -30,7 +30,7 @@ const MODES: ModeDef[] = [
   { name: 'dmr', title: 'DMR (other master)', targetLabel: 'Talkgroup', targetHelp: 'A talkgroup on the master you set up.', targets: ['9', '1'],
     fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, { key: 'address', label: 'Master server', kind: 'text', required: true, hostList: 'dmr-other', help: 'A Homebrew (MMDVM) master, host or host:port (port 62031 when none is given).' }, pw('password', 'Master password', false)] },
   { name: 'tgif', title: 'TGIF', targetLabel: 'Talkgroup', targetHelp: 'A TGIF talkgroup number.', targets: ['31665', '9'],
-    fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, pw('password', 'TGIF password')] },
+    fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, pw('password', 'Hotspot password')] },
   { name: 'ysf', title: 'YSF', targetLabel: 'Reflector', targetHelp: 'A YSF reflector.', needsHost: true, targets: ['YSF-TEST'],
     fields: [cs(), { key: 'suffix', label: 'Suffix', kind: 'text', advanced: true }] },
   { name: 'p25', title: 'P25', targetLabel: 'Talkgroup', targetHelp: 'A P25 reflector talkgroup.', needsHost: true, targets: ['10100'],
@@ -357,8 +357,12 @@ export function mockApi(): Plugin {
         if ((mm = /^\/modes\/([a-z0-9]+)$/.exec(p)) && (m === 'PUT' || m === 'DELETE')) {
           if (!isAdmin) return forbid();
           const d = defOf(mm[1]); if (!d) return err(res, 404, 'unknown mode', 'not_found');
-          if (m === 'DELETE') { delete values[d.name]; delete secrets[d.name]; delete tunes[d.name]; return json(res, 204); }
+          if (m === 'DELETE') { if (active === d.name) selectMode(''); delete values[d.name]; delete secrets[d.name]; delete tunes[d.name]; return json(res, 204); }
           const v: Record<string, string> = (body.values ?? {}) as Record<string, string>;
+          const clr = Array.isArray(body.clear) ? (body.clear as string[]) : [];
+          const badClear = clr.find((k) => !d.fields.some((f) => f.key === k && f.secret));
+          if (badClear) return err(res, 409, `${d.title}: "${badClear}" is not a saved password`, 'node_refused');
+          for (const k of clr) delete secrets[d.name]?.[k];
           for (const f of d.fields) {
             if (!(f.key in v)) continue;
             if (f.secret) { if (v[f.key] !== '') (secrets[d.name] ??= {})[f.key] = true; } else (values[d.name] ??= {})[f.key] = String(v[f.key]);
