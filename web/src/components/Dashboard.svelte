@@ -54,6 +54,8 @@
     try { await api.select(f.mode, targetBody(f.target, f.label && f.label !== f.target ? { name: f.label } : {})); toast(`${modeTitle(f.mode, app.modes)}: connecting to ${f.label || f.target}`); } catch (e) { toastError(e); } finally { busy = ''; }
   }
   const talker = $derived(node?.mode?.talker);
+  /** A local station is transmitting into the receiver and its audio goes to the active mode. */
+  const localTx = $derived(!!node?.radio.rxActive && !!node?.active);
   const idText = $derived.by(() => {
     const i = node?.id;
     if (!i) return '';
@@ -110,8 +112,9 @@
           {/if}
         </div>
         <div class="flex items-center gap-1.5 text-sm" data-testid="talker" aria-live="polite">
-          <Mic size={14} class="shrink-0 {talker ? 'text-danger' : 'text-muted'}" aria-hidden="true" />
-          {#if talker}<span class="min-w-0 truncate"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
+          <Mic size={14} class="shrink-0 {talker || localTx ? 'text-danger' : 'text-muted'}" aria-hidden="true" />
+          {#if localTx && node.active}<span class="min-w-0 truncate" data-testid="local-tx"><b>Local station</b> · sending to {modeTitle(node.active, app.modes)}</span>
+          {:else if talker}<span class="min-w-0 truncate"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
           {:else if app.nowcalling?.current}<span class="min-w-0 truncate"><b class="font-mono">{who(app.nowcalling.current)}</b></span>
           {:else}<span class="text-muted">Nobody is talking</span>{/if}
         </div>

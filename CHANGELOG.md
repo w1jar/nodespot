@@ -24,6 +24,7 @@ Release notes are taken from the section of the tag being released
 - The node now checks the station settings it ignored before: AGC target must be -40 to -6 dBFS and maximum gain 0 to 30 dB (the AGC always clamped them, a save now says so), ID tail window and final-ID quiet time at most 600 s, CW pitch 200 to 2000 Hz and CW level -60 to 0 dBFS.
 
 ### Fixed
+- EchoLink: after the echo test's greeting, the playback of your own transmission never came back on the radio, and nothing was logged. The connection dropped any audio packet whose RTP sequence number was a repeat of, or up to 999 behind, the last one received, for the whole connection, and the playback is numbered below the greeting. Each received transmission now starts sequence tracking afresh, and within one only a duplicate or a packet up to 15 behind is dropped, counted as late.
 - Settings > Station > Radio, Levels: the receive and transmit volume sliders showed 0% and could not be moved. The node reports and accepts levels as fractions (0 to 1) and the page treated them as percent. The sliders now show 0 to 100% and convert both ways; "n/a" still means the sound chip has no such control.
 - Modes page: EchoLink favorites accept a callsign as well as a node number (such as `N1CALL-L`).
 - The Modes page no longer says "not set up yet. Add its login in Settings" for every mode. A mode is ready when its own settings or the station fallbacks (callsign, DMR ID, NXDN ID) cover what it needs, and the echo test is always ready. When something is missing the message names it, such as "Set your DMR ID in Settings > Station or on this mode's page." or "EchoLink needs its password."
@@ -33,6 +34,9 @@ Release notes are taken from the section of the tag being released
 - AllStar: "peer hung up" and "rejected" errors now carry the far node's cause text and code, such as "peer hung up: Normal clearing (cause code 16)".
 
 ### Added
+- EchoLink link counters on the Modes card, like AllStar's: packets received and sent, plus late, dropped, bad and send errors when any occur (status `link`, `proto: "echolink"`).
+- EchoLink logging: `echolink: sending` and `echolink: sent N packets` for each transmission to the station, and with `nodespot-node -debug` a summary at the start and end of each talk spurt each way (sequence numbers and counts, never audio). A failed audio send is logged once per transmission.
+- Dashboard and Modes card: "Local station · sending to <mode>" while the radio's carrier is going to the active mode, in every mode (node status `radio.rxActive`).
 - Settings > Station > Host lists: one row per downloaded list (AllStar nodes, DMR, YSF, P25, NXDN, M17) with its entry count, last update and last error, and an admin Refresh button that downloads all of them (host lists at most once every 10 minutes; a refusal shows the server's message). New `GET /api/hostlists/status` (operator).
 - Host lists: a failed download (no network or an unset clock at boot, the server down) is tried again after 10 minutes instead of a day later, and a manual refresh that downloaded nothing does not block the next one.
 - Modes page: when the YSF, P25, NXDN or M17 list has not downloaded yet, the search says so and points to Settings > Station > Host lists instead of showing nothing.

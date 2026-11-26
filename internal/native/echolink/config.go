@@ -3,6 +3,8 @@ package echolink
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
@@ -90,6 +92,10 @@ type Config struct {
 	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Clock drives timers; default the system clock.
 	Clock Clock
+	// Logger gets the info lines about transmissions sent to a station
+	// and, at debug level, packet summaries per talk spurt (never audio).
+	// Default: discard.
+	Logger *slog.Logger
 
 	tick time.Duration // timer resolution of a connection; tests shorten it
 }
@@ -158,6 +164,9 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if c.Clock == nil {
 		c.Clock = realClock{}
+	}
+	if c.Logger == nil {
+		c.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return c, nil
 }

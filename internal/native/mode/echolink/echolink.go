@@ -88,6 +88,7 @@ func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
 		Name:     s.Get(KeyName, ""),
 		Location: s.Get(KeyLocation, ""),
 		Info:     s.Get(KeyInfo, ""),
+		Logger:   env.Logger(),
 	}
 	for _, sv := range strings.Split(s.Get(KeyServers, ""), ",") {
 		if sv = strings.TrimSpace(sv); sv != "" {
@@ -204,6 +205,7 @@ func (m *Mode) startLink(t mode.Target) {
 	d := m.dir
 	m.mu.Unlock()
 	m.SetTarget(&t)
+	m.SetLinkStats(nil)
 	m.SetState(mode.StateConnecting, "calling "+t.ID, "")
 	m.linkWG.Add(1)
 	go m.link(ctx, d, t)
@@ -231,16 +233,22 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 	}
 	m.env.Logger().Info("echolink: connected", "station", st.Callsign)
 	m.SetState(mode.StateConnected, "connected to "+st.Callsign, "")
+	m.SetLinkStats(linkStats(c.Status()))
 	defer func() {
 		m.mu.Lock()
 		m.conn = nil
 		m.mu.Unlock()
+		m.SetLinkStats(linkStats(c.Status()))
 		m.TalkEnd()
 	}()
+	statTick := time.NewTicker(statsEvery)
+	defer statTick.Stop()
 	peerName := ""
 	recv, events := c.Recv(), c.Events()
 	for {
 		select {
+		case <-statTick.C:
+			m.SetLinkStats(linkStats(c.Status()))
 		case <-ctx.Done():
 			_ = c.Close()
 			return
@@ -268,6 +276,7 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 				m.TalkStart(mode.Talker{Callsign: call, Name: name, Target: t.ID})
 			case el.EventTalkStop:
 				m.TalkEnd()
+				m.SetLinkStats(linkStats(c.Status()))
 			case el.EventPeer:
 				peerName = ev.Name
 				m.UpdateTalker("", ev.Name, "")
@@ -290,6 +299,18 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 			m.Emit(mode.Event{Kind: mode.EventError, Err: msg})
 			return
 		}
+	}
+}
+
+// statsEvery is how often the link counters are copied to the status.
+const statsEvery = time.Second
+
+// linkStats converts connection counters for the status.
+func linkStats(st el.ConnStatus) *mode.LinkStats {
+	return &mode.LinkStats{
+		Proto:       "echolink",
+		RxVoiceFull: st.RxPackets, TxVoice: st.TxPackets,
+		ParseErrors: st.RxBad, Dropped: st.RxDropped, Late: st.RxLate, TxErrors: st.TxErrors,
 	}
 }
 
@@ -369,5 +390,6 @@ func (m *Mode) EndTx() {
 	m.mu.Unlock()
 	if c != nil && was {
 		_ = c.Flush()
+		m.SetLinkStats(linkStats(c.Status()))
 	}
 }

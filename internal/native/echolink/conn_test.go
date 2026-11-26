@@ -1,9 +1,13 @@
 package echolink
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"math"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +23,7 @@ type connSetup struct {
 	d   *Directory
 }
 
-func newConnSetup(t *testing.T, answer bool) *connSetup {
+func newConnSetup(t *testing.T, answer bool, opts ...func(*Config)) *connSetup {
 	t.Helper()
 	s := &connSetup{clk: newFakeClock(), fd: newFakeDirectory(t, testList), st: newFakeStation(t, "127.0.0.2", answer)}
 	cfg := testConfig(s.clk, s.fd.addr())
@@ -31,6 +35,9 @@ func newConnSetup(t *testing.T, answer bool) *connSetup {
 	cfg.RemoteControlPort = s.st.ctrlPort()
 	cfg.tick = time.Second
 	cfg.TalkHang = 2 * time.Second
+	for _, o := range opts {
+		o(&cfg)
+	}
 	d, err := Login(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +225,7 @@ func TestReceiveAudioAndText(t *testing.T) {
 		t.Fatalf("chat %+v", ev)
 	}
 	st := c.Status()
-	if st.RxPackets != 1 || st.RxBad != 2 || st.Info == "" || !st.Talking {
+	if st.RxPackets != 1 || st.RxLate != 1 || st.RxBad != 1 || st.Info == "" || !st.Talking {
 		t.Fatalf("status %+v", st)
 	}
 	select {
@@ -357,5 +364,132 @@ func TestRefuseIncoming(t *testing.T) {
 	}
 	if _, byes := s.st.counts(); byes != 0 {
 		t.Fatalf("station got %d BYEs, want 0", byes)
+	}
+}
+
+// gsmPacket builds an audio packet of four tone frames with seq.
+func gsmPacket(seq uint16) []byte {
+	enc := gsm.NewEncoder()
+	var payload []byte
+	for i := 0; i < 4; i++ {
+		pcm := [gsm.FrameSamples]int16(tone(i))
+		b := enc.Encode(&pcm)
+		payload = append(payload, b[:]...)
+	}
+	return buildAudio(seq, 0, payload)
+}
+
+// waitRx waits until the connection has counted n received packets and late
+// packets.
+func waitRx(t *testing.T, c *Conn, rx, late uint64) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		st := c.Status()
+		if st.RxPackets == rx && st.RxLate == late {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("rx %d late %d, want %d and %d", st.RxPackets, st.RxLate, rx, late)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// TestReceiveRestartedSequence is the echo test bug: the parrot plays our
+// recording back with sequence numbers below those of its greeting, and
+// every packet of it was dropped as late.
+func TestReceiveRestartedSequence(t *testing.T) {
+	s := newConnSetup(t, true)
+	c := s.connect(t)
+	defer c.Close()
+
+	// The greeting: packets 0..39.
+	for seq := uint16(0); seq < 40; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 40, 0)
+	// Within the spurt, a slightly late packet and a duplicate are dropped.
+	s.st.sendAudio(t, c, gsmPacket(30))
+	s.st.sendAudio(t, c, gsmPacket(39))
+	waitRx(t, c, 40, 2)
+	s.clk.run(t, 3*time.Second, time.Second)
+	nextEvent(t, c, EventTalkStop)
+
+	// The playback starts again at 0: a new spurt, every packet taken.
+	for seq := uint16(0); seq < 10; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 50, 2)
+	nextEvent(t, c, EventTalkStart)
+
+	// Within a spurt, a jump back further than the reorder window is a
+	// new stream (a conference relaying another talker), not late audio.
+	s.st.sendAudio(t, c, gsmPacket(60000))
+	s.st.sendAudio(t, c, gsmPacket(60001))
+	waitRx(t, c, 52, 2)
+	if st := c.Status(); st.RxBad != 0 {
+		t.Fatalf("status %+v", st)
+	}
+}
+
+// syncBuf is a goroutine-safe log sink.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *syncBuf) Write(p []byte) (int, error) { b.mu.Lock(); defer b.mu.Unlock(); return b.b.Write(p) }
+func (b *syncBuf) String() string              { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+// TestTransmissionLog checks the info lines at the start and end of a
+// transmission and the debug summaries, which never carry audio.
+func TestTransmissionLog(t *testing.T) {
+	var buf syncBuf
+	s := newConnSetup(t, true, func(c *Config) {
+		c.Logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
+	c := s.connect(t)
+	defer c.Close()
+	<-s.st.audioIn // info packet
+
+	for i := 0; i < 6; i++ {
+		if err := c.Send(tone(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// A second transmission logs again.
+	for i := 0; i < 4; i++ {
+		_ = c.Send(tone(i))
+	}
+	_ = c.Flush()
+	_ = c.Flush() // nothing more to end
+	s.st.sendAudio(t, c, gsmPacket(7))
+	nextEvent(t, c, EventTalkStart)
+	s.clk.run(t, 3*time.Second, time.Second)
+	nextEvent(t, c, EventTalkStop)
+
+	out := buf.String()
+	for _, want := range []string{
+		`msg="echolink: sending" station=N1CALL`,
+		`msg="echolink: sent 2 packets" station=N1CALL`,
+		`msg="echolink: sent 1 packets" station=N1CALL`,
+		`msg="echolink: tx start"`, `seq=0 bytes=144`, `seq=2 bytes=144`,
+		`msg="echolink: tx end" packets=2 last_seq=1`,
+		`msg="echolink: rx start"`, `seq=7`,
+		`msg="echolink: rx end" packets=1 late=0 bad=0 last_seq=7`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log lacks %q:\n%s", want, out)
+		}
+	}
+	if n := strings.Count(out, "echolink: sending"); n != 2 {
+		t.Errorf("%d sending lines, want 2", n)
+	}
+	if st := c.Status(); st.TxPackets != 3 || st.TxErrors != 0 {
+		t.Fatalf("status %+v", st)
 	}
 }

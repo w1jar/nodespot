@@ -28,10 +28,15 @@ export interface Registration {
   registered: boolean; ready: boolean; publicIp?: string; dnsOk: boolean;
   lastAttempt?: string; lastSuccess?: string; since?: string; lastError?: string; httpStatus?: number;
 }
-/** Counters of the current AllStar link, for diagnosing audio problems. */
+/**
+ * Counters of the current AllStar or EchoLink link, for diagnosing audio problems. proto "echolink": rxVoiceFull is the audio
+ * packets received, txVoice the packets sent, late the duplicate or late packets dropped, parseErrors the undecodable ones,
+ * dropped the frames the node did not take in time, txErrors the packets the network refused.
+ */
 export interface LinkStats {
+  proto?: string;
   rxVoiceFull: number; rxVoiceMini: number; txVoice: number; vnakSent: number; vnakRecv: number;
-  retransmits: number; parseErrors: number; dropped: number; gaps: number;
+  retransmits: number; parseErrors: number; dropped: number; gaps: number; late?: number; txErrors?: number;
 }
 export interface ModeStatus {
   mode: string; title: string; active: boolean; state: ModeState; target?: Target; since?: string;
@@ -48,7 +53,7 @@ export interface InputLevel { peakDb: number; rmsDb: number; cos: boolean }
 export interface NodeJSON {
   callsign?: string; started: string;
   radio: {
-    present: boolean; ptt: boolean; cos: boolean; rxLocked?: boolean; txLocked?: boolean;
+    present: boolean; ptt: boolean; cos: boolean; rxActive?: boolean; rxLocked?: boolean; txLocked?: boolean;
     /** The preset in use and the interface found (chip name, USB id). */
     preset?: string; chip?: string; usbId?: string; product?: string; detected?: boolean; sa818?: boolean;
     level?: InputLevel;

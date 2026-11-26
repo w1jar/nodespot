@@ -110,9 +110,14 @@ type Registration struct {
 	HTTPStatus int       `json:"httpStatus,omitempty"`
 }
 
-// LinkStats are the counters of the current AllStar link, for diagnosing
-// audio problems.
+// LinkStats are the counters of the current AllStar or EchoLink link, for
+// diagnosing audio problems. Proto says which: "" (AllStar, the IAX2
+// counters) or "echolink" (audio packets; RxVoiceFull is the packets
+// received, TxVoice the packets sent, Late the duplicate or late packets
+// dropped, ParseErrors the undecodable ones, Dropped the frames the node
+// did not take in time and TxErrors the packets the socket refused).
 type LinkStats struct {
+	Proto       string `json:"proto,omitempty"`
 	RxVoiceFull uint64 `json:"rxVoiceFull"` // voice full frames received
 	RxVoiceMini uint64 `json:"rxVoiceMini"` // voice mini frames received
 	TxVoice     uint64 `json:"txVoice"`
@@ -122,6 +127,8 @@ type LinkStats struct {
 	ParseErrors uint64 `json:"parseErrors"`
 	Dropped     uint64 `json:"dropped"`
 	Gaps        uint64 `json:"gaps"`
+	Late        uint64 `json:"late,omitempty"`
+	TxErrors    uint64 `json:"txErrors,omitempty"`
 }
 
 // Status is a snapshot of a mode for the UI. It never carries a password.
@@ -139,7 +146,7 @@ type Status struct {
 	Talker *Talker `json:"talker,omitempty"`
 	// Registration: AllStar only.
 	Registration *Registration `json:"registration,omitempty"`
-	// Link: counters of the current link (AllStar only, while linked).
+	// Link: counters of the current link (AllStar and EchoLink).
 	Link *LinkStats `json:"link,omitempty"`
 	// Links: the far side's link list (AllStar) or conference members, when known.
 	Links []string `json:"links,omitempty"`

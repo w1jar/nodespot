@@ -66,6 +66,9 @@ type simplex struct {
 	rfStart  time.Time // a local transmission into the receiver began
 	rfSentTo mode.Mode // the mode that received its audio
 	rfLocked bool      // timed out: ignore the carrier until it drops
+	// rfOn: a local transmission is being received and forwarded to the
+	// active mode (for the status).
+	rfOn bool
 
 	netStart time.Time // the network started keying the transmitter
 	txLocked bool      // timed out: ignore the network until it stops
@@ -155,6 +158,7 @@ func (e *Engine) Step(now time.Time) {
 		s.rfLocked = false
 	}
 	e.stepRF(now, m, rfActive)
+	s.rfOn = rfActive && !s.rfLocked && m != nil
 
 	// Network side: the active mode's audio for the radio.
 	var nf audio.Frame

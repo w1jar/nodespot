@@ -177,13 +177,22 @@ func TestOneModeAtATime(t *testing.T) {
 	}
 
 	// The radio's audio goes to the active mode only.
+	if g.e.Status().Radio.RxActive {
+		t.Fatal("RxActive without a carrier")
+	}
 	g.r.SetCarrier(true)
 	for i := 0; i < 5; i++ {
 		g.r.Inject(frame(500))
 		g.step(1)
 	}
+	if !g.e.Status().Radio.RxActive {
+		t.Fatal("the status does not show the local transmission")
+	}
 	g.r.SetCarrier(false)
 	g.step(1)
+	if g.e.Status().Radio.RxActive {
+		t.Fatal("RxActive after the carrier dropped")
+	}
 	if len(bm.Sent()) != 5 || len(as.Sent()) != 0 {
 		t.Fatalf("bm got %d frames, allstar %d; want 5 and 0", len(bm.Sent()), len(as.Sent()))
 	}

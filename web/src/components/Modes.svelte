@@ -7,7 +7,7 @@
   import { app, canOperate, isAdmin, refreshFavorites, refreshModes } from '../lib/store.svelte';
   import { toast, toastError } from '../lib/toast.svelte';
   import {
-    CONFIRM_MS, defaultFavName, favoriteActive, favoriteBlock, favoritesInOrder, findFavorite, hasTarget, linkStatsText, m17Split, modeChip, modeTitle, movedIds,
+    CONFIRM_MS, defaultFavName, favoriteActive, favoriteBlock, favoritesInOrder, findFavorite, hasTarget, linkStatsText, linkStatsTitle, m17Split, modeChip, modeTitle, movedIds,
     needsVocoder, notReadyShort, pendingOutcome, pickerKind, recentTargets, M17_MODULES, sortModes, stateText, targetBody, targetPlaceholder, targetText, targetValue,
     validFavName, vocoderBusy, targetLabel, ECHO_CODECS, echoCodec, echoCodecValues,
   } from '../lib/modes';
@@ -167,6 +167,8 @@
   const DOT = { ok: 'bg-ok', err: 'bg-danger', warn: 'bg-warn', off: 'bg-muted' } as const;
   const TXT = { ok: 'text-ok', err: 'text-danger', warn: 'text-warn', off: 'text-muted' } as const;
   const talker = $derived(isActive ? st?.talker : undefined);
+  /** A local station is transmitting into the receiver and the node sends its audio to this (active) mode. */
+  const localTx = $derived(isActive && !!app.node?.radio.rxActive);
   const levels = $derived(st?.levels ?? (sel === 'echotest' ? app.node?.echoTest : undefined));
 </script>
 
@@ -256,13 +258,14 @@
             <div class="rounded border border-line bg-surface-2 px-3 py-2" aria-live="polite">
               <div class="text-[11px] uppercase tracking-wide text-muted">Now calling</div>
               <div class="flex items-center gap-1.5 text-sm">
-                <Mic size={14} class="shrink-0 {talker ? 'text-danger' : 'text-muted'}" aria-hidden="true" />
-                {#if talker}<span class="min-w-0 truncate" data-testid="mode-talker"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
+                <Mic size={14} class="shrink-0 {talker || localTx ? 'text-danger' : 'text-muted'}" aria-hidden="true" />
+                {#if localTx}<span class="min-w-0 truncate" data-testid="mode-local-tx"><b>Local station</b> · sending to {modeTitle(active, app.modes)}</span>
+                {:else if talker}<span class="min-w-0 truncate" data-testid="mode-talker"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
                 {:else}<span class="text-muted">{isActive ? 'Nobody is talking' : '—'}</span>{/if}
               </div>
             </div>
           </div>
-          {#if isActive && st?.link}<p class="break-words font-mono text-xs text-muted" data-testid="link-stats" title="Link counters: voice full+mini frames received, voice frames sent, VNAKs sent/received, retransmits">{linkStatsText(st.link)}</p>{/if}
+          {#if isActive && st?.link}<p class="break-words font-mono text-xs text-muted" data-testid="link-stats" title={linkStatsTitle(st.link)}>{linkStatsText(st.link)}</p>{/if}
           {#if isActive && st?.registration && !st.registration.registered}<p class="text-xs text-warn">Not registered yet{st.registration.lastError ? `: ${st.registration.lastError}` : ''}</p>{/if}
           {#if sel === 'echotest'}
             <p class="text-sm text-muted">{isActive ? 'Key the radio and talk, then unkey: the node plays your recording back.' : 'Start it, key the radio, talk and unkey: the node plays your recording back.'}</p>

@@ -99,9 +99,11 @@ type ConnStatus struct {
 	Err      string // why the connection closed
 
 	TxPackets uint64
+	TxErrors  uint64 // audio packets the socket refused to send
 	RxPackets uint64
 	RxDropped uint64 // frames dropped because Recv was not drained
-	RxBad     uint64 // undecodable or out-of-order packets
+	RxLate    uint64 // duplicate or late (reordered) audio packets dropped
+	RxBad     uint64 // undecodable audio packets or frames
 	Refused   uint64 // connection attempts from other stations
 }
 
@@ -130,6 +132,11 @@ type Conn struct {
 	pending []byte
 	seq     uint16
 	ts      uint32
+	// The local transmission in progress: whether one is, how many
+	// packets it has sent and whether a send error was logged.
+	txOn     bool
+	txPkts   uint64
+	txErrLog bool
 
 	mu        sync.Mutex
 	st        ConnStatus
@@ -139,7 +146,15 @@ type Conn struct {
 	haveSeq   bool
 	lastSeq   uint16
 	refusedAt map[netip.Addr]time.Time
+	// Counters of the talk spurt being received, for the debug log.
+	rxSpurt struct{ pkts, late, bad uint64 }
 }
+
+// reorderWindow is how far back, in packets, a sequence number counts as a
+// late or duplicate packet of the same stream. A sequence number further
+// back is a new stream: a peer that restarts its numbering, a conference
+// relaying another talker, or a parrot replaying our own packets.
+const reorderWindow = 16
 
 // dial binds the local sockets, calls the station and waits for its answer.
 func dial(ctx context.Context, cfg Config, st Station, onClose func(*Conn)) (*Conn, error) {
@@ -249,6 +264,10 @@ func (c *Conn) Send(f Frame) error {
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	if !c.txOn {
+		c.txOn, c.txPkts, c.txErrLog = true, 0, false
+		c.cfg.Logger.Info("echolink: sending", "station", c.station.Callsign)
+	}
 	pcm := [gsm.FrameSamples]int16(f)
 	b := c.enc.Encode(&pcm)
 	c.pending = append(c.pending, b[:]...)
@@ -259,29 +278,47 @@ func (c *Conn) Send(f Frame) error {
 }
 
 // Flush pads a partly filled packet with silence and sends it, so the end of
-// a transmission is not held back. It does nothing if no frames are waiting.
+// a transmission is not held back, and ends the transmission: the next Send
+// starts a new one. It sends nothing if no frames are waiting.
 func (c *Conn) Flush() error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
-	if len(c.pending) == 0 {
-		return nil
+	var err error
+	if len(c.pending) > 0 {
+		var silence [gsm.FrameSamples]int16
+		for len(c.pending) < audioPayload {
+			b := c.enc.Encode(&silence)
+			c.pending = append(c.pending, b[:]...)
+		}
+		err = c.sendPendingLocked()
 	}
-	var silence [gsm.FrameSamples]int16
-	for len(c.pending) < audioPayload {
-		b := c.enc.Encode(&silence)
-		c.pending = append(c.pending, b[:]...)
+	if c.txOn {
+		c.txOn = false
+		c.cfg.Logger.Info(fmt.Sprintf("echolink: sent %d packets", c.txPkts), "station", c.station.Callsign)
+		c.cfg.Logger.Debug("echolink: tx end", "packets", c.txPkts, "last_seq", c.seq-1)
 	}
-	return c.sendPendingLocked()
+	return err
 }
 
 func (c *Conn) sendPendingLocked() error {
 	p := buildAudio(c.seq, c.ts, c.pending)
 	c.pending = c.pending[:0]
+	if c.txPkts == 0 {
+		c.cfg.Logger.Debug("echolink: tx start", "to", c.rAudio.String(), "seq", c.seq, "bytes", len(p))
+	}
 	c.seq++
 	c.ts += FramesPerPacket * FrameSamples
 	if err := c.write(c.audio, c.rAudio, p); err != nil {
+		c.mu.Lock()
+		c.st.TxErrors++
+		c.mu.Unlock()
+		if !c.txErrLog && !errors.Is(err, ErrClosed) {
+			c.txErrLog = true
+			c.cfg.Logger.Warn("echolink: audio send failed", "err", err)
+		}
 		return err
 	}
+	c.txPkts++
 	c.mu.Lock()
 	c.st.TxPackets++
 	c.mu.Unlock()
@@ -424,14 +461,22 @@ func (c *Conn) handleAudio(p []byte, from netip.AddrPort) {
 	c.fromPeerLocked(now)
 	if err != nil {
 		c.st.RxBad++
+		c.rxSpurt.bad++
 		c.mu.Unlock()
 		return
 	}
-	// Drop duplicates and late packets; a large jump back is taken as the
-	// sender restarting its sequence.
+	// A talk spurt starts a new stream, so its numbering is not compared
+	// with the last one: a parrot replays our own packets and a conference
+	// relays each talker's, both numbered below what we heard last. Within
+	// a spurt, drop duplicates and packets that arrive a little late; a
+	// larger jump back is the sender starting a new stream.
+	if !c.st.Talking {
+		c.haveSeq = false
+	}
 	if c.haveSeq {
-		if d := int16(seq - c.lastSeq); d <= 0 && d > -1000 {
-			c.st.RxBad++
+		if d := int16(seq - c.lastSeq); d <= 0 && d > -reorderWindow {
+			c.st.RxLate++
+			c.rxSpurt.late++
 			c.mu.Unlock()
 			return
 		}
@@ -442,8 +487,11 @@ func (c *Conn) handleAudio(p []byte, from netip.AddrPort) {
 	c.lastAudio = now
 	if !c.st.Talking {
 		c.st.Talking = true
+		c.rxSpurt.pkts, c.rxSpurt.late, c.rxSpurt.bad = 0, 0, 0
+		c.cfg.Logger.Debug("echolink: rx start", "from", from.String(), "seq", seq, "bytes", len(p))
 		c.emitLocked(Event{Kind: EventTalkStart, Time: now, Callsign: c.st.Talker})
 	}
+	c.rxSpurt.pkts++
 	c.mu.Unlock()
 
 	frames := make([]Frame, 0, len(payload)/gsm.FrameBytes)
@@ -459,6 +507,7 @@ func (c *Conn) handleAudio(p []byte, from netip.AddrPort) {
 	defer c.mu.Unlock()
 	if bad := len(payload)/gsm.FrameBytes - len(frames); bad > 0 {
 		c.st.RxBad += uint64(bad)
+		c.rxSpurt.bad += uint64(bad)
 	}
 	for _, f := range frames {
 		if c.chClosed {
@@ -558,6 +607,8 @@ func (c *Conn) timerLoop(start time.Time) {
 		}
 		if reason == nil && c.st.Talking && now.Sub(c.lastAudio) >= c.cfg.TalkHang {
 			c.st.Talking = false
+			c.cfg.Logger.Debug("echolink: rx end", "packets", c.rxSpurt.pkts, "late", c.rxSpurt.late,
+				"bad", c.rxSpurt.bad, "last_seq", c.lastSeq)
 			c.emitLocked(Event{Kind: EventTalkStop, Time: now, Callsign: c.st.Talker})
 		}
 		c.mu.Unlock()

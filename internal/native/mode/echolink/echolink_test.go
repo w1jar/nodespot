@@ -33,7 +33,13 @@ func (c *fakeConn) Err() error              { c.mu.Lock(); defer c.mu.Unlock(); 
 func (c *fakeConn) Send(el.Frame) error     { c.mu.Lock(); c.sent++; c.mu.Unlock(); return nil }
 func (c *fakeConn) Flush() error            { c.mu.Lock(); c.flushes++; c.mu.Unlock(); return nil }
 func (c *fakeConn) Station() el.Station     { return c.st }
-func (c *fakeConn) Status() el.ConnStatus   { return el.ConnStatus{Station: c.st} }
+func (c *fakeConn) Status() el.ConnStatus {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// The counters follow what the mode did: a packet per two frames sent.
+	return el.ConnStatus{Station: c.st, TxPackets: uint64(c.sent / 2), RxPackets: 5,
+		RxLate: 1, RxBad: 2, RxDropped: 3, TxErrors: 4}
+}
 func (c *fakeConn) Close() error {
 	c.mu.Lock()
 	c.closed = true
@@ -192,6 +198,11 @@ func TestPendingTargetAndAudio(t *testing.T) {
 	c.mu.Unlock()
 	if sent != 2 || fl != 1 {
 		t.Fatalf("sent %d flushes %d", sent, fl)
+	}
+	// The end of the transmission updates the link counters at once.
+	want := mode.LinkStats{Proto: "echolink", RxVoiceFull: 5, TxVoice: 1, Late: 1, ParseErrors: 2, Dropped: 3, TxErrors: 4}
+	if l := m.Status().Link; l == nil || *l != want {
+		t.Fatalf("link stats %+v, want %+v", l, want)
 	}
 	// Remote bye: back to ready, still logged in.
 	c.end(el.ErrRemoteBye)
