@@ -34,6 +34,7 @@ export const groups: SettingsGroup[] = [
   { id: 'station', label: 'Station', admin: true, tabs: [
     { id: 'station', label: 'Station', title: 'Station', bare: true, load: () => import('./Station.svelte') },
     { id: 'radio', label: 'Radio', bare: true, load: () => import('./RadioTune.svelte') },
+    { id: 'audio', label: 'Audio', bare: true, load: () => import('./AudioTune.svelte') },
     { id: 'lookup', label: 'Caller lookup', bare: true, load: () => import('./CallerLookup.svelte') },
     { id: 'hostlists', label: 'Host lists', bare: true, load: () => import('./HostLists.svelte') },
   ] },

@@ -248,6 +248,14 @@ func (c *Client) RadioProgram(ctx context.Context) (Status, error) {
 	return out, err
 }
 
+// TestTone keys the radio with the 1 kHz test tone for seconds (0: the
+// default 5, at most 10), or with stop ends it early.
+func (c *Client) TestTone(ctx context.Context, seconds float64, stop bool) (Status, error) {
+	var out Status
+	err := c.Call(ctx, OpTestTone, map[string]any{"seconds": seconds, "stop": stop}, &out)
+	return out, err
+}
+
 // Reload makes the node read its config file again.
 func (c *Client) Reload(ctx context.Context) (Status, error) {
 	var out Status

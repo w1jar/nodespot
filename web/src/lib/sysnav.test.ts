@@ -4,7 +4,7 @@ import { movedPath, MOVED, OLD_IDS, isSettingsPath, settingsRoute, clampLines, a
 
 test('movedPath redirects every legacy route', () => {
   assert.equal(movedPath('/updates'), '/settings/system/updates');
-  assert.equal(movedPath('/tune'), '/settings/station/radio');
+  assert.equal(movedPath('/tune'), '/settings/station/audio');
   assert.equal(movedPath('/digital'), '/modes');
   assert.equal(movedPath('/backup'), '/settings/maintenance/backup');
   assert.equal(movedPath('/system'), '/settings/system/overview');
@@ -22,7 +22,7 @@ test('movedPath maps each old System section to its tab', () => {
 
 test('movedPath maps every flat settings id of the first Settings layout', () => {
   assert.equal(Object.keys(OLD_IDS).length, 21);
-  assert.equal(movedPath('/settings/audio-levels'), '/settings/station/radio');
+  assert.equal(movedPath('/settings/audio-levels'), '/settings/station/audio');
   for (const id of ['dv-engine', 'dv-identity', 'dv-bridge', 'dv-audio']) assert.equal(movedPath('/settings/' + id), '/modes');
   assert.equal(movedPath('/settings/dv-user-list'), '/settings/station/lookup');
   assert.equal(movedPath('/settings/users'), '/settings/access');

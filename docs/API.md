@@ -236,6 +236,17 @@ SimpleUSB audio tuning (see [SIMPLEUSB_TUNE.md](SIMPLEUSB_TUNE.md)). Every route
 
 Other errors: `502 radio_unexpected_output` (a reply that is not the expected one, including a device other than the one addressed), `502 device_not_found` (the interface is not plugged in), `502 radio_command_failed`, `503 no_chan_simpleusb` (the module is not loaded), `503 radio_unavailable` (the interface is busy or the radio service is not wired), `503 ami_down`, `504 radio_unavailable` (no answer in time). Writes are audited as `radio.params`, `radio.echo`, `radio.save` and `radio.revert` with the device, the field names and the linked nodes, never reply text. Unsaved changes are lost when `chan_simpleusb` is reloaded or Asterisk restarts.
 
+### Native node radio (admin)
+
+The native node's radio (see [NATIVE_NODE.md](NATIVE_NODE.md), "Radio and Audio settings"). Admin only (`403` otherwise); writes need the CSRF header.
+
+| Route | Body | Response |
+|---|---|---|
+| `POST /api/radio/tone` | `{seconds?}` (1 to 10; absent is 5) | `200` the node status, with `radio.testTone: true` while the tone plays. Keys the transmitter with a 1 kHz test tone at the network to radio speech level, after the key-up delay. `400 bad_request` for another length; `409 node_refused` with the node's reason when there is no radio, the node is transmitting, the receiver has a carrier, or the active mode is talking. The tone stops early when anyone else starts talking. Audited as `radio.test_tone` |
+| `DELETE /api/radio/tone` | | `200` the node status. Stops the test tone; nothing to stop is not an error |
+
+`GET`/`PUT /api/station` carry the audio settings in `advanced`: `radioAgc` and `modeAgc` (AGC radio to network and network to radio, both on by default), `rxAgcTargetDb` and `txAgcTargetDb` (-40 to -6 dBFS, default -22 each), `agcMaxDb`, `rxGainDb`, `txGainDb`, `flatAudio` (software pre- and de-emphasis for a flat data port or discriminator, off by default) and `plFilter`. The retired `agcTargetDb`, `preEmphasis` and `deEmphasis` are migrated when the config is read. `radio.sa818Filter.{emphasis,highPass,lowPass}` are "on" flags; unset ones default to emphasis off, high-pass on and low-pass on.
+
 ## Backup and restore (admin)
 
 See [BACKUP.md](BACKUP.md) for what a backup holds and how a restore works.

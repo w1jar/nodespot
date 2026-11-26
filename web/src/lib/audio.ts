@@ -1,4 +1,4 @@
-// The "Audio and timers" card: limits, defaults and checks for station.advanced and station.id. Pure functions, tested in
+// The Radio and Audio tabs of Settings, Station: limits, defaults and checks for station.advanced and station.id. Pure functions, tested in
 // audio.test.ts. The limits match Validate in internal/native/node/config.go; 0 or unset means the node's default.
 import type { Sa818Filter, Station, StationAdvanced, StationId } from './types';
 
@@ -6,10 +6,14 @@ import type { Sa818Filter, Station, StationAdvanced, StationId } from './types';
 export interface NumField { key: string; label: string; unit: string; min: number; max: number; step: number; def: number; help: string; keepZero?: boolean }
 
 /** Defaults of the node (config.go and audio/agc.go). */
-export const AGC_DEFAULTS = { modeAgc: true, radioAgc: false, preEmphasis: false, deEmphasis: false } as const;
+export const AGC_DEFAULTS = { modeAgc: true, radioAgc: true, flatAudio: false } as const;
 
-/** The SA818 filter flags: each is on unless set to false (the node's default, 1,1,1). */
+/** The SA818 filter flags and the node's defaults when none is stored: emphasis off, high-pass and low-pass on. */
 export const SA818_FILTER_KEYS = ['emphasis', 'highPass', 'lowPass'] as const;
+export const SA818_FILTER_DEFAULTS = { emphasis: false, highPass: true, lowPass: true } as const;
+
+/** A filter flag as the node will program it: the stored one, else the default. */
+export const filterOn = (f: Sa818Filter | undefined, k: (typeof SA818_FILTER_KEYS)[number]): boolean => f?.[k] ?? SA818_FILTER_DEFAULTS[k];
 
 /** Static gain, radio to network (rx) and network to radio (tx), applied before the AGC. */
 export const GAIN_FIELDS: NumField[] = [
@@ -24,8 +28,13 @@ export const DELAY_FIELDS: NumField[] = [
   { key: 'txOffDelayMs', label: 'Transmit-off delay', unit: 'ms', min: 0, max: 2000, step: 10, def: 0, help: 'Extra time the transmitter stays keyed after the hang time, 0 to 2000.' },
 ];
 
+/** The AGC targets, one per direction. */
+export const AGC_TARGET_FIELDS: NumField[] = [
+  { key: 'rxAgcTargetDb', label: 'Radio → network target', unit: 'dBFS', min: -40, max: -6, step: 1, def: -22, help: 'Speech level sent to the network, -40 to -6.' },
+  { key: 'txAgcTargetDb', label: 'Network → radio target', unit: 'dBFS', min: -40, max: -6, step: 1, def: -22, help: 'Speech level sent to the transmitter, -40 to -6.' },
+];
 export const AGC_FIELDS: NumField[] = [
-  { key: 'agcTargetDb', label: 'Target level', unit: 'dBFS', min: -40, max: -6, step: 1, def: -22, help: 'Speech level the AGC aims for, -40 to -6.' },
+  ...AGC_TARGET_FIELDS,
   { key: 'agcMaxDb', label: 'Maximum gain', unit: 'dB', min: 1, max: 30, step: 1, def: 18, help: 'The most the AGC may boost quiet audio, 1 to 30.' },
 ];
 export const TIMER_FIELDS: NumField[] = [
@@ -91,9 +100,9 @@ export function audioBody(base: Station, adv: StationAdvanced, id: StationId, fi
   if (i.enabled === true) delete i.enabled; // on is the default
   const out: Station = { ...base, advanced: a as StationAdvanced, id: i as StationId };
   if (filt !== undefined) {
-    // Only flags turned off are stored; all on is the default and is left out.
+    // Only flags that differ from the defaults are stored; the defaults are left out.
     const f: Sa818Filter = {};
-    for (const k of SA818_FILTER_KEYS) if (filt[k] === false) f[k] = false;
+    for (const k of SA818_FILTER_KEYS) if (typeof filt[k] === 'boolean' && filt[k] !== SA818_FILTER_DEFAULTS[k]) f[k] = filt[k];
     const radio = { ...base.radio } as Record<string, unknown>;
     if (Object.keys(f).length) radio.sa818Filter = f; else delete radio.sa818Filter;
     out.radio = radio as Station['radio'];
@@ -117,3 +126,15 @@ export function programmedText(p?: { emphasis: boolean; highPass: boolean; lowPa
   return `Programmed: emphasis ${p.emphasis ? 'on' : 'off'}, high-pass ${p.highPass ? 'on' : 'off'}, low-pass ${p.lowPass ? 'on' : 'off'}`;
 }
 function sortKeys(o: Record<string, unknown>): Record<string, unknown> { return Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]])); }
+
+/** The station.advanced keys each Settings, Station tab edits. A tab saves only its own keys over the station as saved now,
+ * so a change made on the other tab (or a tuning slider) is kept. */
+export const RADIO_ADV_KEYS: readonly string[] = [...TIMER_FIELDS, ...DELAY_FIELDS].map((f) => f.key).concat(['flatAudio', 'plFilter']);
+export const AUDIO_ADV_KEYS: readonly string[] = [...GAIN_FIELDS, ...AGC_FIELDS].map((f) => f.key).concat(['modeAgc', 'radioAgc']);
+
+/** A copy of base where each of keys takes the edited value (left out when edited has none). */
+export function withKeys(base: StationAdvanced, edited: StationAdvanced, keys: readonly string[]): StationAdvanced {
+  const out: StationAdvanced = { ...base };
+  for (const k of keys) { if (edited[k] === undefined) delete out[k]; else out[k] = edited[k]; }
+  return out;
+}

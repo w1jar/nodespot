@@ -106,6 +106,8 @@ const resolved = () => {
 const started = new Date(Date.now() - 5 * 3600e3).toISOString();
 let active = 'allstar', target = '1000', state: 'idle' | 'connecting' | 'connected' = 'connected', since = new Date(Date.now() - 1800e3).toISOString();
 let nodeRunning = true, ptt = false, cos = false;
+// The test tone (POST /api/radio/tone): keyed until the timer ends it or DELETE stops it.
+let testTone: ReturnType<typeof setTimeout> | null = null;
 let talker: { callsign: string; name: string; place: string; id?: number; since: string } | null = null;
 
 interface Call { callsign: string; name: string; place: string; id?: number; mode: string; target: string; node?: string; desc?: string }
@@ -125,13 +127,15 @@ const iso = (t: number) => new Date(t).toISOString();
 
 const inputLevel = () => {
   const t = Date.now() / 1000, on = cos || Math.sin(t / 3) > 0.2;
-  const peakDb = on ? -14 + 10 * Math.sin(t * 2.3) + Math.random() * 2 : -90;
+  // The receive level and gain move the meter, as on a real radio.
+  const gain = 20 * Math.log10(Math.max(0.05, Number(station.radio.rxVolume ?? 0.6)) / 0.6) + Number(station.advanced.rxGainDb ?? 0);
+  const peakDb = on ? Math.min(0, -14 + gain + 4 * Math.sin(t * 2.3) + Math.random() * 2) : -90;
   return { peakDb, rmsDb: on ? peakDb - 9 : -90, cos };
 };
 const nodeJSON = () => ({
   callsign: station.callsign || undefined, started,
   echoTest: { at: iso(now() - 30e3), frames: 160, durationMs: 3200, peakDb: -9.4, rmsDb: -21.8, voicedFrames: 142, clipped: 0 },
-  radio: { present: radioPresent && resolved().audio, level: inputLevel(), ptt, cos, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818 },
+  radio: { present: radioPresent && resolved().audio, level: inputLevel(), ptt, cos, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818, ...(testTone ? { testTone: true } : {}) },
   active: active || undefined, since: active ? since : undefined,
   mode: active ? modeStatus(active) : undefined,
   id: { enabled: station.id.enabled, owed: false, last: iso(now() - 240e3) },
@@ -249,6 +253,7 @@ export function mockApi(): Plugin {
   restartClients = () => { clients.forEach((c) => c.res.end()); clients.clear(); };
   const broadcast = (ev: string, f: (role: string) => unknown) => clients.forEach((c) => { const d = f(c.role); if (d !== undefined) sse(c, ev, d); });
   const pushNode = () => broadcast('node', () => nodeJSON());
+  const stopTone = () => { if (testTone) { clearTimeout(testTone); testTone = null; ptt = false; pushNode(); } };
   const event = (kind: string, extra: Record<string, unknown> = {}) => broadcast('nodeevent', () => ({ kind, mode: active, at: iso(now()), ...extra }));
 
   // The one active mode: select it, optionally connect a target (a connect takes a moment).
@@ -388,7 +393,7 @@ export function mockApi(): Plugin {
               Object.assign(station.radio, body.radio);
             }
             // Like the node: the sent id and advanced replace the saved ones, and the limits are the node's.
-            const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], agcTargetDb: [-40, -6], agcMaxDb: [1, 30], rxGainDb: [-20, 20], txGainDb: [-20, 20], rxOnDelayMs: [0, 1000], txOnDelayMs: [0, 1000], txOffDelayMs: [0, 2000], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
+            const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], rxAgcTargetDb: [-40, -6], txAgcTargetDb: [-40, -6], agcMaxDb: [1, 30], rxGainDb: [-20, 20], txGainDb: [-20, 20], rxOnDelayMs: [0, 1000], txOnDelayMs: [0, 1000], txOffDelayMs: [0, 2000], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
             for (const o of [body.advanced, body.id]) for (const [k, [lo, hi]] of Object.entries(lim)) {
               const v = o?.[k];
               if (v !== undefined && (typeof v !== 'number' || v < lo || v > hi)) return err(res, 400, `${k} must be ${lo} to ${hi}`, 'bad_request');
@@ -439,9 +444,21 @@ export function mockApi(): Plugin {
         }
         if (p === '/radio/program' && m === 'POST') {
           if (!isAdmin) return forbid();
-          // Like the node: Program sends the configured SA818 filters (on unless turned off) and the state file remembers them.
+          // Like the node: Program sends the configured SA818 filters (unset: emphasis off, high-pass and low-pass on) and the
+          // state file remembers them.
           const f = station.radio.sa818Filter ?? {};
-          programmedFilters = { emphasis: f.emphasis !== false, highPass: f.highPass !== false, lowPass: f.lowPass !== false, at: iso(now()) };
+          programmedFilters = { emphasis: f.emphasis === true, highPass: f.highPass !== false, lowPass: f.lowPass !== false, at: iso(now()) };
+          return json(res, 200, nodeJSON());
+        }
+        if (p === '/radio/tone' && (m === 'POST' || m === 'DELETE')) {
+          if (!isAdmin) return forbid();
+          if (m === 'DELETE') { stopTone(); return json(res, 200, nodeJSON()); }
+          const secs = body?.seconds ?? 5;
+          if (typeof secs !== 'number' || secs < 1 || secs > 10) return err(res, 400, 'seconds must be 1 to 10', 'bad_request');
+          if (!radioPresent) return err(res, 409, 'test tone: this node has no radio', 'node_refused');
+          if (testTone) return err(res, 409, 'test tone: the transmitter is already keyed', 'node_refused');
+          if (ptt || cos) return err(res, 409, ptt ? 'test tone: the transmitter is already keyed' : 'test tone: the radio is receiving', 'node_refused');
+          ptt = true; testTone = setTimeout(() => { testTone = null; ptt = false; pushNode(); }, secs * 1000); pushNode();
           return json(res, 200, nodeJSON());
         }
         if (p === '/hostlists' && m === 'GET') {

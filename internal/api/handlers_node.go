@@ -41,6 +41,8 @@ func (s *Server) nodeRoutes() {
 	m.HandleFunc("PUT /api/radio", s.authed(store.RoleAdmin, s.handleRadioPut))
 	m.HandleFunc("GET /api/radio/info", s.authed(store.RoleAdmin, s.handleRadioInfo))
 	m.HandleFunc("POST /api/radio/program", s.authed(store.RoleAdmin, s.handleRadioProgram))
+	m.HandleFunc("POST /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestTone))
+	m.HandleFunc("DELETE /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestToneStop))
 	m.HandleFunc("GET /api/hostlists", s.authed(store.RoleOperator, s.handleHostLists))
 	m.HandleFunc("GET /api/hostlists/status", s.authed(store.RoleOperator, s.handleHostListsStatus))
 	m.HandleFunc("POST /api/hostlists/refresh", s.authed(store.RoleAdmin, s.handleHostListsRefresh))
@@ -498,6 +500,52 @@ func (s *Server) handleRadioProgram(w http.ResponseWriter, r *http.Request, u st
 		return
 	}
 	s.audit(u, "radio.program", nil)
+	s.adopt(st)
+	writeJSON(w, 200, s.nw.json())
+}
+
+// handleTestTone keys the radio with the 1 kHz test tone {seconds?} (1 to
+// 10, default 5). The node refuses it (409) while it transmits, while the
+// radio receives and while the active mode is talking. It answers the node
+// status, whose radio.testTone is true while the tone plays.
+func (s *Server) handleTestTone(w http.ResponseWriter, r *http.Request, u store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	var in struct {
+		Seconds float64 `json:"seconds"`
+	}
+	if !decode(w, r, &in, true) {
+		return
+	}
+	if in.Seconds != 0 && (in.Seconds < 1 || in.Seconds > node.MaxTestTone.Seconds()) {
+		writeErr(w, 400, "bad_request", "seconds must be 1 to 10")
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.TestTone(ctx, in.Seconds, false)
+	if err != nil {
+		s.nodeErr(w, err) // a refusal is 409 node_refused with the node's reason
+		return
+	}
+	s.audit(u, "radio.test_tone", map[string]any{"seconds": in.Seconds})
+	s.adopt(st)
+	writeJSON(w, 200, s.nw.json())
+}
+
+// handleTestToneStop ends the test tone early (no error when none plays).
+func (s *Server) handleTestToneStop(w http.ResponseWriter, r *http.Request, _ store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.TestTone(ctx, 0, true)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
 	s.adopt(st)
 	writeJSON(w, 200, s.nw.json())
 }

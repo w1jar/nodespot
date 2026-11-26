@@ -331,25 +331,31 @@ Code references point into the nodespot repository; size estimates are rough and
 - [ASL3 software update 2025-11-14](https://community.allstarlink.org/t/allstarlink-v3-software-update-release-2025-11-14/23960)
 - [nodes.allstarlink.org DNS service update](https://community.allstarlink.org/t/nodes-allstarlink-org-dns-service-update/21879)
 
-### Audio and timers (Settings > Station > Radio)
+### Radio and Audio settings (Settings > Station > Radio and Audio)
 
-The card edits `station.advanced` and `station.id`. A save is validated by `Config.Validate`, written, and applied to the running engine at once (`paramsFor` is rebuilt on every commit); no restart is needed. Only radio wiring changes restart the node. Empty or 0 means the default; the form shows it as a placeholder and does not accept 0. The key-up delay is the exception: empty is its default and 0 turns it off.
+Settings > Station has two tabs for the radio. **Radio** (`#/settings/station/radio`) holds the RF side: the interface, the SA818 channel and Program, the timers and delays, the station ID, and a collapsed Advanced section with "Radio audio is flat (data port or discriminator)", the PL filter, the SA818 filters and the mic boost. **Audio** (`#/settings/station/audio`; the old `#/tune` and `#/settings/audio-levels` links redirect here) holds the levels: a two-step tuning wizard, the AGC each way, and a collapsed Advanced section with the static gain, the AGC's maximum gain and the sound chip's counters. Each tab saves only its own `advanced` keys over the station as saved now, so a change on one tab never undoes the other.
+
+Tuning, step 1 (receive): "Key up a handheld and talk." A live meter of `GET /api/radio/input` (peak and RMS) with the target band (-20 to -6 dBFS) shaded green, and a verdict from the highest peak of the last two seconds: Good, Too low or Too high. The slider is the sound chip's capture mixer level when it has one, else Receive gain (`advanced.rxGainDb`, saved when the slider is released). Step 2 (transmit): "Send test tone" keys the transmitter with a 1 kHz tone for 5 seconds (`POST /api/radio/tone`), with Stop (`DELETE /api/radio/tone`), and a shortcut to the echo test. The slider is the playback mixer level, else Transmit gain (`advanced.txGainDb`). The Station group is admin only; the controls are read-only for anyone else.
+
+Test tone: the node keys PTT, waits for the key-up delay, then plays a 1 kHz sine for the asked time (1 to 10 s, default 5) at the level network speech reaches the radio: the network to radio AGC target when that AGC is on, else -22 dBFS plus the transmit gain (RMS; the peak is 3 dB higher, at most -1 dBFS). It is refused (`409 node_refused` with the reason) when there is no radio, the node is already transmitting, the receiver has a carrier, or the active mode is talking or has audio queued. It stops early when a local station or the network starts talking, and counts as a transmission for the station ID. The node status has `radio.testTone: true` while it plays; the node publishes a `tone` event when it starts and ends.
+
+The tabs edit `station.advanced`, `station.id` and `station.radio.sa818Filter`. A save is validated by `Config.Validate`, written, and applied to the running engine at once (`paramsFor` is rebuilt on every commit); no restart is needed. Only radio wiring changes restart the node. Empty or 0 means the default; the form shows it as a placeholder and does not accept 0. The key-up delay is the exception: empty is its default and 0 turns it off.
 
 | Setting | Key | Range | Default |
 |---|---|---|---|
 | Receive gain, radio to network | `advanced.rxGainDb` | -20 to 20 dB | 0 |
 | Transmit gain, network to radio | `advanced.txGainDb` | -20 to 20 dB | 0 |
-| Software pre-emphasis (transmit) | `advanced.preEmphasis` | on/off | off |
-| Software de-emphasis (receive) | `advanced.deEmphasis` | on/off | off |
+| Radio audio is flat: software pre-emphasis (transmit) and de-emphasis (receive) | `advanced.flatAudio` | on/off | off |
 | PL filter (receive) | `advanced.plFilter` | on/off; unset is automatic | on, off for an SA818 |
-| SA818 filters | `radio.sa818Filter.{emphasis,highPass,lowPass}` | on/off each | all on |
+| SA818 filters | `radio.sa818Filter.{emphasis,highPass,lowPass}` | on/off each | emphasis off, high-pass and low-pass on |
 | Receive boost | `radio.rxBoost` | on/off, only if the chip has the control | chip default |
 | Receive-on delay | `advanced.rxOnDelayMs` | 0 to 1000 ms | 0 |
 | Key-up delay | `advanced.txOnDelayMs` | 0 to 1000 ms; 0 is off | 200 |
 | Transmit-off delay | `advanced.txOffDelayMs` | 0 to 2000 ms | 0 |
 | AGC, network to radio | `advanced.modeAgc` | on/off | on |
-| AGC, radio to network | `advanced.radioAgc` | on/off | off |
-| AGC target (both directions) | `advanced.agcTargetDb` | -40 to -6 dBFS | -22 |
+| AGC, radio to network | `advanced.radioAgc` | on/off | on |
+| AGC target, radio to network | `advanced.rxAgcTargetDb` | -40 to -6 dBFS | -22 |
+| AGC target, network to radio | `advanced.txAgcTargetDb` | -40 to -6 dBFS | -22 |
 | AGC maximum gain (both directions) | `advanced.agcMaxDb` | 1 to 30 dB (0 = default) | 18 |
 | Hang time | `advanced.hangMs` | 1 to 10000 ms | 500 |
 | Transmit timeout, both ways | `advanced.txTimeoutS` | 1 to 1800 s | 180 |
@@ -362,12 +368,14 @@ The card edits `station.advanced` and `station.id`. A save is validated by `Conf
 | CW level | `id.levelDb` | -60 to -1 dBFS | -24 |
 | Voice file | `id.voiceFile` | absolute path of an 8 kHz mono WAV, else CW | CW |
 
-Audio processing order. Receive (radio to network): PL filter, software de-emphasis, receive gain, AGC. Transmit (network to radio): transmit gain, software pre-emphasis, AGC. The core runs at 8 kHz in 20 ms frames; the filters are designed for that rate (`internal/native/audio/dsp.go`). The static gain is exact (a power of ten of the dB value) and soft-limited. The emphasis filters are first order with a 75 microsecond constant (corner 2122 Hz), normalized to 0 dB at 1 kHz, and pre-emphasis is the exact inverse of de-emphasis. The PL filter is a 4th-order Butterworth at 300 Hz (about -3 dB at 300 Hz and more than 20 dB down at 100 Hz).
+Retired keys are migrated when the config is read: `agcTargetDb` becomes both `rxAgcTargetDb` and `txAgcTargetDb` (unless they are set), and `preEmphasis` or `deEmphasis` set to true becomes `flatAudio: true` (unless it is set); the old keys are dropped on the next save.
 
-SA818 filters: `radio.sa818Filter` flags (unset means on, the module's default `AT+SETFILTER=1,1,1`) are written to the module only by the Program button and the other explicit programming paths, never when settings are saved. Settings shows the filters recorded in `/etc/nodespot/sa818.json` when the module was last programmed, or "unknown until programmed". The module's polarity for the flags (1 = filter on) is not confirmed on hardware. On an SA818 radio the software emphasis switches are hidden and the PL filter is off unless set.
+Audio processing order. Receive (radio to network): PL filter, software de-emphasis (flat audio), receive gain, AGC. Transmit (network to radio): transmit gain, software pre-emphasis (flat audio), AGC. The core runs at 8 kHz in 20 ms frames; the filters are designed for that rate (`internal/native/audio/dsp.go`). The static gain is exact (a power of ten of the dB value) and soft-limited. The emphasis filters are first order with a 75 microsecond constant (corner 2122 Hz), normalized to 0 dB at 1 kHz, and pre-emphasis is the exact inverse of de-emphasis. The PL filter is a 4th-order Butterworth at 300 Hz (about -3 dB at 300 Hz and more than 20 dB down at 100 Hz).
+
+SA818 filters: the module's command is `AT+SETFILTER=<emphasis>,<highpass>,<lowpass>`, where 1 bypasses that filter and 0 turns it on (the programming manual's `AT+SETFILTER=0,0,0` turns all three on). The `radio.sa818Filter` flags mean "on" in the config, the API and Settings, and the node writes the inverse to the wire. An unset flag takes the default: emphasis off, high-pass on, low-pass on (`AT+SETFILTER=1,0,0`). The high-pass removes the PL tone from the received audio. The flags are written to the module only by the Program button and the other explicit programming paths, never when settings are saved. Settings shows the filters recorded in `/etc/nodespot/sa818.json` when the module was last programmed (as "on" flags), or "unknown until programmed". The state file is version 2; a version 1 file was written by builds that sent the flags inverted, so it reads as unknown and the module is programmed again at boot. On an SA818 radio the PL filter is off unless set.
 
 Delays: with a receive-on delay, a carrier must be present for `rxOnDelayMs` before the node starts passing receive audio, so that much of the start of a transmission is dropped. The key-up delay holds network audio for `txOnDelayMs` after the node keys PTT, so the transmitter (an SA818 takes a moment) is up before the first word; the audio waits in the queue, none of it is dropped. It applies only when PTT goes up: a transmission that starts during the hang plays at once. The transmit-off delay is added to the hang time before PTT is released.
 
 Receive boost: `PUT /api/radio` accepts `rxBoost`; the control is the sound chip's microphone boost ALSA mixer control, and `GET /api/radio` reports `BoostAvailable` and `Boost`. A chip without the control ignores the setting.
 
-The web card saves by reading the current station, replacing only `advanced` and `id`, and PUTting it to `/api/station`, so other fields (and unknown keys such as `md380`) survive.
+The web tabs save by reading the current station, replacing only their own keys, and PUTting it to `/api/station`, so other fields (and unknown keys such as `md380`) survive.

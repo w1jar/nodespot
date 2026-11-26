@@ -107,15 +107,15 @@ func TestSoftwareEmphasis(t *testing.T) {
 	cfg := quietConfig()
 	plain := peak(rxSent(t, cfg, hi, 40)[20:])
 	cfg = quietConfig()
-	cfg.Station.Advanced.DeEmphasis = true
+	cfg.Station.Advanced.FlatAudio = true
 	de := peak(rxSent(t, cfg, hi, 40)[20:])
 	if de >= plain*8/10 {
 		t.Fatalf("de-emphasis at 3 kHz: %d against %d", de, plain)
 	}
-	// Pre-emphasis on the transmit side lifts the highs.
+	// Flat audio also pre-emphasizes the transmit side, lifting the highs.
 	run := func(pre bool) int {
 		cfg := quietConfig()
-		cfg.Station.Advanced.PreEmphasis = pre
+		cfg.Station.Advanced.FlatAudio = pre
 		g := newRig(t, cfg)
 		g.sel(mode.BM, nil)
 		var fs []audio.Frame

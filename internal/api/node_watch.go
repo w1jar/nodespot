@@ -32,6 +32,7 @@ type Node interface {
 	RadioTune(ctx context.Context, rx, tx *float64, boost *bool) (radio.Levels, error)
 	RadioInfo(ctx context.Context) (node.RadioDetail, error)
 	RadioProgram(ctx context.Context) (node.Status, error)
+	TestTone(ctx context.Context, seconds float64, stop bool) (node.Status, error)
 	Reload(ctx context.Context) (node.Status, error)
 	Subscribe(ctx context.Context) (node.Status, <-chan node.Event, error)
 }
@@ -246,7 +247,7 @@ func (s *Server) refreshModes(ctx context.Context) {
 // nodeEvent folds one event of the node's stream.
 func (s *Server) nodeEvent(ctx context.Context, ev node.Event) {
 	switch ev.Kind {
-	case node.EventPTT, node.EventCOS, node.EventRx:
+	case node.EventPTT, node.EventCOS, node.EventRx, node.EventTone:
 		if ev.On != nil {
 			s.nw.mu.Lock()
 			switch ev.Kind {
@@ -254,6 +255,8 @@ func (s *Server) nodeEvent(ctx context.Context, ev node.Event) {
 				s.nw.st.Radio.PTT = *ev.On
 			case node.EventCOS:
 				s.nw.st.Radio.COS = *ev.On
+			case node.EventTone:
+				s.nw.st.Radio.TestTone = *ev.On
 			default:
 				// A local station's audio started or stopped going to
 				// the active mode: the Dashboard's "Local station".

@@ -60,6 +60,8 @@ export interface NodeJSON {
     /** The preset in use and the interface found (chip name, USB id). */
     preset?: string; chip?: string; usbId?: string; product?: string; detected?: boolean; sa818?: boolean;
     level?: InputLevel;
+    /** True while the test tone (POST /api/radio/tone) is keyed. */
+    testTone?: boolean;
   };
   /** The active mode ("" or absent when the node is idle) and its status. */
   active?: string; since?: string; mode?: ModeStatus; registration?: Registration;
@@ -120,11 +122,13 @@ export interface StationId {
 /** station.advanced: timers and AGC. Unset or 0 is the node's default. Unknown keys (md380 and others) survive a save. */
 export interface StationAdvanced {
   hangMs?: number; txTimeoutS?: number;
-  modeAgc?: boolean; radioAgc?: boolean; agcTargetDb?: number; agcMaxDb?: number;
+  /** AGC: radioAgc is radio to network, modeAgc network to radio; both on by default. Targets -40 to -6 dBFS (unset -22). */
+  modeAgc?: boolean; radioAgc?: boolean; rxAgcTargetDb?: number; txAgcTargetDb?: number; agcMaxDb?: number;
   /** Static gain, -20 to 20 dB: radio to network and network to radio. 0 or unset is none. */
   rxGainDb?: number; txGainDb?: number;
-  /** Software 75 microsecond emphasis (off by default); plFilter unset is automatic: on, unless the radio is an SA818. */
-  preEmphasis?: boolean; deEmphasis?: boolean; plFilter?: boolean;
+  /** flatAudio: the radio's audio is flat (data port or discriminator), so the node applies 75 microsecond pre- and
+   * de-emphasis in software. plFilter unset is automatic: on, unless the radio is an SA818. */
+  flatAudio?: boolean; plFilter?: boolean;
   /** Carrier debounce before a receive counts (0 to 1000 ms) and extra hang time (0 to 2000 ms). */
   rxOnDelayMs?: number; txOffDelayMs?: number;
   /** Key-up delay: network audio waits this long after PTT (0 to 1000 ms); unset is 200, 0 is off. */
@@ -143,7 +147,7 @@ export interface Station {
     ctcssSource?: string; ctcssActiveLow?: boolean; sa818?: boolean; sa818Port?: string;
     /** Microphone boost of the sound chip, when it has the control. */
     rxBoost?: boolean;
-    /** The SA818's filter flags, written to the module only by Program. Unset flags are on. */
+    /** The SA818's filter flags, written to the module only by Program. Unset flags take the defaults: emphasis off, high-pass and low-pass on. */
     sa818Filter?: Sa818Filter;
   };
   id: StationId;

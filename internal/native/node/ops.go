@@ -72,6 +72,8 @@ type RadioStatus struct {
 	// PTTStuck: unkeying the transmitter failed and is being retried, so
 	// it may still be on the air.
 	PTTStuck bool `json:"pttStuck,omitempty"`
+	// TestTone: the transmit test tone is playing or waiting to key up.
+	TestTone bool `json:"testTone,omitempty"`
 }
 
 // InputLevel is the radio's receive level as the node hears it from the sound
@@ -105,6 +107,7 @@ func (e *Engine) Status() Status {
 			Preset: string(e.info.Interface.Preset), Chip: e.info.Chip, USBID: e.info.USBID,
 			Product: e.info.Product, Detected: e.info.Detected, SA818: e.info.Interface.SA818,
 			RxActive: e.sx.rfOn, NetDropped: e.sx.netDropped, RxLocked: e.sx.rfLocked, TxLocked: e.sx.txLocked, PTTStuck: e.sx.pttStuck,
+			TestTone: e.sx.tone != nil,
 		},
 		ID: IDStatus{
 			Enabled: e.params.id.on, Owed: e.sx.idT.owed,
@@ -528,7 +531,7 @@ type RadioDetail struct {
 }
 
 // ProgrammedFilters are the SA818 filter flags last sent to the module, true
-// meaning on (wire value 1), and when.
+// meaning the filter is on (wire value 0; 1 bypasses it), and when.
 type ProgrammedFilters struct {
 	Emphasis bool      `json:"emphasis"`
 	HighPass bool      `json:"highPass"`

@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { audioBody, audioDirty, audioError, effectivePL, fieldError, programmedText, AGC_FIELDS, DELAY_FIELDS, GAIN_FIELDS, TIMER_FIELDS, ID_FIELDS } from './audio.ts';
+import { audioBody, audioDirty, audioError, effectivePL, fieldError, filterOn, programmedText, withKeys, AGC_DEFAULTS, AGC_FIELDS, AUDIO_ADV_KEYS, RADIO_ADV_KEYS, SA818_FILTER_DEFAULTS, DELAY_FIELDS, GAIN_FIELDS, TIMER_FIELDS, ID_FIELDS } from './audio.ts';
 import type { Station } from './types';
 
 const base = (): Station => ({ callsign: 'N0CALL', radio: { frequencyMHz: 146.52 }, id: { enabled: true, wpm: 20, extra: 1 }, advanced: { hangMs: 700, md380: '127.0.0.1:2470', modeAgc: false }, dmrId: 1234567 });
 
 test('limits match the node', () => {
   const f = (k: string) => [...AGC_FIELDS, ...TIMER_FIELDS, ...ID_FIELDS].find((x) => x.key === k)!;
-  assert.deepEqual([f('agcTargetDb').min, f('agcTargetDb').max, f('agcTargetDb').def], [-40, -6, -22]);
+  assert.deepEqual([f('rxAgcTargetDb').min, f('rxAgcTargetDb').max, f('rxAgcTargetDb').def], [-40, -6, -22]);
+  assert.deepEqual([f('txAgcTargetDb').min, f('txAgcTargetDb').max, f('txAgcTargetDb').def], [-40, -6, -22]);
   assert.deepEqual([f('agcMaxDb').max, f('agcMaxDb').def], [30, 18]);
   assert.deepEqual([f('hangMs').max, f('hangMs').def], [10000, 500]);
   assert.deepEqual([f('txTimeoutS').max, f('txTimeoutS').def], [1800, 180]);
@@ -30,13 +31,13 @@ test('gain and delay checks', () => {
   assert.notEqual(audioError({ rxOnDelayMs: -1 }, {}), '');
 });
 
-test('emphasis and PL in the body', () => {
+test('flat audio and PL in the body', () => {
   const b = base();
-  const out = audioBody(b, { ...b.advanced, rxGainDb: 0, txGainDb: -3.5, preEmphasis: true, deEmphasis: false, plFilter: false, rxOnDelayMs: 0, txOffDelayMs: 250 }, b.id);
+  const out = audioBody(b, { ...b.advanced, rxGainDb: 0, txGainDb: -3.5, flatAudio: true, plFilter: false, rxOnDelayMs: 0, txOffDelayMs: 250 }, b.id);
   assert.equal(out.advanced.rxGainDb, undefined);
   assert.equal(out.advanced.txGainDb, -3.5);
-  assert.equal(out.advanced.preEmphasis, true);
-  assert.equal(out.advanced.deEmphasis, undefined);
+  assert.equal(out.advanced.flatAudio, true);
+  assert.equal(audioBody(b, { ...b.advanced, flatAudio: false }, b.id).advanced.flatAudio, undefined); // off is the default
   assert.equal(out.advanced.plFilter, false); // an explicit off is kept: unset means automatic
   assert.equal(out.advanced.txOffDelayMs, 250);
   assert.equal(audioBody(b, { ...b.advanced, plFilter: undefined }, b.id).advanced.plFilter, undefined);
@@ -62,10 +63,19 @@ test('effective PL', () => {
   assert.equal(effectivePL({ plFilter: false }, false), false);
 });
 
+test('SA818 filter defaults: emphasis off, high-pass and low-pass on', () => {
+  assert.deepEqual(SA818_FILTER_DEFAULTS, { emphasis: false, highPass: true, lowPass: true });
+  assert.equal(filterOn(undefined, 'emphasis'), false);
+  assert.equal(filterOn({}, 'highPass'), true);
+  assert.equal(filterOn({ emphasis: true, lowPass: false }, 'emphasis'), true);
+  assert.equal(filterOn({ emphasis: true, lowPass: false }, 'lowPass'), false);
+});
+
 test('SA818 filters in the body', () => {
   const b = base();
-  assert.equal(audioBody(b, b.advanced, b.id, { emphasis: true, highPass: true, lowPass: true }).radio.sa818Filter, undefined);
-  assert.deepEqual(audioBody(b, b.advanced, b.id, { emphasis: false, highPass: true }).radio.sa818Filter, { emphasis: false });
+  assert.equal(audioBody(b, b.advanced, b.id, { emphasis: false, highPass: true, lowPass: true }).radio.sa818Filter, undefined);
+  assert.deepEqual(audioBody(b, b.advanced, b.id, { emphasis: true, highPass: true }).radio.sa818Filter, { emphasis: true });
+  assert.deepEqual(audioBody(b, b.advanced, b.id, { emphasis: false, highPass: false }).radio.sa818Filter, { highPass: false });
   assert.equal(audioBody(b, b.advanced, b.id).radio.sa818Filter, undefined); // not given: radio untouched
   const s: Station = { ...b, radio: { ...b.radio, sa818Filter: { lowPass: false } } };
   assert.equal(audioDirty(s, s.advanced, s.id), false);
@@ -103,12 +113,31 @@ test('card check', () => {
 
 test('body keeps other fields and leaves defaults out', () => {
   const b = base();
-  const out = audioBody(b, { ...b.advanced, hangMs: '' as unknown as number, agcMaxDb: 20, modeAgc: true, radioAgc: true }, { ...b.id, enabled: true, wpm: null as unknown as number, voiceFile: ' /a/id.wav ' });
+  const out = audioBody(b, { ...b.advanced, hangMs: '' as unknown as number, agcMaxDb: 20, modeAgc: true, radioAgc: false }, { ...b.id, enabled: true, wpm: null as unknown as number, voiceFile: ' /a/id.wav ' });
   assert.equal(out.callsign, 'N0CALL');
   assert.equal(out.dmrId, 1234567);
-  assert.deepEqual(out.advanced, { md380: '127.0.0.1:2470', agcMaxDb: 20, radioAgc: true });
+  assert.deepEqual(out.advanced, { md380: '127.0.0.1:2470', agcMaxDb: 20, radioAgc: false });
   assert.deepEqual(out.id, { extra: 1, voiceFile: '/a/id.wav' });
-  assert.equal(audioBody(b, { agcTargetDb: '-30' as unknown as number }, {}).advanced.agcTargetDb, -30);
+  const t = audioBody(b, { rxAgcTargetDb: '-30' as unknown as number, txAgcTargetDb: -18 }, {}).advanced;
+  assert.deepEqual([t.rxAgcTargetDb, t.txAgcTargetDb], [-30, -18]);
+});
+
+test('AGC: both directions on by default, separate targets', () => {
+  assert.deepEqual(AGC_DEFAULTS, { modeAgc: true, radioAgc: true, flatAudio: false });
+  assert.equal(audioError({ rxAgcTargetDb: -41 }, {}) !== '', true);
+  assert.equal(audioError({ txAgcTargetDb: -5 }, {}) !== '', true);
+  assert.equal(audioError({ rxAgcTargetDb: -40, txAgcTargetDb: -6 }, {}), '');
+  const b = base();
+  assert.equal(audioBody(b, { radioAgc: true, modeAgc: true }, {}).advanced.radioAgc, undefined);
+});
+
+test('each tab saves only its own keys', () => {
+  assert.ok(RADIO_ADV_KEYS.includes('hangMs') && RADIO_ADV_KEYS.includes('flatAudio') && RADIO_ADV_KEYS.includes('plFilter'));
+  assert.ok(AUDIO_ADV_KEYS.includes('rxAgcTargetDb') && AUDIO_ADV_KEYS.includes('radioAgc') && AUDIO_ADV_KEYS.includes('rxGainDb'));
+  assert.equal(RADIO_ADV_KEYS.some((k) => AUDIO_ADV_KEYS.includes(k)), false);
+  const saved = { hangMs: 900, rxGainDb: 3, md380: 'x' };
+  assert.deepEqual(withKeys(saved, { hangMs: 700, rxGainDb: -1 }, RADIO_ADV_KEYS), { hangMs: 700, rxGainDb: 3, md380: 'x' });
+  assert.deepEqual(withKeys(saved, { hangMs: 700 }, AUDIO_ADV_KEYS), { hangMs: 900, md380: 'x' });
 });
 
 test('dirty', () => {

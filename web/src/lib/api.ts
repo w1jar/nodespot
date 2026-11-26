@@ -144,6 +144,9 @@ export const api = {
   radioInput: () => req<InputLevel>('GET', '/radio/input'),
   radioInfo: () => req<RadioInfo>('GET', '/radio/info'),
   radioProgram: () => req<NodeJSON>('POST', '/radio/program'),
+  /** Keys the transmitter with a 1 kHz tone for `seconds` (1 to 10; unset is 5). Admin. */
+  testTone: (seconds?: number) => req<NodeJSON>('POST', '/radio/tone', seconds ? { seconds } : undefined),
+  stopTestTone: () => req<NodeJSON>('DELETE', '/radio/tone'),
   hostLists: (mode: string) => req<HostList>('GET', `/hostlists?mode=${q(mode)}`),
   hostListsStatus: () => req<HostListsStatus>('GET', '/hostlists/status'),
   refreshHostLists: () => req<HostListsStatus>('POST', '/hostlists/refresh'),

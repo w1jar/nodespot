@@ -90,9 +90,10 @@ func octalDigits(n int) bool {
 	return true
 }
 
-// Filters selects the module's audio filters. The polarity of the wire value
-// (true sends 1) follows the common SA818 programming scripts and has not been
-// confirmed on hardware here.
+// Filters selects the module's audio filters; true means the filter is on.
+// On the wire (AT+SETFILTER=emphasis,highpass,lowpass, per the SA818
+// programming manual) 1 bypasses a filter and 0 leaves it in the audio path,
+// so an "on" filter goes out as 0.
 type Filters struct {
 	Emphasis bool `json:"emphasis"`
 	HighPass bool `json:"highpass"`
@@ -115,13 +116,15 @@ type Settings struct {
 }
 
 // DefaultSettings returns a simplex starting point: wide, squelch 4, volume 8,
-// no tones, filters on. The frequencies must still be set.
+// no tones, DefaultFilters. The frequencies must still be set.
 func DefaultSettings() Settings {
-	return Settings{
-		Bandwidth: Wide, Squelch: 4, Volume: 8,
-		Filters: Filters{Emphasis: true, HighPass: true, LowPass: true},
-	}
+	return Settings{Bandwidth: Wide, Squelch: 4, Volume: 8, Filters: DefaultFilters()}
 }
+
+// DefaultFilters are the filters of a module with no stored choice: the
+// pre/de-emphasis bypassed (flat audio, as an AllStar node expects), the
+// high-pass and low-pass on. On the wire: AT+SETFILTER=1,0,0.
+func DefaultFilters() Filters { return Filters{Emphasis: false, HighPass: true, LowPass: true} }
 
 func freqOK(mhz float64) bool {
 	return (mhz >= 134 && mhz <= 174) || (mhz >= 400 && mhz <= 480)
@@ -154,11 +157,13 @@ func (s Settings) Validate() error {
 	return errors.Join(errs...)
 }
 
-func b01(b bool) int {
-	if b {
-		return 1
+// bypass is the wire value of a filter flag: 1 bypasses the filter, 0 keeps
+// it on.
+func bypass(on bool) int {
+	if on {
+		return 0
 	}
-	return 0
+	return 1
 }
 
 // Commands formats the AT commands that program the settings, in the order
@@ -176,7 +181,7 @@ func (s Settings) Commands() ([]string, error) {
 	return []string{
 		fmt.Sprintf("AT+DMOSETGROUP=%d,%.4f,%.4f,%s,%d,%s", bw, s.TxMHz, s.RxMHz, tx, s.Squelch, rx),
 		fmt.Sprintf("AT+DMOSETVOLUME=%d", s.Volume),
-		fmt.Sprintf("AT+SETFILTER=%d,%d,%d", b01(s.Filters.Emphasis), b01(s.Filters.HighPass), b01(s.Filters.LowPass)),
+		fmt.Sprintf("AT+SETFILTER=%d,%d,%d", bypass(s.Filters.Emphasis), bypass(s.Filters.HighPass), bypass(s.Filters.LowPass)),
 	}, nil
 }
 

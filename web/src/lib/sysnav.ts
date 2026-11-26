@@ -2,7 +2,7 @@
 
 /** Every flat section id of the first Settings layout (#/settings/<id>) and where it lives now: [group, tab?]. */
 export const OLD_IDS: Readonly<Record<string, readonly [string, string?]>> = {
-  'audio-levels': ['station', 'radio'],
+  'audio-levels': ['station', 'audio'],
   'dv-engine': ['modes'],
   'dv-identity': ['modes'],
   'dv-bridge': ['modes'],

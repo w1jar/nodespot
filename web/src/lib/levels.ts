@@ -1,4 +1,4 @@
-// Pure helpers for the live input meter and the echo test report on the Radio tune page.
+// Pure helpers for the live input meter, the tuning wizard and the echo test report on the Audio tab.
 import type { EchoReport } from './types';
 
 /** The bottom of the meter, in dBFS. Anything quieter shows as an empty bar. */
@@ -66,3 +66,17 @@ export function levelFraction(pct: number): number {
 
 /** The label text for a node level: "60%", or "n/a" when the chip has no such control. */
 export const levelText = (v: number): string => (levelAvailable(v) ? `${levelPercent(v)}%` : 'n/a');
+
+/** The tuning verdict for a speech peak: Good inside the target band, else Too low or Too high; '' with no signal. */
+export function levelVerdict(peakDb: number | undefined): '' | 'Good' | 'Too low' | 'Too high' {
+  if (peakDb === undefined || !Number.isFinite(peakDb) || peakDb <= -90) return '';
+  if (peakDb < TARGET_LOW_DB) return 'Too low';
+  if (peakDb > TARGET_HIGH_DB) return 'Too high';
+  return 'Good';
+}
+
+/** The highest peak of the recent readings (the meter's peak hold), or undefined when there are none. */
+export function heldPeak(peaks: number[]): number | undefined {
+  const f = peaks.filter((p) => Number.isFinite(p));
+  return f.length ? Math.max(...f) : undefined;
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { barPercent, targetBand, isHot, dbText, warningText, durationText, reportSummary, levelPercent, levelFraction, levelText, levelAvailable } from './levels.ts';
+import { barPercent, targetBand, isHot, dbText, warningText, durationText, reportSummary, levelPercent, levelFraction, levelText, levelAvailable, levelVerdict, heldPeak } from './levels.ts';
 
 test('barPercent maps -60..0 dBFS to 0..100', () => {
   assert.equal(barPercent(0), 100);
@@ -66,4 +66,21 @@ test('levels: the node speaks 0..1, the page percent', () => {
   assert.equal(levelFraction(33.4), 0.33);
   // A round trip never drifts.
   for (let p = 0; p <= 100; p++) assert.equal(levelPercent(levelFraction(p)), p);
+});
+
+test('levelVerdict: the tuning wizard', () => {
+  assert.equal(levelVerdict(undefined), '');
+  assert.equal(levelVerdict(-90), '');
+  assert.equal(levelVerdict(NaN), '');
+  assert.equal(levelVerdict(-35), 'Too low');
+  assert.equal(levelVerdict(-20), 'Good');
+  assert.equal(levelVerdict(-12), 'Good');
+  assert.equal(levelVerdict(-6), 'Good');
+  assert.equal(levelVerdict(-3), 'Too high');
+});
+
+test('heldPeak holds the highest recent peak', () => {
+  assert.equal(heldPeak([]), undefined);
+  assert.equal(heldPeak([-30, -12, -90]), -12);
+  assert.equal(heldPeak([NaN, -40]), -40);
 });

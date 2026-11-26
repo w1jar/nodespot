@@ -24,7 +24,7 @@ test('a group has tabs or pages, never both', () => {
 });
 
 test('tabs of each tabbed group, in order', () => {
-  assert.deepEqual(tabIds('station'), ['station', 'radio', 'lookup', 'hostlists']);
+  assert.deepEqual(tabIds('station'), ['station', 'radio', 'audio', 'lookup', 'hostlists']);
   assert.deepEqual(tabIds('system'), ['overview', 'updates', 'network', 'wifi', 'web-port', 'node', 'terminal']);
   assert.deepEqual(tabIds('maintenance'), ['backup', 'logs', 'diagnostics', 'audit']);
 });

@@ -14,8 +14,11 @@ import (
 // DefaultStatePath is where the daemon keeps the applied settings.
 const DefaultStatePath = "/etc/nodespot/sa818.json"
 
-// stateVersion is the file format version.
-const stateVersion = 1
+// stateVersion is the file format version. Version 1 files were written by
+// builds that sent the filter flags inverted (1 for "on"), so what they say
+// was programmed is not what the module has: they read as no state, and the
+// node programs the module again.
+const stateVersion = 2
 
 // State is the saved copy of what the module was last programmed with.
 type State struct {

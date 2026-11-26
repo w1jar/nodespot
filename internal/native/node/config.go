@@ -101,14 +101,15 @@ type RadioConfig struct {
 	RxBoost *bool `json:"rxBoost,omitempty"`
 	// SA818Filter is what the SA818's three audio filters are set to the next
 	// time the module is programmed (the Program button, or a changed
-	// channel). Unset is the default, all three on. Saving it sends nothing.
+	// channel). Unset is sa818.DefaultFilters: emphasis off, high-pass and
+	// low-pass on. Saving it sends nothing.
 	SA818Filter *SA818Filter `json:"sa818Filter,omitempty"`
 }
 
-// SA818Filter is the SA818's AT+SETFILTER=emphasis,highPass,lowPass flags in
-// that order. true is "on" and goes out as 1 (see sa818.Filters, whose wire
-// polarity follows common SA818 programming scripts and is not confirmed on
-// hardware). A nil flag is the default, on.
+// SA818Filter is the SA818's three audio filters (AT+SETFILTER=emphasis,
+// highPass,lowPass). true is "on" (the wire value 0; 1 bypasses the filter,
+// see sa818.Filters). A nil flag is the default: emphasis off (flat audio),
+// high-pass and low-pass on.
 type SA818Filter struct {
 	Emphasis *bool `json:"emphasis,omitempty"` // pre- and de-emphasis
 	HighPass *bool `json:"highPass,omitempty"` // high-pass (removes sub-audible tones)
@@ -118,10 +119,11 @@ type SA818Filter struct {
 // Filters returns the filter settings to program.
 func (r RadioConfig) Filters() sa818.Filters {
 	f := r.SA818Filter
+	d := sa818.DefaultFilters()
 	if f == nil {
-		return sa818.Filters{Emphasis: true, HighPass: true, LowPass: true}
+		return d
 	}
-	return sa818.Filters{Emphasis: on(f.Emphasis, true), HighPass: on(f.HighPass, true), LowPass: on(f.LowPass, true)}
+	return sa818.Filters{Emphasis: on(f.Emphasis, d.Emphasis), HighPass: on(f.HighPass, d.HighPass), LowPass: on(f.LowPass, d.LowPass)}
 }
 
 // Overrides are the preset overrides of r.
@@ -170,21 +172,23 @@ type IDConfig struct {
 type Advanced struct {
 	HangMS     int `json:"hangMs,omitempty"`     // transmitter hang (default 500)
 	TxTimeoutS int `json:"txTimeoutS,omitempty"` // longest transmission either way (default 180)
-	// AGC on the mode's audio for the radio (default on) and on the
-	// radio's audio for the mode (default off).
-	ModeAGC   *bool   `json:"modeAgc,omitempty"`
-	RadioAGC  *bool   `json:"radioAgc,omitempty"`
-	AGCTarget float64 `json:"agcTargetDb,omitempty"` // dBFS (default -22)
-	AGCMax    float64 `json:"agcMaxDb,omitempty"`    // dB (default 18)
+	// AGC on the mode's audio for the radio (network to radio) and on the
+	// radio's audio for the mode (radio to network), both on by default,
+	// each with its own target level. AGCMax is shared.
+	ModeAGC     *bool   `json:"modeAgc,omitempty"`
+	RadioAGC    *bool   `json:"radioAgc,omitempty"`
+	RxAGCTarget float64 `json:"rxAgcTargetDb,omitempty"` // radio to network, dBFS (default -22)
+	TxAGCTarget float64 `json:"txAgcTargetDb,omitempty"` // network to radio, dBFS (default -22)
+	AGCMax      float64 `json:"agcMaxDb,omitempty"`      // dB (default 18)
 	// RxGainDB (radio to network) and TxGainDB (network to radio) are static
 	// gains, -20 to 20 dB, applied before the AGC.
 	RxGainDB float64 `json:"rxGainDb,omitempty"`
 	TxGainDB float64 `json:"txGainDb,omitempty"`
-	// PreEmphasis is software 75 microsecond pre-emphasis on the audio to the
-	// radio, DeEmphasis the matching de-emphasis on the audio from it, for
-	// radios that do neither themselves (default off).
-	PreEmphasis bool `json:"preEmphasis,omitempty"`
-	DeEmphasis  bool `json:"deEmphasis,omitempty"`
+	// FlatAudio says the radio's audio is flat (a data port or the
+	// discriminator): the node then applies software 75 microsecond
+	// pre-emphasis to the audio to the radio and the matching de-emphasis to
+	// the audio from it (default off).
+	FlatAudio bool `json:"flatAudio,omitempty"`
 	// PLFilter is the ~300 Hz high-pass on the received audio that removes
 	// sub-audible tones. Unset is automatic: on, unless the interface has an
 	// SA818, whose own high-pass does the job.
@@ -277,19 +281,55 @@ func (a Advanced) Hang() time.Duration {
 // TxTimeout is the longest transmission.
 func (a Advanced) TxTimeout() time.Duration { return secs(a.TxTimeoutS, DefaultTxTimeout) }
 
-// UnmarshalJSON reads Advanced, ignoring the retired "courtesyTone" key so
-// config files written by earlier builds keep loading (the strict decoder
-// would refuse it). The key is dropped on the next save.
+// UnmarshalJSON reads Advanced and migrates the keys of earlier builds, so
+// their config files keep loading (the strict decoder would refuse them):
+//   - "courtesyTone" (retired) is dropped;
+//   - "agcTargetDb" (one target for both directions) sets "rxAgcTargetDb"
+//     and "txAgcTargetDb" when those are absent;
+//   - "preEmphasis" and "deEmphasis": either one true sets "flatAudio"
+//     when that is absent.
+//
+// The old keys are never written again: the next save has only the new ones.
 func (a *Advanced) UnmarshalJSON(b []byte) error {
 	type plain Advanced
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	if _, ok := raw["courtesyTone"]; !ok {
+	migrated := false
+	if _, ok := raw["courtesyTone"]; ok {
+		delete(raw, "courtesyTone")
+		migrated = true
+	}
+	if v, ok := raw["agcTargetDb"]; ok {
+		delete(raw, "agcTargetDb")
+		migrated = true
+		for _, k := range []string{"rxAgcTargetDb", "txAgcTargetDb"} {
+			if _, set := raw[k]; !set {
+				raw[k] = v
+			}
+		}
+	}
+	flat := false
+	for _, k := range []string{"preEmphasis", "deEmphasis"} {
+		v, ok := raw[k]
+		if !ok {
+			continue
+		}
+		delete(raw, k)
+		migrated = true
+		var on bool
+		if err := json.Unmarshal(v, &on); err != nil {
+			return fmt.Errorf("advanced %s: %w", k, err)
+		}
+		flat = flat || on
+	}
+	if _, set := raw["flatAudio"]; flat && !set {
+		raw["flatAudio"] = json.RawMessage("true")
+	}
+	if !migrated {
 		return json.Unmarshal(b, (*plain)(a))
 	}
-	delete(raw, "courtesyTone")
 	nb, err := json.Marshal(raw)
 	if err != nil {
 		return err
@@ -297,16 +337,22 @@ func (a *Advanced) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(nb, (*plain)(a))
 }
 
-// AGC returns the AGC parameters and which AGCs are on.
-func (a Advanced) AGC() (p audio.AGCParams, modeOn, radioOn bool) {
-	p = audio.AGCParams{TargetDb: a.AGCTarget, MaxGainDb: a.AGCMax}
-	if p.TargetDb == 0 {
-		p.TargetDb = DefaultAGCTargetDb
+// AGC returns the AGC parameters of each direction and which AGCs are on:
+// rx is radio to network (RadioAGC), tx network to radio (ModeAGC).
+func (a Advanced) AGC() (rx, tx audio.AGCParams, modeOn, radioOn bool) {
+	max := a.AGCMax
+	if max == 0 {
+		max = DefaultAGCMaxDb
 	}
-	if p.MaxGainDb == 0 {
-		p.MaxGainDb = DefaultAGCMaxDb
+	target := func(v float64) float64 {
+		if v == 0 {
+			return DefaultAGCTargetDb
+		}
+		return v
 	}
-	return p.Clamp(), on(a.ModeAGC, true), on(a.RadioAGC, false)
+	rx = audio.AGCParams{TargetDb: target(a.RxAGCTarget), MaxGainDb: max}.Clamp()
+	tx = audio.AGCParams{TargetDb: target(a.TxAGCTarget), MaxGainDb: max}.Clamp()
+	return rx, tx, on(a.ModeAGC, true), on(a.RadioAGC, true)
 }
 
 // PL reports whether the PL (sub-audible tone) high-pass is on. sa818 says
@@ -471,8 +517,10 @@ func (c *Config) Validate() error {
 	if a.TxTimeoutS < 0 || a.TxTimeoutS > 1800 {
 		errs = append(errs, errors.New("transmit timeout must be at most 1800 seconds"))
 	}
-	if a.AGCTarget != 0 && (a.AGCTarget < audio.MinTargetDb || a.AGCTarget > audio.MaxTargetDb) {
-		errs = append(errs, fmt.Errorf("AGC: target must be %d to %d dBFS", audio.MinTargetDb, audio.MaxTargetDb))
+	for name, v := range map[string]float64{"radio to network": a.RxAGCTarget, "network to radio": a.TxAGCTarget} {
+		if v != 0 && (math.IsNaN(v) || v < audio.MinTargetDb || v > audio.MaxTargetDb) {
+			errs = append(errs, fmt.Errorf("AGC: %s target must be %d to %d dBFS", name, audio.MinTargetDb, audio.MaxTargetDb))
+		}
 	}
 	if a.AGCMax < 0 || a.AGCMax > audio.MaxGainLimitDb {
 		errs = append(errs, fmt.Errorf("AGC: maximum gain must be 0 to %d dB", audio.MaxGainLimitDb))

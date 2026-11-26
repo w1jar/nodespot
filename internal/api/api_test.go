@@ -474,6 +474,8 @@ func TestRoles(t *testing.T) {
 		{"op", "PUT", "/api/radio"},
 		{"op", "GET", "/api/radio/info"},
 		{"op", "POST", "/api/radio/program"},
+		{"op", "POST", "/api/radio/tone"},
+		{"op", "DELETE", "/api/radio/tone"},
 		{"op", "POST", "/api/node/reload"},
 	}
 	for _, f := range forbidden {
@@ -1381,4 +1383,23 @@ func TestSSELocalStation(t *testing.T) {
 	s.wait(func(ev sseEvent) bool {
 		return ev.name == "node" && strings.Contains(ev.data, `"cos":false`) && !strings.Contains(ev.data, `"rxActive":true`)
 	})
+}
+
+func TestRadioTestTone(t *testing.T) {
+	e := newEnv(t, opts{})
+	expectErr(t, e, "admin", "POST", "/api/radio/tone", map[string]any{"seconds": 11}, 400, "bad_request")
+	if c := e.do("admin", "POST", "/api/radio/tone", map[string]any{"seconds": 3}, nil); c != 200 {
+		t.Fatalf("test tone: %d", c)
+	}
+	e.waitNode("tone on", func(n api.NodeJSON) bool { return n.Radio.TestTone })
+	if c := e.do("admin", "DELETE", "/api/radio/tone", nil, nil); c != 200 {
+		t.Fatalf("stop: %d", c)
+	}
+	e.waitNode("tone off", func(n api.NodeJSON) bool { return !n.Radio.TestTone })
+	// Refused while the radio receives: 409 with the node's reason.
+	e.node.Radio.SetCarrier(true)
+	var out struct{ Code, Error string }
+	if c := e.do("admin", "POST", "/api/radio/tone", nil, &out); c != 409 || out.Code != "node_refused" || !strings.Contains(out.Error, "receiving") {
+		t.Fatalf("while receiving: %d %+v", c, out)
+	}
 }

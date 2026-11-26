@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -56,6 +57,7 @@ const (
 	OpRadioTune   = "radio_tune"   // {rxVolume?, txVolume?, rxBoost?} -> radio.Levels
 	OpRadioProg   = "radio_program"
 	OpRadioInfo   = "radio_info" // -> RadioDetail
+	OpTestTone    = "test_tone"  // {seconds?, stop?} -> Status (seconds 0: 5, at most 10)
 	OpConfig      = "config"     // -> the station settings (no mode passwords)
 	OpReload      = "reload"     // read the config file again
 	OpSubscribe   = "subscribe"  // the connection then streams Event lines
@@ -316,6 +318,25 @@ func (s *Server) do(ctx context.Context, req Request) (any, error) {
 		return e.Levels(), nil
 	case OpRadioInfo:
 		return e.RadioInfo(), nil
+	case OpTestTone:
+		var a struct {
+			Seconds float64 `json:"seconds"`
+			Stop    bool    `json:"stop"`
+		}
+		if err := args(req.Args, &a); err != nil {
+			return nil, err
+		}
+		if a.Stop {
+			e.StopTestTone()
+			return e.Status(), nil
+		}
+		if math.IsNaN(a.Seconds) || a.Seconds < 0 || a.Seconds > MaxTestTone.Seconds() {
+			return nil, ErrToneLength
+		}
+		if err := e.TestTone(time.Duration(a.Seconds * float64(time.Second))); err != nil {
+			return nil, err
+		}
+		return e.Status(), nil
 	case OpRadioProg:
 		if err := e.ProgramRadio(); err != nil {
 			return nil, err

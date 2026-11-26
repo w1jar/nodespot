@@ -95,6 +95,8 @@ const (
 	EventID     EventKind = "id"     // Text: the station ID started (why)
 	EventConfig EventKind = "config" // the config was saved or reloaded
 	EventLog    EventKind = "log"    // Text: a problem worth showing
+	// EventTone: On: the transmit test tone started or ended (TestTone).
+	EventTone EventKind = "tone"
 )
 
 // Event is what a control subscriber receives.
