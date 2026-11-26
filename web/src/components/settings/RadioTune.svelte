@@ -9,6 +9,7 @@
   import type { InputLevel, RadioInfo, RadioLevels, Station } from '../../lib/types';
   import StationFields from '../StationFields.svelte';
   import RadioPicker from '../RadioPicker.svelte';
+  import AudioTimers from './AudioTimers.svelte';
 
   let lv = $state<RadioLevels | null>(null), st = $state<Station | null>(null), info = $state<RadioInfo | null>(null);
   let err = $state(''), busy = $state(false), prog = $state(false);
@@ -118,7 +119,7 @@
     <h2 class="text-base font-semibold">Channel</h2>
     <form class="space-y-3" onsubmit={save}>
       {#if sa818}
-        <StationFields bind:st radio idPrefix="rt" />
+        <StationFields bind:st radio idToggle={false} idPrefix="rt" />
       {:else}
         <p class="text-sm text-muted">The frequency and tone are set on the radio itself. Save to keep the interface settings above.</p>
       {/if}
@@ -131,3 +132,5 @@
     </form>
   </section>
 {/if}
+
+<AudioTimers onsaved={load} />

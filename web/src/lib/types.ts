@@ -100,6 +100,18 @@ export interface Vocoder {
 }
 
 /** GET and PUT /api/station (admin). */
+/** station.id: the station ID sent on the radio. Unset or 0 is the node's default. Unknown keys survive a save. */
+export interface StationId {
+  enabled?: boolean; intervalS?: number; tailWindowS?: number; endQuietS?: number;
+  wpm?: number; pitchHz?: number; levelDb?: number; voiceFile?: string;
+  [key: string]: unknown;
+}
+/** station.advanced: timers and AGC. Unset or 0 is the node's default. Unknown keys (md380 and others) survive a save. */
+export interface StationAdvanced {
+  hangMs?: number; txTimeoutS?: number; courtesyTone?: boolean;
+  modeAgc?: boolean; radioAgc?: boolean; agcTargetDb?: number; agcMaxDb?: number;
+  [key: string]: unknown;
+}
 export interface Station {
   callsign?: string;
   /** Optional digital IDs of the station (DMR 1 to 16777215, NXDN 1 to 65535); unset or 0 is none. Modes use them when their own ID is empty. */
@@ -111,8 +123,8 @@ export interface Station {
     pttGpio?: number; pttActiveLow?: boolean; cosSource?: string; cosActiveLow?: boolean;
     ctcssSource?: string; ctcssActiveLow?: boolean; sa818?: boolean; sa818Port?: string;
   };
-  id: { enabled?: boolean; intervalS?: number; wpm?: number; pitchHz?: number; levelDb?: number };
-  advanced: Record<string, unknown>;
+  id: StationId;
+  advanced: StationAdvanced;
   active?: { mode: string; target?: Target };
 }
 /** The settings of a radio interface (a preset's defaults, or what runs). */

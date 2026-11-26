@@ -65,7 +65,7 @@ const HOSTS: Record<string, { value: string; name: string; detail?: string; addr
 };
 
 // ---- Station and node state.
-const station: Record<string, any> & { callsign: string; radio: Record<string, any>; id: Record<string, any> } = { callsign: 'N0CALL', dmrId: 1234567, radio: { frequencyMHz: 146.52, tone: '100.0', squelch: 4, narrow: false, rxVolume: 60, txVolume: 55, preset: '', sa818Port: '/dev/ttyUSB0' }, id: { enabled: true, intervalS: 600, wpm: 20, pitchHz: 800, levelDb: -12 } };
+const station: Record<string, any> & { callsign: string; radio: Record<string, any>; id: Record<string, any>; advanced: Record<string, any> } = { callsign: 'N0CALL', dmrId: 1234567, radio: { frequencyMHz: 146.52, tone: '100.0', squelch: 4, narrow: false, rxVolume: 60, txVolume: 55, preset: '', sa818Port: '/dev/ttyUSB0' }, id: { enabled: true, intervalS: 600, wpm: 20, pitchHz: 800, levelDb: -12 }, advanced: { hangMs: 600, modeAgc: true } };
 let stationSet = process.env.MOCK_STATION_SETUP !== '1';
 if (!stationSet) { station.callsign = ''; delete station.dmrId; }
 const radioPresent = process.env.MOCK_NO_RADIO !== '1';
@@ -350,7 +350,7 @@ export function mockApi(): Plugin {
         }
         if (p === '/station') {
           if (!isAdmin) return forbid();
-          if (m === 'GET') return json(res, 200, { ...station, advanced: {}, active: active ? { mode: active, target: target ? { id: target } : undefined } : undefined });
+          if (m === 'GET') return json(res, 200, { ...station, active: active ? { mode: active, target: target ? { id: target } : undefined } : undefined });
           if (m === 'PUT') {
             if (!/^[A-Za-z0-9/]{3,12}$/.test(String(body.callsign ?? ''))) return err(res, 400, 'enter the station callsign', 'bad_request');
             const ids: [string, number][] = [['dmrId', 16777215], ['nxdnId', 65535]];
@@ -364,7 +364,15 @@ export function mockApi(): Plugin {
               for (const k of ['preset', 'pttGpio', 'pttActiveLow', 'cosSource', 'cosActiveLow', 'ctcssSource', 'ctcssActiveLow', 'sa818']) delete (station.radio as Record<string, unknown>)[k];
               Object.assign(station.radio, body.radio);
             }
-            if (body.id) Object.assign(station.id, body.id);
+            // Like the node: the sent id and advanced replace the saved ones, and the limits are the node's.
+            const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], agcTargetDb: [-40, -6], agcMaxDb: [1, 30], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
+            for (const o of [body.advanced, body.id]) for (const [k, [lo, hi]] of Object.entries(lim)) {
+              const v = o?.[k];
+              if (v !== undefined && (typeof v !== 'number' || v < lo || v > hi)) return err(res, 400, `${k} must be ${lo} to ${hi}`, 'bad_request');
+            }
+            if (body.id?.voiceFile && !String(body.id.voiceFile).startsWith('/')) return err(res, 400, 'ID: voice file must be an absolute path', 'bad_request');
+            if (body.id) station.id = { ...body.id };
+            if (body.advanced) station.advanced = { ...body.advanced };
             stationSet = true; pushNode(); return json(res, 200, nodeJSON());
           }
         }

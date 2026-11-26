@@ -14,6 +14,8 @@ Release notes are taken from the section of the tag being released
 - When the far AllStar node disconnects you or hangs up, the link stays down: the node does not redial, and the link is not restored at boot.
 - Changing the radio wiring (PTT pin, PTT or COS polarity, SA818 port) restarts the node service so the change takes effect at once.
 
+- The node now checks the station settings it ignored before: AGC target must be -40 to -6 dBFS and maximum gain 0 to 30 dB (the AGC always clamped them, a save now says so), ID tail window and final-ID quiet time at most 600 s, CW pitch 200 to 2000 Hz and CW level -60 to 0 dBFS.
+
 ### Fixed
 - Modes page: EchoLink favorites accept a callsign as well as a node number (such as `N1CALL-L`).
 - The Modes page no longer says "not set up yet. Add its login in Settings" for every mode. A mode is ready when its own settings or the station fallbacks (callsign, DMR ID, NXDN ID) cover what it needs, and the echo test is always ready. When something is missing the message names it, such as "Set your DMR ID in Settings > Station or on this mode's page." or "EchoLink needs its password."
@@ -23,6 +25,7 @@ Release notes are taken from the section of the tag being released
 - AllStar: "peer hung up" and "rejected" errors now carry the far node's cause text and code, such as "peer hung up: Normal clearing (cause code 16)".
 
 ### Added
+- Settings > Station > Radio has an "Audio and timers" card for settings that had no UI: the AGC in each direction ("Network to radio" on by default, "Radio to network" off by default) with its target (-40 to -6 dBFS, default -22) and maximum gain (1 to 30 dB, default 18), the transmitter hang time and transmit timeout (both ways), the courtesy tone, and the station ID's on/off, interval, tail window, final-ID quiet time, CW speed, pitch and level, and optional voice file. Defaults show as placeholders, empty uses the default, changes apply at once without a restart, and the card has an unsaved marker and a Revert button.
 - The Modes page is rebuilt on the model of the old DV page. A button row covers every mode (AllStar, EchoLink, BrandMeister, TGIF, DMR, YSF, P25, NXDN, M17 and the echo test); the active one is highlighted and not-ready ones are marked. The selected mode shows its status (linked target, who is calling, the AllStar counters line), connect and disconnect with host-list or node search, the last tune, per-mode favorites (add, rename, remove, move earlier or later, connect, pin to the dashboard) and its settings in a collapsible section (station fallback placeholders, save, clear, the md380-emu Install button for AMBE modes, the not-ready message). Activating a mode is an explicit "Make active" action and shows a "Not confirmed" notice if the node has not confirmed the switch after 5 seconds. It works at phone width.
 - The dashboard Pinned strip connects a pinned favorite with one tap and switches the mode if needed. The mode card has a Disconnect button.
 - Each mode remembers its last tune (`tune.json` next to `node.json`) and reconnects to it when the mode becomes active, including at startup, until you disconnect on purpose. A drop or a failed connect keeps it. The "default reflector" and "default talkgroup" fields of P25, NXDN and M17 are gone; an old value seeds the remembered tune once, and old configs still load.

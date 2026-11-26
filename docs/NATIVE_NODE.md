@@ -308,3 +308,27 @@ Code references point into the nodespot repository; size estimates are rough and
 - [Can't connect to HamVOIP node](https://community.allstarlink.org/t/cant-connect-to-hamvoip-node/24494)
 - [ASL3 software update 2025-11-14](https://community.allstarlink.org/t/allstarlink-v3-software-update-release-2025-11-14/23960)
 - [nodes.allstarlink.org DNS service update](https://community.allstarlink.org/t/nodes-allstarlink-org-dns-service-update/21879)
+
+### Audio and timers (Settings > Station > Radio)
+
+The card edits `station.advanced` and `station.id`. A save is validated by `Config.Validate`, written, and applied to the running engine at once (`paramsFor` is rebuilt on every commit); no restart is needed. Only radio wiring changes restart the node. Empty or 0 means the default; the form shows it as a placeholder and does not accept 0.
+
+| Setting | Key | Range | Default |
+|---|---|---|---|
+| AGC, network to radio | `advanced.modeAgc` | on/off | on |
+| AGC, radio to network | `advanced.radioAgc` | on/off | off |
+| AGC target (both directions) | `advanced.agcTargetDb` | -40 to -6 dBFS | -22 |
+| AGC maximum gain (both directions) | `advanced.agcMaxDb` | 1 to 30 dB (0 = default) | 18 |
+| Hang time | `advanced.hangMs` | 1 to 10000 ms | 500 |
+| Transmit timeout, both ways | `advanced.txTimeoutS` | 1 to 1800 s | 180 |
+| Courtesy tone | `advanced.courtesyTone` (boolean) | on/off | on |
+| Station ID | `id.enabled` | on/off | on |
+| ID interval | `id.intervalS` | 1 to 600 s | 600 |
+| Tail window | `id.tailWindowS` | 1 to 600 s | 60 |
+| Final ID after quiet | `id.endQuietS` | 1 to 600 s | 60 |
+| CW speed | `id.wpm` | 5 to 60 | 25 |
+| CW pitch | `id.pitchHz` | 200 to 2000 Hz | 800 |
+| CW level | `id.levelDb` | -60 to -1 dBFS | -24 |
+| Voice file | `id.voiceFile` | absolute path of an 8 kHz mono WAV, else CW | CW |
+
+The web card saves by reading the current station, replacing only `advanced` and `id`, and PUTting it to `/api/station`, so other fields (and unknown keys such as `md380`) survive.

@@ -355,14 +355,20 @@ func (c *Config) Validate() error {
 	if id.IntervalS < 0 || id.IntervalS > 600 {
 		errs = append(errs, errors.New("ID: interval must be at most 600 seconds (10 minutes)"))
 	}
-	if id.TailWindowS < 0 || id.EndQuietS < 0 {
-		errs = append(errs, errors.New("ID: times must not be negative"))
+	if id.TailWindowS < 0 || id.TailWindowS > 600 {
+		errs = append(errs, errors.New("ID: tail window must be at most 600 seconds"))
+	}
+	if id.EndQuietS < 0 || id.EndQuietS > 600 {
+		errs = append(errs, errors.New("ID: quiet time must be at most 600 seconds"))
 	}
 	if id.WPM != 0 && (id.WPM < 5 || id.WPM > 60) {
 		errs = append(errs, errors.New("ID: CW speed must be 5 to 60 WPM"))
 	}
-	if id.LevelDb > 0 {
-		errs = append(errs, errors.New("ID: level must be at most 0 dBFS"))
+	if id.PitchHz != 0 && (id.PitchHz < 200 || id.PitchHz > 2000) {
+		errs = append(errs, errors.New("ID: CW pitch must be 200 to 2000 Hz"))
+	}
+	if id.LevelDb > 0 || id.LevelDb < -60 {
+		errs = append(errs, errors.New("ID: level must be -60 to 0 dBFS"))
 	}
 	if id.VoiceFile != "" && !filepath.IsAbs(id.VoiceFile) {
 		errs = append(errs, errors.New("ID: voice file must be an absolute path"))
@@ -374,8 +380,11 @@ func (c *Config) Validate() error {
 	if a.TxTimeoutS < 0 || a.TxTimeoutS > 1800 {
 		errs = append(errs, errors.New("transmit timeout must be at most 1800 seconds"))
 	}
-	if a.AGCMax < 0 || a.AGCTarget > 0 {
-		errs = append(errs, errors.New("AGC: target must be below 0 dBFS and maximum gain positive"))
+	if a.AGCTarget != 0 && (a.AGCTarget < audio.MinTargetDb || a.AGCTarget > audio.MaxTargetDb) {
+		errs = append(errs, fmt.Errorf("AGC: target must be %d to %d dBFS", audio.MinTargetDb, audio.MaxTargetDb))
+	}
+	if a.AGCMax < 0 || a.AGCMax > audio.MaxGainLimitDb {
+		errs = append(errs, fmt.Errorf("AGC: maximum gain must be 0 to %d dB", audio.MaxGainLimitDb))
 	}
 	if st.Active != nil {
 		if _, ok := mode.Lookup(st.Active.Mode); !ok {
