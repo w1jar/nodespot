@@ -46,8 +46,9 @@ type Config struct {
 	Password string // EchoLink password; never logged or put in errors
 	Name     string // operator name shown to peers in SDES; optional
 	Location string // directory description, e.g. a city
-	// Info is the station info text sent to a station after connecting,
-	// with "\n" line breaks; optional.
+	// Info is the station info text sent to a station when calling it and
+	// again once it answers, with "\n" line breaks; optional. Unset, the
+	// callsign, name and location are sent instead.
 	Info string
 	// Servers lists directory servers as host or host:port; default
 	// DefaultServers on port DirectoryPort.

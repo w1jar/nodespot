@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -83,13 +84,16 @@ func TestConnectHandshake(t *testing.T) {
 	if sdes.callsign() != "N0CALL-L" || sdes.name() != "Test Op" || sdes.items[sdesLOC] != "Example City" {
 		t.Fatalf("our SDES: %+v", sdes.items)
 	}
-	select {
-	case p := <-s.st.audioIn:
-		if tp := parseText(p); !tp.info || tp.text != "N0CALL-L\nExample City" {
-			t.Fatalf("info packet %+v", tp)
+	// The info goes out twice: when calling and once the station answers.
+	for i := 0; i < 2; i++ {
+		select {
+		case p := <-s.st.textIn:
+			if tp := parseText(p); !tp.info || tp.text != "N0CALL-L\nExample City" {
+				t.Fatalf("info packet %+v", tp)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("info packet %d not received", i+1)
 		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("no info packet")
 	}
 	st := c.Status()
 	if st.State != StateConnected || st.PeerName != "Test Op" || st.Station.ID != 1997 {
@@ -137,7 +141,6 @@ func TestSendAudio(t *testing.T) {
 	s := newConnSetup(t, true)
 	c := s.connect(t)
 	defer c.Close()
-	<-s.st.audioIn // info packet
 
 	ref := gsm.NewEncoder()
 	for i := 0; i < 6; i++ {
@@ -288,6 +291,11 @@ func TestKeepaliveAndTimeouts(t *testing.T) {
 		}
 		// It retried the SDES while waiting and said BYE at the end.
 		s.st.waitCounts(t, 3, 1)
+		// Each retry also went out from the audio port, keeping the way
+		// in for the station's audio open.
+		if n := len(s.st.textIn); n < 3 {
+			t.Fatalf("%d info packets while calling, want one per SDES", n)
+		}
 		// The slot is free again.
 		s.st.mu.Lock()
 		s.st.answer = true
@@ -451,7 +459,6 @@ func TestTransmissionLog(t *testing.T) {
 	})
 	c := s.connect(t)
 	defer c.Close()
-	<-s.st.audioIn // info packet
 
 	for i := 0; i < 6; i++ {
 		if err := c.Send(tone(i)); err != nil {
@@ -503,7 +510,6 @@ func TestPlaybackRightAfterGreeting(t *testing.T) {
 	s := newConnSetup(t, true)
 	c := s.connect(t)
 	defer c.Close()
-	<-s.st.audioIn // info packet
 
 	for seq := uint16(0); seq < 40; seq++ {
 		s.st.sendAudio(t, c, gsmPacket(seq))
@@ -564,5 +570,115 @@ func TestTalkStopCounts(t *testing.T) {
 	s.clk.run(t, 3*time.Second, time.Second)
 	if ev := nextEvent(t, c, EventTalkStop); ev.Packets != 1 || ev.Late != 0 || ev.Dropped != 0 {
 		t.Fatalf("second talk stop %+v", ev)
+	}
+}
+
+// TestAudioBeforeTheAnswer is the echo test's cut greeting: the station
+// starts its greeting as soon as our SDES arrives, before (or instead of)
+// answering it. Our first packet from the audio port must already be out
+// by then, since behind a NAT router that is what lets the station's audio
+// in, and every frame of the greeting must reach Recv, the first one
+// included.
+func TestAudioBeforeTheAnswer(t *testing.T) {
+	for _, info := range []string{"N0CALL-L\nExample City", ""} {
+		t.Run("info "+strconv.Quote(info), func(t *testing.T) {
+			s := newConnSetup(t, false, func(c *Config) { c.Info = info })
+			type result struct {
+				c   *Conn
+				err error
+			}
+			done := make(chan result, 1)
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				c, err := s.d.Connect(ctx, "N1CALL")
+				done <- result{c, err}
+			}()
+			want := info
+			if want == "" {
+				want = "N0CALL-L\nTest Op\nExample City"
+			}
+			// While we are still calling, our info has come from the
+			// audio port and our SDES from the control port.
+			select {
+			case p := <-s.st.textIn:
+				if tp := parseText(p); !tp.info || tp.text != want {
+					t.Fatalf("info packet %+v, want %q", tp, want)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("nothing sent from the audio port while calling")
+			}
+			if sdes := <-s.st.ctrlIn; !sdes.sdes {
+				t.Fatalf("control packet %+v", sdes)
+			}
+			select {
+			case r := <-done:
+				t.Fatalf("connected before the station answered: %v", r.err)
+			default:
+			}
+
+			// The greeting, answering our info's source address: the
+			// first packet is marked loud, the next two quieter.
+			s.st.mu.Lock()
+			to := s.st.audioFrom
+			s.st.mu.Unlock()
+			enc := gsm.NewEncoder()
+			for seq := uint16(500); seq < 503; seq++ {
+				amp := 3000.0
+				if seq == 500 {
+					amp = 12000
+				}
+				var payload []byte
+				for k := 0; k < 4; k++ {
+					var pcm [gsm.FrameSamples]int16
+					for i := range pcm {
+						n := float64(int(seq)*4*FrameSamples + k*FrameSamples + i)
+						pcm[i] = int16(amp * math.Sin(2*math.Pi*500*n/SampleRate))
+					}
+					b := enc.Encode(&pcm)
+					payload = append(payload, b[:]...)
+				}
+				if _, err := s.st.audio.WriteToUDPAddrPort(buildAudio(seq, 0, payload), to); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r := <-done
+			if r.err != nil {
+				t.Fatal(r.err)
+			}
+			c := r.c
+			defer c.Close()
+			nextEvent(t, c, EventConnected)
+			nextEvent(t, c, EventTalkStart)
+			var peaks []int16
+			for len(peaks) < 12 {
+				select {
+				case f := <-c.Recv():
+					var pk int16
+					for _, v := range f {
+						pk = max(pk, v)
+					}
+					peaks = append(peaks, pk)
+				case <-time.After(3 * time.Second):
+					t.Fatalf("got %d of the greeting's 12 frames", len(peaks))
+				}
+			}
+			// The first decoded frame is the codec settling; the rest of
+			// the marked packet is loud, the following ones are not.
+			for i, pk := range peaks[1:] {
+				if loud := i+1 < 4; loud != (pk > 7000) {
+					t.Fatalf("frame peaks %v: the greeting's first packet is not first", peaks)
+				}
+			}
+			if st := c.Status(); st.RxPackets != 3 || st.RxDropped != 0 || st.RxLate != 0 || st.RxBad != 0 {
+				t.Fatalf("status %+v", st)
+			}
+			// Once connected the info goes out again.
+			select {
+			case <-s.st.textIn:
+			case <-time.After(3 * time.Second):
+				t.Fatal("no info after the station answered")
+			}
+		})
 	}
 }

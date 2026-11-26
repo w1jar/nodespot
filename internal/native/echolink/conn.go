@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -201,13 +202,18 @@ func dial(ctx context.Context, cfg Config, st Station, onClose func(*Conn)) (*Co
 	go c.readLoop(c.audio, c.handleAudio)
 	go c.readLoop(c.ctrl, c.handleControl)
 	go c.timerLoop(now)
+	// The info goes out on the audio port before the SDES: behind a NAT
+	// router, our first packet from that port is what lets the station's
+	// audio back in. A station starts sending (the echo test its
+	// greeting) as soon as our SDES reaches it, so audio that arrived
+	// before we had sent from the audio port was dropped by the router.
+	c.sendInfo()
 	c.sendSDES()
 
 	select {
 	case <-c.connected:
-		if c.cfg.Info != "" {
-			c.write(c.audio, c.rAudio, buildInfo(c.cfg.Info))
-		}
+		// Again, now that the station has a connection to show it on.
+		c.sendInfo()
 		return c, nil
 	case <-c.done:
 		<-c.finished
@@ -371,6 +377,26 @@ func (c *Conn) sendSDES() {
 	_ = c.write(c.ctrl, c.rCtrl, buildSDES(c.cfg.Callsign, c.cfg.Name, c.cfg.Location))
 }
 
+// sendInfo sends our station info to the station's audio port.
+func (c *Conn) sendInfo() {
+	_ = c.write(c.audio, c.rAudio, buildInfo(c.infoText()))
+}
+
+// infoText is Config.Info, or the callsign, name and location when it is
+// unset.
+func (c *Conn) infoText() string {
+	if c.cfg.Info != "" {
+		return c.cfg.Info
+	}
+	lines := []string{c.cfg.Callsign}
+	for _, s := range []string{c.cfg.Name, c.cfg.Location} {
+		if s = strings.TrimSpace(s); s != "" {
+			lines = append(lines, s)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // emitLocked queues an event without blocking. c.mu must be held.
 func (c *Conn) emitLocked(ev Event) {
 	if c.chClosed {
@@ -501,7 +527,8 @@ func (c *Conn) handleAudio(p []byte, from netip.AddrPort) {
 	if !c.st.Talking {
 		c.st.Talking = true
 		c.rxSpurt = struct{ pkts, late, dropped, bad uint64 }{}
-		c.cfg.Logger.Debug("echolink: rx start", "from", from.String(), "seq", seq, "bytes", len(p))
+		c.cfg.Logger.Debug("echolink: rx start", "from", from.String(), "seq", seq, "bytes", len(p),
+			"since_call", now.Sub(c.st.Started).Round(time.Millisecond))
 		c.emitLocked(Event{Kind: EventTalkStart, Time: now, Callsign: c.st.Talker})
 	}
 	c.rxSpurt.pkts++
@@ -639,6 +666,12 @@ func (c *Conn) timerLoop(start time.Time) {
 			return
 		}
 		if !now.Before(nextKeepalive) {
+			c.mu.Lock()
+			calling := c.st.State == StateConnecting
+			c.mu.Unlock()
+			if calling {
+				c.sendInfo() // the station has not answered: open the audio path again
+			}
 			c.sendSDES()
 			nextKeepalive = now.Add(c.cfg.Keepalive)
 		}

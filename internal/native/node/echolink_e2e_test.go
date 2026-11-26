@@ -109,6 +109,8 @@ type parrot struct {
 
 	mu       sync.Mutex
 	greeted  bool
+	natOpen  bool     // the station has sent from its audio port
+	natDrops int      // packets the router dropped
 	packets  [][]byte // RTP packets received from the station
 	seqs     []uint16
 	lastRx   time.Time
@@ -134,6 +136,18 @@ type parrotOptions struct {
 	// many packets.
 	pauseAfter int
 	pause      time.Duration
+	// greetFirst starts the greeting the moment the station's first SDES
+	// arrives, as the echo test server does, and answers that SDES only
+	// replyDelay later.
+	greetFirst bool
+	replyDelay time.Duration
+	// welcome is how many of the greeting's first frames are louder than
+	// the rest, so the test can tell whether they reached the radio.
+	welcome int
+	// nat stands for a home router in front of the station: nothing the
+	// parrot sends to the station's audio port gets through until the
+	// station has sent something from that port.
+	nat bool
 }
 
 func newParrot(t *testing.T, clientAudio int, opt parrotOptions) *parrot {
@@ -197,14 +211,48 @@ func (p *parrot) readCtrl() {
 		if n < 8 || buf[1] != 201 {
 			continue
 		}
-		_, _ = p.ctrl.WriteToUDPAddrPort(parrotSDES(), from)
 		p.mu.Lock()
 		greet := !p.greeted
 		p.greeted = true
 		p.mu.Unlock()
-		if greet {
-			go p.play(tone(2000, p.opt.greetFrames), p.opt.greetSeq0)
+		if greet && p.opt.greetFirst {
+			go p.play(p.greeting(), p.opt.greetSeq0)
+			if d := p.opt.replyDelay; d > 0 {
+				go func(to netip.AddrPort) {
+					time.Sleep(d)
+					_, _ = p.ctrl.WriteToUDPAddrPort(parrotSDES(), to)
+				}(from)
+				continue
+			}
 		}
+		_, _ = p.ctrl.WriteToUDPAddrPort(parrotSDES(), from)
+		if greet && !p.opt.greetFirst {
+			go p.play(p.greeting(), p.opt.greetSeq0)
+		}
+	}
+}
+
+// greeting is the greeting's audio: a 2000 tone, its first welcome frames
+// at 8000.
+func (p *parrot) greeting() []audio.Frame {
+	g := tone(2000, p.opt.greetFrames)
+	for k := 0; k < p.opt.welcome && k < len(g); k++ {
+		g[k] = sine(8000, k)
+	}
+	return g
+}
+
+// send sends b to the station's audio port, through the router if there
+// is one.
+func (p *parrot) send(b []byte) {
+	p.mu.Lock()
+	blocked := p.opt.nat && !p.natOpen
+	if blocked {
+		p.natDrops++
+	}
+	p.mu.Unlock()
+	if !blocked {
+		_, _ = p.audio.WriteToUDPAddrPort(b, p.clientAudio)
 	}
 }
 
@@ -216,6 +264,9 @@ func (p *parrot) readAudio() {
 			return
 		}
 		b := append([]byte(nil), buf[:n]...)
+		p.mu.Lock()
+		p.natOpen = true
+		p.mu.Unlock()
 		if len(b) >= 6 && string(b[:6]) == "oNDATA" {
 			continue
 		}
@@ -287,7 +338,7 @@ func (p *parrot) replay(pkts [][]byte) {
 			case <-time.After(p.opt.pause):
 			}
 		}
-		_, _ = p.audio.WriteToUDPAddrPort(b, p.clientAudio)
+		p.send(b)
 		select {
 		case <-p.stop:
 			return
@@ -315,7 +366,7 @@ func (p *parrot) play(frames []audio.Frame, seq uint16) {
 			b := enc.Encode(&pcm)
 			pkt = append(pkt, b[:]...)
 		}
-		_, _ = p.audio.WriteToUDPAddrPort(pkt, p.clientAudio)
+		p.send(pkt)
 		select {
 		case <-p.stop:
 			return
@@ -691,5 +742,69 @@ func runEchoCase(t *testing.T, c echoCase) {
 		if out := logs.String(); !strings.Contains(out, want) {
 			t.Errorf("log lacks %s:\n%s", want, out)
 		}
+	}
+}
+
+// TestEchoLinkGreetingStart is the field report of the greeting's first
+// word missing: the echo test starts its greeting as soon as our SDES
+// reaches it, before or while it answers, and a home router lets that
+// audio in only once we have sent from our audio port. The greeting's
+// first word, louder than the rest, must come out of the radio whole,
+// after the default key-up delay.
+func TestEchoLinkGreetingStart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs in real time")
+	}
+	for _, c := range []struct {
+		name string
+		opt  parrotOptions
+	}{
+		{"answers at once", parrotOptions{greetFirst: true}},
+		{"answers late", parrotOptions{greetFirst: true, replyDelay: 300 * time.Millisecond}},
+		{"behind a router", parrotOptions{greetFirst: true, nat: true}},
+		{"behind a router, answers late", parrotOptions{greetFirst: true, nat: true, replyDelay: 300 * time.Millisecond}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			const welcome = 24 // half a second
+			c.opt.welcome = welcome
+			edit := func(cfg *Config) { cfg.Station.Advanced.TxOnDelayMS = nil }
+			g := newELRigWith(t, c.opt, edit, nil)
+			g.sel(mode.EchoLink, &mode.Target{ID: "*ECHOTEST*"})
+			if !g.liveUntil(5*time.Second, func() bool { return g.r.PTT() }) {
+				t.Fatalf("the greeting never keyed the radio: %+v", g.mode.Status())
+			}
+			if !g.liveUntil(8*time.Second, func() bool { return !g.r.PTT() && !g.mode.Talking() }) {
+				t.Fatal("the radio stayed keyed after the greeting")
+			}
+			played := g.r.Played()
+			start := 0
+			for start < len(played) && !loud(played[start]) {
+				start++
+			}
+			words := 0
+			for _, f := range played[start:] {
+				if peak([]audio.Frame{f}) > 5000 {
+					words++
+				}
+			}
+			// The codec takes a frame to settle.
+			if words < welcome-1 {
+				t.Errorf("%d of the greeting's %d first frames reached the radio", words, welcome)
+			}
+			if n := countLoud(played); n < 146 || n > 150 {
+				t.Errorf("greeting: %d loud frames on the radio, want 150", n)
+			}
+			g.p.mu.Lock()
+			drops := g.p.natDrops
+			g.p.mu.Unlock()
+			if drops != 0 {
+				t.Errorf("the router dropped %d greeting packets", drops)
+			}
+			st := g.e.Status()
+			if l := st.Mode.Link; l == nil || l.Late != 0 || l.Dropped != 0 || l.ParseErrors != 0 || st.Radio.NetDropped != 0 {
+				t.Errorf("counters show a loss: link %+v, radio %+v", l, st.Radio)
+			}
+		})
 	}
 }

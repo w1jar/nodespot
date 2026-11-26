@@ -257,12 +257,14 @@ type fakeStation struct {
 	name     string
 	answer   bool // reply to SDES
 
-	mu       sync.Mutex
-	ctrlFrom netip.AddrPort
-	sdes     int
-	byes     int
-	audioIn  chan []byte
-	ctrlIn   chan rtcpInfo
+	mu        sync.Mutex
+	ctrlFrom  netip.AddrPort
+	audioFrom netip.AddrPort // where the client's audio-port packets come from
+	sdes      int
+	byes      int
+	audioIn   chan []byte // RTP packets
+	textIn    chan []byte // oNDATA packets
+	ctrlIn    chan rtcpInfo
 }
 
 func newFakeStation(t *testing.T, ip string, answer bool) *fakeStation {
@@ -277,7 +279,7 @@ func newFakeStation(t *testing.T, ip string, answer bool) *fakeStation {
 	}
 	s := &fakeStation{
 		t: t, audio: ua, ctrl: uc, callsign: "N1CALL", name: "Test Op", answer: answer,
-		audioIn: make(chan []byte, 100), ctrlIn: make(chan rtcpInfo, 100),
+		audioIn: make(chan []byte, 100), textIn: make(chan []byte, 100), ctrlIn: make(chan rtcpInfo, 100),
 	}
 	go s.readAudio()
 	go s.readCtrl()
@@ -291,12 +293,19 @@ func (s *fakeStation) ctrlPort() int  { return s.ctrl.LocalAddr().(*net.UDPAddr)
 func (s *fakeStation) readAudio() {
 	buf := make([]byte, 2048)
 	for {
-		n, _, err := s.audio.ReadFromUDPAddrPort(buf)
+		n, from, err := s.audio.ReadFromUDPAddrPort(buf)
 		if err != nil {
 			return
 		}
+		s.mu.Lock()
+		s.audioFrom = from
+		s.mu.Unlock()
+		ch := s.audioIn
+		if isText(buf[:n]) {
+			ch = s.textIn
+		}
 		select {
-		case s.audioIn <- append([]byte(nil), buf[:n]...):
+		case ch <- append([]byte(nil), buf[:n]...):
 		default:
 		}
 	}
