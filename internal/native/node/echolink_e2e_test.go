@@ -216,7 +216,14 @@ func (p *parrot) readCtrl() {
 		p.greeted = true
 		p.mu.Unlock()
 		if greet && p.opt.greetFirst {
-			go p.play(p.greeting(), p.opt.greetSeq0)
+			go func() {
+				// The greeting reaches the router a round trip after our
+				// first packets left it. Without this, on loopback the
+				// SDES on the control port can be read before the info
+				// that went out first on the audio port.
+				time.Sleep(20 * time.Millisecond)
+				p.play(p.greeting(), p.opt.greetSeq0)
+			}()
 			if d := p.opt.replyDelay; d > 0 {
 				go func(to netip.AddrPort) {
 					time.Sleep(d)
