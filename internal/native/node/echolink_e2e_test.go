@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand"
 	"net"
 	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -84,15 +86,32 @@ func fakeELDirectory(t *testing.T, list string) string {
 	return ln.Addr().String()
 }
 
-// freeUDPPort returns a loopback UDP port that was free a moment ago.
+// nextUDPPort hands out ports below the kernel's ephemeral range (32768 and
+// up on Linux), so a port picked here is not also given to one of the
+// ephemeral sockets the parallel tests open between the pick and the bind.
+var nextUDPPort atomic.Int32
+
+func init() { nextUDPPort.Store(int32(20000 + rand.Intn(10000))) }
+
+// freeUDPPort returns a loopback UDP port that was free a moment ago and
+// that no other test in this process has been given.
 func freeUDPPort(t *testing.T) int {
 	t.Helper()
-	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
-	if err != nil {
-		t.Fatal(err)
+	for i := 0; i < 1000; i++ {
+		port := int(nextUDPPort.Add(1))
+		if port >= 32768 {
+			nextUDPPort.Store(20000)
+			continue
+		}
+		c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port})
+		if err != nil {
+			continue
+		}
+		_ = c.Close()
+		return port
 	}
-	defer c.Close()
-	return c.LocalAddr().(*net.UDPAddr).Port
+	t.Fatal("no free UDP port")
+	return 0
 }
 
 // parrot is a fake EchoLink echo test server. Like the real one it greets a
