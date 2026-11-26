@@ -173,9 +173,9 @@ func TestLoginSuccessAndPollFormat(t *testing.T) {
 	if string(p) != string(want) {
 		t.Fatalf("poll %q want %q", p, want)
 	}
-	if r.count("NXDNP") < 3 {
-		t.Fatal("expected a poll burst")
-	}
+	// The reflector can answer the first poll of the burst before the
+	// other two have arrived.
+	eventually(t, "poll burst", func() bool { return r.count("NXDNP") >= 3 })
 	// periodic keepalive
 	c0 := r.count("NXDNP")
 	eventually(t, "keepalive", func() bool { return r.count("NXDNP") > c0 })
