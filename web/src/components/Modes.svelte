@@ -20,6 +20,7 @@
   import Menu from './Menu.svelte';
   import ModeSettings from './ModeSettings.svelte';
   import NodePicker from './NodePicker.svelte';
+  import { emptyListNote } from '../lib/hostlists';
   import PinFace from './PinFace.svelte';
   import Plug from '@lucide/svelte/icons/plug';
   import Unplug from '@lucide/svelte/icons/unplug';
@@ -295,6 +296,9 @@
                   aria-label={starred ? 'Already a favorite' : 'Save the target as a favorite'} title={block || 'Save the target as a favorite'} onclick={openStar}>
                   <Star size={16} class={starred ? 'fill-accent text-accent' : 'text-muted'} aria-hidden="true" /></button>
               </div>
+              {#if kind === 'hosts' && hostLists[sel] && !hostLists[sel].items.length}
+                <p class="text-xs text-warn" role="status" data-testid="hosts-empty">{emptyListNote(sel, sel.toUpperCase())}{#if admin}{' '}<a class="underline" href="#/settings/station/hostlists">Open it</a>{/if}</p>
+              {/if}
               {#if info.targetHelp}<p class="text-xs text-muted">{info.targetHelp}{#if !isActive}{' '}Connecting makes {title} the active mode.{/if}</p>{/if}
             </form>
           {/if}

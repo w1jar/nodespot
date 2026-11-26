@@ -45,7 +45,20 @@ type Field struct {
 	// (EchoLink adds "-L" to the station callsign). The UI shows it in the
 	// "from station" hint.
 	StationSuffix string `json:"stationSuffix,omitempty"`
+	// HostList names a host list (GET /api/hostlists?mode=<HostList>) the
+	// UI offers as a picker for this text field: HostListBM or
+	// HostListDMROther. A pick fills the field with the list entry's host
+	// (host:port when the list gives a port); the UI also keeps an
+	// "Other..." choice to type a value. The saved value is always plain
+	// text, so the field works the same without the list.
+	HostList string `json:"hostList,omitempty"`
 }
+
+// Host lists a Field can be picked from (Field.HostList).
+const (
+	HostListBM       = "bm"        // BrandMeister masters of the DMR list
+	HostListDMROther = "dmr-other" // the DMR list without BrandMeister and TGIF
+)
 
 // Station values a Field can fall back to (Field.StationDefault).
 const (

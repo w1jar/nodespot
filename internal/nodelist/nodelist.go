@@ -33,6 +33,8 @@ type Status struct {
 	Updated *time.Time `json:"updated"`
 	Source  string     `json:"source"`
 	Error   *string    `json:"error"`
+	// Busy is true while a download runs.
+	Busy bool `json:"busy,omitempty"`
 }
 
 // Options configure a DB.
@@ -418,6 +420,9 @@ func (d *DB) Status() Status {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	s := Status{Count: len(d.list), Source: d.source}
+	d.refreshMu.Lock()
+	s.Busy = d.refreshing
+	d.refreshMu.Unlock()
 	if !d.updated.IsZero() {
 		u := d.updated
 		s.Updated = &u

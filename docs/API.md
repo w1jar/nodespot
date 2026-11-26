@@ -167,6 +167,16 @@ Snapshot = {
 | GET | `/api/nodelist` | `{"count": int, "updated": RFC3339 \| null, "source": str, "error": str \| null}` |
 | POST | `/api/nodelist/refresh` | `202` (admin) |
 
+## Host lists (operator, admin)
+
+| Method | Path | Response |
+|---|---|---|
+| GET | `/api/hostlists?mode=dmr\|ysf\|p25\|nxdn\|m17\|bm\|dmr-other` | operator: `{"mode","items":[{"value","name","detail"?,"address","port","password"?}],"truncated"?,"etag"}` with an `ETag` header and `304` on `If-None-Match`; `503 hostlists_unavailable` when the list is not downloaded yet. `bm` is the BrandMeister masters of the DMR list sorted by id (`value` the host, `name` such as `3104 – United States`, `port` 0: the native client uses 54006); `dmr-other` is the DMR list without the BrandMeister and TGIF entries |
+| GET | `/api/hostlists/status` | operator: `{"busy"?, "lists": {"dmr"\|"ysf"\|"p25"\|"nxdn"\|"m17": {"entries", "updated"?, "checked"?, "error"?}}, "nextManual"?, "nodelist"?: {"count", "updated": RFC3339 \| null, "source", "error": str \| null, "busy"?}}`. `nextManual` is when a manual refresh is allowed again (absent: now) |
+| POST | `/api/hostlists/refresh` | admin: downloads the host lists, then the AllStar node list, and answers the status document above. `409 hostlists_busy` with the reason when a refresh is running, when the last manual one was less than 10 minutes ago or when digital modes are off (nothing is fetched). A download that fails is not a refusal: the answer is `200` and the list's `error` says why. Audit: `hostlists.refresh`, `hostlists.refresh.refused` |
+
+A mode field with `"hostList": "bm"` or `"dmr-other"` in `GET /api/modes` is a text field the UI offers that list for (docs/NATIVE_NODE.md "Host lists and master pickers").
+
 ## System (all roles)
 
 `GET /api/system` returns `System`; also pushed via SSE every 10 s.

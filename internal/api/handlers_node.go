@@ -12,6 +12,7 @@ import (
 	"github.com/w1jar/nodespot/internal/hostlists"
 	"github.com/w1jar/nodespot/internal/native/mode"
 	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/nodelist"
 	"github.com/w1jar/nodespot/internal/store"
 )
 
@@ -41,6 +42,7 @@ func (s *Server) nodeRoutes() {
 	m.HandleFunc("GET /api/radio/info", s.authed(store.RoleAdmin, s.handleRadioInfo))
 	m.HandleFunc("POST /api/radio/program", s.authed(store.RoleAdmin, s.handleRadioProgram))
 	m.HandleFunc("GET /api/hostlists", s.authed(store.RoleOperator, s.handleHostLists))
+	m.HandleFunc("GET /api/hostlists/status", s.authed(store.RoleOperator, s.handleHostListsStatus))
 	m.HandleFunc("POST /api/hostlists/refresh", s.authed(store.RoleAdmin, s.handleHostListsRefresh))
 }
 
@@ -540,18 +542,58 @@ func (s *Server) handleHostLists(w http.ResponseWriter, r *http.Request, _ store
 	writeJSON(w, 200, l)
 }
 
-// handleHostListsRefresh fetches the lists now (at most once every ten
-// minutes).
+// hostListsStatus is the state of every downloaded list: the Pi-Star host
+// lists (lists, busy, nextManual) and the AllStar node list (nodelist).
+type hostListsStatus struct {
+	hostlists.Status
+	Nodelist *nodelist.Status `json:"nodelist,omitempty"`
+}
+
+func (s *Server) hostListsStatus() hostListsStatus {
+	var out hostListsStatus
+	if s.d.HostLists != nil {
+		out.Status = s.d.HostLists.Status()
+	} else {
+		out.Lists = map[string]hostlists.ListStatus{}
+	}
+	if s.d.Nodelist != nil {
+		ns := s.d.Nodelist.Status()
+		out.Nodelist = &ns
+	}
+	return out
+}
+
+// handleHostListsStatus reports the count, update time and last error of
+// every list (GET /api/hostlists/status; the AllStar node list is
+// "nodelist").
+func (s *Server) handleHostListsStatus(w http.ResponseWriter, _ *http.Request, _ store.User) {
+	writeJSON(w, 200, s.hostListsStatus())
+}
+
+// handleHostListsRefresh fetches the host lists and the AllStar node list now.
+// The host lists allow it at most once every ten minutes; a refusal is 409
+// with the reason and nothing is fetched. A download that fails is not a
+// refusal: the answer is 200 with the error in that list's status.
 func (s *Server) handleHostListsRefresh(w http.ResponseWriter, r *http.Request, u store.User) {
 	if s.d.HostLists == nil {
 		writeErr(w, http.StatusServiceUnavailable, "hostlists_unavailable", "the host lists are not available")
 		return
 	}
-	if err := s.d.HostLists.Refresh(r.Context()); err != nil {
+	err := s.d.HostLists.Refresh(r.Context())
+	if errors.Is(err, hostlists.ErrBusy) || errors.Is(err, hostlists.ErrTooSoon) || errors.Is(err, hostlists.ErrDisabled) {
 		s.audit(u, "hostlists.refresh.refused", map[string]any{"error": err.Error()})
 		writeErr(w, http.StatusConflict, "hostlists_busy", err.Error())
 		return
 	}
-	s.audit(u, "hostlists.refresh", nil)
-	writeJSON(w, 200, s.d.HostLists.Status())
+	detail := map[string]any{}
+	if err != nil {
+		detail["error"] = err.Error()
+	}
+	if s.d.Nodelist != nil {
+		if nerr := s.d.Nodelist.Refresh(r.Context()); nerr != nil {
+			detail["nodelistError"] = nerr.Error()
+		}
+	}
+	s.audit(u, "hostlists.refresh", detail)
+	writeJSON(w, 200, s.hostListsStatus())
 }

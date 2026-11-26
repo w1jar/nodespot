@@ -1,5 +1,5 @@
 import type {
-  About, BackupInfo, BackupSelection, Favorite, HostList, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
+  About, BackupInfo, BackupSelection, Favorite, HostList, HostListsStatus, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
   InputLevel, NowCalling, PublicInfo, PublicSettings, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
   Settings, Station, SysLogs, SysNetwork, SysServices, SystemInfo, Target, TerminalSessionInfo, TerminalStatus, TerminalTicket, UpdateInfo, User,
   UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo,
@@ -145,7 +145,8 @@ export const api = {
   radioInfo: () => req<RadioInfo>('GET', '/radio/info'),
   radioProgram: () => req<NodeJSON>('POST', '/radio/program'),
   hostLists: (mode: string) => req<HostList>('GET', `/hostlists?mode=${q(mode)}`),
-  refreshHostLists: () => req<unknown>('POST', '/hostlists/refresh'),
+  hostListsStatus: () => req<HostListsStatus>('GET', '/hostlists/status'),
+  refreshHostLists: () => req<HostListsStatus>('POST', '/hostlists/refresh'),
   nodeService: () => req<NodeService>('GET', '/system/node-service'),
   restartNodeService: () => req<{ ok: boolean }>('POST', '/system/node-service/restart'),
 

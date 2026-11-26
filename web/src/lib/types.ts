@@ -73,6 +73,8 @@ export interface ModeField {
   stationDefault?: 'callsign' | 'dmrId' | 'nxdnId';
   /** Appended to the station value shown as the placeholder (EchoLink uses "-L" after the callsign). */
   stationSuffix?: string;
+  /** A text field the UI offers a host list picker for: "bm" (BrandMeister masters) or "dmr-other" (other Homebrew masters). The saved value stays plain text. */
+  hostList?: 'bm' | 'dmr-other';
 }
 export interface ModeSettings { values?: Record<string, string>; favorites?: Target[]; reflectors?: Target[] }
 /** One mode of GET /api/modes. Operators and viewers get no fields, settings or secretsSet. */
@@ -167,6 +169,12 @@ export interface Heard {
 /** A reflector or master of GET /api/hostlists. */
 export interface HostItem { value: string; name: string; detail?: string; address: string; port: number; password?: string }
 export interface HostList { mode: string; items: HostItem[]; truncated?: boolean; etag: string }
+/** One downloaded list in GET /api/hostlists/status: dmr, ysf, p25, nxdn or m17. */
+export interface HostListState { entries: number; updated?: string; checked?: string; error?: string }
+/** The AllStar node list in GET /api/hostlists/status. */
+export interface NodelistState { count: number; updated: string | null; source: string; error: string | null; busy?: boolean }
+/** GET /api/hostlists/status (and the answer of the refresh): nextManual is when the next manual refresh is allowed. */
+export interface HostListsStatus { busy?: boolean; lists: Record<string, HostListState>; nextManual?: string; nodelist?: NodelistState }
 
 /** A favorite: a saved target of one mode (GET /api/favorites). */
 export interface Favorite { id: number; mode: string; target: string; label: string; group: string; position: number; pinned: boolean; info: NodeInfo | null }

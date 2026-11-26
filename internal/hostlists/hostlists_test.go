@@ -3,6 +3,8 @@ package hostlists
 import (
 	"context"
 	"errors"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -277,4 +279,35 @@ func TestOtherDMRMasters(t *testing.T) {
 	if len(OtherDMRMasters(nil)) != 0 {
 		t.Error("nil list must give no masters")
 	}
+}
+
+// A failed check is tried again after Retry, not a day later, and a failed
+// manual refresh does not block the next one.
+func TestRetryAfterFailure(t *testing.T) {
+	s := &srv{}
+	s.failAll.Store(true)
+	ts := httptest.NewServer(s.handler(t))
+	defer ts.Close()
+	m := New(Options{Dir: t.TempDir(), Settings: set{SettingBaseURL: ts.URL + "/dl/"},
+		FirstDelay: 10 * time.Millisecond, Retry: 50 * time.Millisecond, Logger: log.New(io.Discard, "", 0)})
+	if err := m.Refresh(context.Background()); err == nil {
+		t.Fatal("a refresh of unusable files succeeded")
+	}
+	if err := m.Refresh(context.Background()); errors.Is(err, ErrTooSoon) {
+		t.Fatal("a failed manual refresh blocked the next one")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	time.Sleep(100 * time.Millisecond)
+	s.failAll.Store(false)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := m.Get("dmr"); err == nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("never retried after the failure")
 }

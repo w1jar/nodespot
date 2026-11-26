@@ -17,10 +17,12 @@
 //	MSTCL "MSTCL"+id(4) / RPTCL "RPTCL"+id(4)           close
 //	DMRD  55-byte voice/data packet                     see dmrd.go
 //
-// Defaults: TGIF uses timeslot 2 and ignores the slot and options keys. Its
-// master address and port are set by the helper from the DMR host list (first
-// TGIF entry), else tgif.network port 62031; a TGIF entry has no saved address. DMR has no
-// default address; NetConfig.Address is required.
+// Defaults: TGIF uses timeslot 2 and ignores the slot and options keys. With
+// no NetConfig.Address it connects to tgif.network port 62031 (ctl.TGIFAddress,
+// ctl.TGIFPort); the node does not read the DMR host list (hostlists.TGIFFromFile
+// is not wired in: the node runs as another user and has no access to the web
+// app's data directory). DMR has no default address; NetConfig.Address is
+// required, and a port-less address uses 62031.
 //
 // Option keys (ctl.NetConfig.Options):
 //

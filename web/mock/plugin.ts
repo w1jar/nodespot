@@ -16,7 +16,7 @@ const byNode = new Map(NODES.map((n) => [n.node, n]));
 const allstarInfo = (n: string) => byNode.get(n) ?? null;
 
 // ---- Modes. Fields are what the settings forms draw; secrets are never returned, only whether they are set.
-type Field = { key: string; label: string; kind: 'text' | 'number' | 'password' | 'bool' | 'select'; required?: boolean; secret?: boolean; default?: string; options?: string[]; help?: string; advanced?: boolean; stationDefault?: 'callsign' | 'dmrId' | 'nxdnId'; stationSuffix?: string };
+type Field = { key: string; label: string; kind: 'text' | 'number' | 'password' | 'bool' | 'select'; required?: boolean; secret?: boolean; default?: string; options?: string[]; help?: string; advanced?: boolean; stationDefault?: 'callsign' | 'dmrId' | 'nxdnId'; stationSuffix?: string; hostList?: 'bm' | 'dmr-other' };
 interface ModeDef { name: string; title: string; targetLabel: string; targetHelp: string; needsHost?: boolean; fields: Field[]; targets: string[] }
 const cs = (suffix?: string, required = true): Field => ({ key: 'callsign', label: suffix ? 'EchoLink callsign' : 'Callsign', kind: 'text', required, stationDefault: 'callsign', ...(suffix ? { stationSuffix: suffix } : {}), ...(required ? {} : { advanced: true }) });
 const pw = (key: string, label: string, required = true): Field => ({ key, label, kind: 'password', secret: true, required });
@@ -26,9 +26,9 @@ const MODES: ModeDef[] = [
   { name: 'echolink', title: 'EchoLink', targetLabel: 'Callsign or node', targetHelp: 'An EchoLink node number or callsign with -L or -R.', targets: ['N1CALL-L', '123456'],
     fields: [cs('-L'), pw('password', 'EchoLink password'), { key: 'location', label: 'Location text', kind: 'text', advanced: true }] },
   { name: 'bm', title: 'BrandMeister', targetLabel: 'Talkgroup', targetHelp: 'A talkgroup number, for example 91.', targets: ['91', '3100', '9'],
-    fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, pw('password', 'Hotspot security password'), { key: 'master', label: 'Master', kind: 'text', default: 'master.example.net', advanced: true }] },
+    fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, pw('password', 'Hotspot security password'), { key: 'address', label: 'Master server', kind: 'text', required: true, hostList: 'bm', help: 'The BrandMeister master closest to you. Port 54006 unless you type host:port.' }] },
   { name: 'dmr', title: 'DMR (other master)', targetLabel: 'Talkgroup', targetHelp: 'A talkgroup on the master you set up.', targets: ['9', '1'],
-    fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, { key: 'master', label: 'Master host', kind: 'text', required: true, default: 'dmr.example.net' }, { key: 'port', label: 'Master port', kind: 'number', default: '62031' }, pw('password', 'Master password')] },
+    fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, { key: 'address', label: 'Master server', kind: 'text', required: true, hostList: 'dmr-other', help: 'A Homebrew (MMDVM) master, host or host:port (port 62031 when none is given).' }, pw('password', 'Master password', false)] },
   { name: 'tgif', title: 'TGIF', targetLabel: 'Talkgroup', targetHelp: 'A TGIF talkgroup number.', targets: ['31665', '9'],
     fields: [{ key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }, pw('password', 'TGIF password')] },
   { name: 'ysf', title: 'YSF', targetLabel: 'Reflector', targetHelp: 'A YSF reflector.', needsHost: true, targets: ['YSF-TEST'],
@@ -46,7 +46,7 @@ const MODES: ModeDef[] = [
 const ambeNeeded = (d: ModeDef) => AMBE_MODES.includes(d.name) || (d.name === 'echotest' && (values.echotest?.codec ?? 'plain').toLowerCase() === 'ambe');
 const defOf = (n: string) => MODES.find((m) => m.name === n);
 const values: Record<string, Record<string, string>> = {
-  allstar: { node: '1999', server: 'register.example.net' }, bm: { id: '1234567', master: 'master.example.net' },
+  allstar: { node: '1999', server: 'register.example.net' }, bm: { id: '1234567', address: 'bm-master2.example.net' },
 };
 const secrets: Record<string, Record<string, boolean>> = { allstar: { password: true }, bm: { password: true } };
 // The station value a field falls back to ("" when the station has none).
@@ -57,11 +57,27 @@ const isConfigured = (m: ModeDef) => missingOf(m).length === 0;
 // What each mode remembers: the last target, or an explicit unlink. It is reconnected when the mode becomes active.
 const tunes: Record<string, { target?: string; unlinked?: boolean }> = { bm: { target: '91' } };
 
-const HOSTS: Record<string, { value: string; name: string; detail?: string; address: string; port: number }[]> = {
+type HostRow = { value: string; name: string; detail?: string; address: string; port: number; password?: string };
+// MOCK_NO_HOSTLISTS=1: nothing downloaded yet (the pickers show their notes, the refresh fills the lists in).
+let hostListsLoaded = process.env.MOCK_NO_HOSTLISTS !== '1';
+let hostListsNext = 0;
+const HOSTS_ALL: Record<string, HostRow[]> = {
+  bm: [{ value: 'bm-master1.example.net', name: '2001 – Test Land', address: 'bm-master1.example.net', port: 0 }, { value: 'bm-master2.example.net', name: '3104 – United States', address: 'bm-master2.example.net', port: 0 }, { value: 'bm-master3.example.net', name: '3102 – Example Region', address: 'bm-master3.example.net', port: 0 }].sort((a, b) => parseInt(a.name) - parseInt(b.name)),
+  'dmr-other': [{ value: '192.0.2.10', name: 'Test master', address: '192.0.2.10', port: 62031, password: 'passw0rd' }, { value: 'dmr2.example.net', name: 'Second master', detail: 'ID 1234', address: 'dmr2.example.net', port: 55555, password: 'secret' }],
   ysf: [{ value: 'YSF-TEST', name: 'Test reflector', detail: 'Placeholder', address: 'ysf1.example.net', port: 42000 }, { value: 'YSF-DEMO', name: 'Demo reflector', address: 'ysf2.example.net', port: 42000 }],
   p25: [{ value: '10100', name: 'Test talkgroup', address: 'p25.example.net', port: 41000 }],
   nxdn: [{ value: '65000', name: 'Test talkgroup', address: 'nxdn.example.net', port: 41400 }],
   m17: [{ value: 'M17-XXX C', name: 'Test reflector', address: 'm17.example.net', port: 17000 }, { value: 'M17-YYY A', name: 'Second reflector', address: 'm17b.example.net', port: 17000 }],
+};
+const HOSTS = new Proxy(HOSTS_ALL, { get: (t, k: string) => (hostListsLoaded ? t[k] : undefined) });
+const hostListsStatus = () => {
+  const at = hostListsLoaded ? '2026-11-26T06:12:00Z' : '';
+  const row = (n: number) => (hostListsLoaded ? { entries: n, updated: at, checked: at } : { entries: 0, error: 'download failed: HTTP 503' });
+  return {
+    lists: { dmr: row(HOSTS_ALL.bm.length + HOSTS_ALL['dmr-other'].length + 1), ysf: row(HOSTS_ALL.ysf.length), p25: row(HOSTS_ALL.p25.length), nxdn: row(HOSTS_ALL.nxdn.length), m17: row(HOSTS_ALL.m17.length) },
+    ...(hostListsNext > Date.now() ? { nextManual: new Date(hostListsNext).toISOString() } : {}),
+    nodelist: { count: 21870, updated: '2026-11-26T04:30:00Z', source: 'download', error: null },
+  };
 };
 
 // ---- Station and node state.
@@ -426,9 +442,17 @@ export function mockApi(): Plugin {
         }
         if (p === '/hostlists' && m === 'GET') {
           const mode = url.searchParams.get('mode') ?? '';
-          return json(res, 200, { mode, items: HOSTS[mode] ?? [], etag: 'mock' });
+          const items = HOSTS[mode];
+          if (!items) return err(res, 503, 'no_list: the list is not available on this node yet', 'hostlists_unavailable');
+          return json(res, 200, { mode, items, etag: 'mock' });
         }
-        if (p === '/hostlists/refresh' && m === 'POST') { if (!isAdmin) return forbid(); return json(res, 202); }
+        if (p === '/hostlists/status' && m === 'GET') return json(res, 200, hostListsStatus());
+        if (p === '/hostlists/refresh' && m === 'POST') {
+          if (!isAdmin) return forbid();
+          if (hostListsNext > Date.now()) return err(res, 409, 'the lists were refreshed a moment ago', 'hostlists_busy');
+          hostListsLoaded = true; hostListsNext = Date.now() + 10 * 60_000;
+          return json(res, 200, hostListsStatus());
+        }
         if (p === '/system/node-service' && m === 'GET') {
           if (!isAdmin) return forbid();
           return json(res, 200, { available: true, service: { unit: 'nodespot-node.service', description: 'nodespot node', active: nodeRunning ? 'active' : 'failed', sub: nodeRunning ? 'running' : 'failed', enabled: 'enabled', since: 'Mon 2026-11-16 08:00:01 UTC' } });
