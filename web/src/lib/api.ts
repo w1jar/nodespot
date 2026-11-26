@@ -140,7 +140,7 @@ export const api = {
   disconnect: () => req<NodeJSON>('POST', '/disconnect'),
   heard: (limit = 50) => req<Heard[]>('GET', `/heard?limit=${limit}`),
   radio: () => req<RadioLevels>('GET', '/radio'),
-  setRadio: (p: { rxVolume?: number; txVolume?: number }) => req<RadioLevels>('PUT', '/radio', p),
+  setRadio: (p: { rxVolume?: number; txVolume?: number; rxBoost?: boolean }) => req<RadioLevels>('PUT', '/radio', p),
   radioInput: () => req<InputLevel>('GET', '/radio/input'),
   radioInfo: () => req<RadioInfo>('GET', '/radio/info'),
   radioProgram: () => req<NodeJSON>('POST', '/radio/program'),

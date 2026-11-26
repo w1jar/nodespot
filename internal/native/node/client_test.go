@@ -83,7 +83,7 @@ func TestClientOps(t *testing.T) {
 			return err
 		}, nil},
 		{"levels", func() error { _, err := c.RadioLevels(ctx); return err }, nil},
-		{"tune", func() error { _, err := c.RadioTune(ctx, &f, nil); return err }, nil},
+		{"tune", func() error { _, err := c.RadioTune(ctx, &f, nil, nil); return err }, nil},
 		{"idle", func() error { _, err := c.Select(ctx, "", nil); return err }, nil},
 	}
 	for _, tt := range tests {

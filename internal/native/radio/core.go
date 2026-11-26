@@ -51,6 +51,14 @@ type Mixer interface {
 	Close() error
 }
 
+// BoostMixer is implemented by a [Mixer] whose chip may have a microphone
+// boost control (the alsa mixer does).
+type BoostMixer interface {
+	BoostAvailable() bool
+	Boost() (bool, error)
+	SetBoost(bool) error
+}
+
 // xruns is implemented by the real stream types.
 type xrunCounter interface{ Xruns() uint64 }
 
@@ -217,6 +225,14 @@ func (c *core) SetVolumes(capture, playback float64) error {
 	return errors.Join(c.p.Mixer.SetCaptureVolume(capture), c.p.Mixer.SetPlaybackVolume(playback))
 }
 
+// SetBoost implements Booster.
+func (c *core) SetBoost(on bool) error {
+	if b, ok := c.p.Mixer.(BoostMixer); ok && b.BoostAvailable() {
+		return b.SetBoost(on)
+	}
+	return ErrNoBoost
+}
+
 func (c *core) Levels() Levels {
 	now := time.Now()
 	l := Levels{
@@ -231,6 +247,10 @@ func (c *core) Levels() Levels {
 		if v, err := c.p.Mixer.PlaybackVolume(); err == nil {
 			l.PlaybackVolume = v
 		}
+	}
+	if b, ok := c.p.Mixer.(BoostMixer); ok && b.BoostAvailable() {
+		l.BoostAvailable = true
+		l.Boost, _ = b.Boost()
 	}
 	for _, s := range []any{c.p.Capture, c.p.Playback} {
 		if x, ok := s.(xrunCounter); ok {

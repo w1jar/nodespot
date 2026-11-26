@@ -322,7 +322,7 @@ func (e *Engine) Reload(ctx context.Context) error {
 	}
 	oldRadio := e.cfg.Station.Radio
 	e.cfg = c.Clone()
-	e.params = paramsFor(c)
+	e.params = paramsFor(c, e.info.Interface.SA818)
 	e.mu.Unlock()
 	if same {
 		return nil
@@ -344,9 +344,9 @@ func (e *Engine) Reload(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Tune sets the sound chip's mixer (0 to 1 each; nil keeps a level) and
-// saves the levels.
-func (e *Engine) Tune(rx, tx *float64) error {
+// Tune sets the sound chip's mixer (0 to 1 each; nil keeps a level) and the
+// receive boost (nil keeps it) and saves them.
+func (e *Engine) Tune(rx, tx *float64, boost *bool) error {
 	for _, v := range []*float64{rx, tx} {
 		if v != nil && (*v < 0 || *v > 1) {
 			return errors.New("levels must be 0 to 1")
@@ -365,6 +365,10 @@ func (e *Engine) Tune(rx, tx *float64) error {
 		v := *tx
 		c.Station.Radio.TxVolume = &v
 	}
+	if boost != nil {
+		v := *boost
+		c.Station.Radio.RxBoost = &v
+	}
 	if err := e.applyVolumes(c.Station.Radio); err != nil {
 		return err
 	}
@@ -372,8 +376,17 @@ func (e *Engine) Tune(rx, tx *float64) error {
 }
 
 func (e *Engine) applyVolumes(r RadioConfig) error {
+	var errs []error
+	if r.RxBoost != nil {
+		// A chip with no boost control has nothing to apply: not an error.
+		if b, ok := e.o.Radio.(radio.Booster); ok && e.o.Radio.Levels().BoostAvailable {
+			if err := b.SetBoost(*r.RxBoost); err != nil {
+				errs = append(errs, fmt.Errorf("radio receive boost: %w", err))
+			}
+		}
+	}
 	if r.RxVolume == nil && r.TxVolume == nil {
-		return nil
+		return errors.Join(errs...)
 	}
 	cur := e.o.Radio.Levels()
 	rx, tx := cur.CaptureVolume, cur.PlaybackVolume
@@ -384,9 +397,9 @@ func (e *Engine) applyVolumes(r RadioConfig) error {
 		tx = *r.TxVolume
 	}
 	if err := e.o.Radio.SetVolumes(rx, tx); err != nil {
-		return fmt.Errorf("radio levels: %w", err)
+		errs = append(errs, fmt.Errorf("radio levels: %w", err))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Levels returns the radio's levels.
@@ -491,6 +504,19 @@ type RadioDetail struct {
 	// resolve.
 	Resolved        *radio.Interface `json:"resolved,omitempty"`
 	RestartRequired bool             `json:"restartRequired,omitempty"`
+	// SA818Filters is what the SA818's audio filters were last programmed to,
+	// from the state file. It is absent when the module has never been
+	// programmed by this node (the filters are then unknown).
+	SA818Filters *ProgrammedFilters `json:"sa818Filters,omitempty"`
+}
+
+// ProgrammedFilters are the SA818 filter flags last sent to the module, true
+// meaning on (wire value 1), and when.
+type ProgrammedFilters struct {
+	Emphasis bool      `json:"emphasis"`
+	HighPass bool      `json:"highPass"`
+	LowPass  bool      `json:"lowPass"`
+	At       time.Time `json:"at"`
 }
 
 // RadioInfo describes the radio interface.
@@ -502,6 +528,13 @@ func (e *Engine) RadioInfo() RadioDetail {
 	d.Info.Present = !e.o.RadioAbsent
 	if iface, err := r.Interface(e.info.SHARI); err == nil {
 		d.Resolved = &iface
+	}
+	if e.hasSA818() {
+		// Read only: showing the saved state sends nothing to the module.
+		if st, err := radio.SavedSA818(e.o.RadioConfig); err == nil {
+			f := st.Settings.Filters
+			d.SA818Filters = &ProgrammedFilters{Emphasis: f.Emphasis, HighPass: f.HighPass, LowPass: f.LowPass, At: st.AppliedAt}
+		}
 	}
 	return d
 }

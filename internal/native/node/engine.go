@@ -123,7 +123,7 @@ func New(cfg *Config, o Options) (*Engine, error) {
 		o.RadioAbsent = !info.Present
 	}
 	e := &Engine{
-		info: info, o: o, log: o.Log, cfg: cfg, params: paramsFor(cfg),
+		info: info, o: o, log: o.Log, cfg: cfg, params: paramsFor(cfg, info.Interface.SA818),
 		modes: map[string]*instance{}, buildErr: map[string]string{}, tunes: map[string]Tune{},
 	}
 	if p := o.tunePath(); p != "" {
@@ -134,6 +134,7 @@ func New(cfg *Config, o Options) (*Engine, error) {
 		e.tunes = t
 	}
 	e.sx.modeAGC, e.sx.radioAGC = audio.NewAGC(), audio.NewAGC()
+	e.sx.rxPL, e.sx.rxDeemph, e.sx.txPre = audio.NewPLFilter(), audio.NewDeemphasisNode(), audio.NewPreemphasisNode()
 	e.ctx, e.stop = context.WithCancel(context.Background())
 	return e, nil
 }
@@ -536,7 +537,7 @@ func (e *Engine) commit(c *Config, apply bool) error {
 	}
 	e.mu.Lock()
 	e.cfg = c.Clone()
-	e.params = paramsFor(c)
+	e.params = paramsFor(c, e.info.Interface.SA818)
 	e.mu.Unlock()
 	if apply {
 		e.applyModes(c)

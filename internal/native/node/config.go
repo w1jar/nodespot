@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -95,6 +96,32 @@ type RadioConfig struct {
 	CTCSSActiveLow *bool  `json:"ctcssActiveLow,omitempty"`
 	SA818Enabled   *bool  `json:"sa818,omitempty"`
 	SA818Port      string `json:"sa818Port,omitempty"`
+	// RxBoost switches the sound chip's microphone boost on or off, when the
+	// chip has the control (unset leaves it as it is).
+	RxBoost *bool `json:"rxBoost,omitempty"`
+	// SA818Filter is what the SA818's three audio filters are set to the next
+	// time the module is programmed (the Program button, or a changed
+	// channel). Unset is the default, all three on. Saving it sends nothing.
+	SA818Filter *SA818Filter `json:"sa818Filter,omitempty"`
+}
+
+// SA818Filter is the SA818's AT+SETFILTER=emphasis,highPass,lowPass flags in
+// that order. true is "on" and goes out as 1 (see sa818.Filters, whose wire
+// polarity follows common SA818 programming scripts and is not confirmed on
+// hardware). A nil flag is the default, on.
+type SA818Filter struct {
+	Emphasis *bool `json:"emphasis,omitempty"` // pre- and de-emphasis
+	HighPass *bool `json:"highPass,omitempty"` // high-pass (removes sub-audible tones)
+	LowPass  *bool `json:"lowPass,omitempty"`  // low-pass
+}
+
+// Filters returns the filter settings to program.
+func (r RadioConfig) Filters() sa818.Filters {
+	f := r.SA818Filter
+	if f == nil {
+		return sa818.Filters{Emphasis: true, HighPass: true, LowPass: true}
+	}
+	return sa818.Filters{Emphasis: on(f.Emphasis, true), HighPass: on(f.HighPass, true), LowPass: on(f.LowPass, true)}
 }
 
 // Overrides are the preset overrides of r.
@@ -150,6 +177,24 @@ type Advanced struct {
 	RadioAGC  *bool   `json:"radioAgc,omitempty"`
 	AGCTarget float64 `json:"agcTargetDb,omitempty"` // dBFS (default -22)
 	AGCMax    float64 `json:"agcMaxDb,omitempty"`    // dB (default 18)
+	// RxGainDB (radio to network) and TxGainDB (network to radio) are static
+	// gains, -20 to 20 dB, applied before the AGC.
+	RxGainDB float64 `json:"rxGainDb,omitempty"`
+	TxGainDB float64 `json:"txGainDb,omitempty"`
+	// PreEmphasis is software 75 microsecond pre-emphasis on the audio to the
+	// radio, DeEmphasis the matching de-emphasis on the audio from it, for
+	// radios that do neither themselves (default off).
+	PreEmphasis bool `json:"preEmphasis,omitempty"`
+	DeEmphasis  bool `json:"deEmphasis,omitempty"`
+	// PLFilter is the ~300 Hz high-pass on the received audio that removes
+	// sub-audible tones. Unset is automatic: on, unless the interface has an
+	// SA818, whose own high-pass does the job.
+	PLFilter *bool `json:"plFilter,omitempty"`
+	// RxOnDelayMS is how long the carrier must stay present before a
+	// received transmission counts (debounce); TxOffDelayMS is added to the
+	// hang time.
+	RxOnDelayMS  int `json:"rxOnDelayMs,omitempty"`
+	TxOffDelayMS int `json:"txOffDelayMs,omitempty"`
 	// MD380 is the md380-emu address for AMBE (default 127.0.0.1:2470).
 	MD380          string `json:"md380,omitempty"`
 	MD380TimeoutMS int    `json:"md380TimeoutMs,omitempty"`
@@ -168,6 +213,10 @@ const (
 	DefaultAGCTargetDb = -22
 	DefaultAGCMaxDb    = 18
 	DefaultSquelch     = 4
+
+	MaxStaticGainDb = audio.MaxStaticGainDb // gain is -20 to +20 dB
+	MaxRxOnDelayMS  = 1000
+	MaxTxOffDelayMS = 2000
 )
 
 func on(b *bool, def bool) bool {
@@ -237,6 +286,16 @@ func (a Advanced) AGC() (p audio.AGCParams, modeOn, radioOn bool) {
 	return p.Clamp(), on(a.ModeAGC, true), on(a.RadioAGC, false)
 }
 
+// PL reports whether the PL (sub-audible tone) high-pass is on. sa818 says
+// the interface has an SA818, which has its own high-pass: unset is then off.
+func (a Advanced) PL(sa818 bool) bool { return on(a.PLFilter, !sa818) }
+
+// RxOnDelay is the carrier debounce.
+func (a Advanced) RxOnDelay() time.Duration { return time.Duration(a.RxOnDelayMS) * time.Millisecond }
+
+// TxOffDelay is the extra transmitter tail added to the hang time.
+func (a Advanced) TxOffDelay() time.Duration { return time.Duration(a.TxOffDelayMS) * time.Millisecond }
+
 // SquelchLevel is the SA818 squelch.
 func (r RadioConfig) SquelchLevel() int {
 	if r.Squelch == nil {
@@ -287,6 +346,7 @@ func (r RadioConfig) SA818() (sa818.Settings, error) {
 	s.RxMHz, s.TxMHz = r.FrequencyMHz, r.FrequencyMHz
 	s.RxTone, s.TxTone = t, t
 	s.Squelch = r.SquelchLevel()
+	s.Filters = r.Filters()
 	if r.Narrow {
 		s.Bandwidth = sa818.Narrow
 	}
@@ -385,6 +445,17 @@ func (c *Config) Validate() error {
 	}
 	if a.AGCMax < 0 || a.AGCMax > audio.MaxGainLimitDb {
 		errs = append(errs, fmt.Errorf("AGC: maximum gain must be 0 to %d dB", audio.MaxGainLimitDb))
+	}
+	for name, v := range map[string]float64{"receive gain": a.RxGainDB, "transmit gain": a.TxGainDB} {
+		if math.IsNaN(v) || v < -MaxStaticGainDb || v > MaxStaticGainDb {
+			errs = append(errs, fmt.Errorf("audio: %s must be -%d to %d dB", name, MaxStaticGainDb, MaxStaticGainDb))
+		}
+	}
+	if a.RxOnDelayMS < 0 || a.RxOnDelayMS > MaxRxOnDelayMS {
+		errs = append(errs, fmt.Errorf("audio: receive-on delay must be 0 to %d ms", MaxRxOnDelayMS))
+	}
+	if a.TxOffDelayMS < 0 || a.TxOffDelayMS > MaxTxOffDelayMS {
+		errs = append(errs, fmt.Errorf("audio: transmit-off delay must be 0 to %d ms", MaxTxOffDelayMS))
 	}
 	if st.Active != nil {
 		if _, ok := mode.Lookup(st.Active.Mode); !ok {

@@ -66,6 +66,8 @@ const HOSTS: Record<string, { value: string; name: string; detail?: string; addr
 
 // ---- Station and node state.
 const station: Record<string, any> & { callsign: string; radio: Record<string, any>; id: Record<string, any>; advanced: Record<string, any> } = { callsign: 'N0CALL', dmrId: 1234567, radio: { frequencyMHz: 146.52, tone: '100.0', squelch: 4, narrow: false, rxVolume: 60, txVolume: 55, preset: '', sa818Port: '/dev/ttyUSB0' }, id: { enabled: true, intervalS: 600, wpm: 20, pitchHz: 800, levelDb: -12 }, advanced: { hangMs: 600, modeAgc: true } };
+// What the SA818's filters were last programmed to; unknown until the Program button is used.
+let programmedFilters: { emphasis: boolean; highPass: boolean; lowPass: boolean; at: string } | null = null;
 let stationSet = process.env.MOCK_STATION_SETUP !== '1';
 if (!stationSet) { station.callsign = ''; delete station.dmrId; }
 const radioPresent = process.env.MOCK_NO_RADIO !== '1';
@@ -176,7 +178,8 @@ function pubSnapshot() {
 
 // ---- Radio levels (the sound chip) and the caller lookup lists.
 const level = (on: boolean) => ({ RMSDb: on ? -24 + Math.random() * 6 : -60, PeakDb: on ? -12 + Math.random() * 4 : -55, Active: on, Clipped: 0, Frames: 480 });
-const radioLevels = () => ({ CaptureVolume: station.radio.rxVolume, PlaybackVolume: station.radio.txVolume, Rx: level(cos), Tx: level(ptt), DroppedRx: 0, DroppedTx: 0, Xruns: 0 });
+// The mock's sound chip has a microphone boost control.
+const radioLevels = () => ({ CaptureVolume: station.radio.rxVolume, PlaybackVolume: station.radio.txVolume, BoostAvailable: true, Boost: !!station.radio.rxBoost, Rx: level(cos), Tx: level(ptt), DroppedRx: 0, DroppedTx: 0, Xruns: 0 });
 let userList = { enabled: true, entries: 183204, updated: iso(now() - 86400e3), checked: iso(now() - 3600e3), size: 9.4e6, busy: false };
 let hamdb = { enabled: false, cached: 0, today: 0, dailyMax: 500 };
 
@@ -365,7 +368,7 @@ export function mockApi(): Plugin {
               Object.assign(station.radio, body.radio);
             }
             // Like the node: the sent id and advanced replace the saved ones, and the limits are the node's.
-            const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], agcTargetDb: [-40, -6], agcMaxDb: [1, 30], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
+            const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], agcTargetDb: [-40, -6], agcMaxDb: [1, 30], rxGainDb: [-20, 20], txGainDb: [-20, 20], rxOnDelayMs: [0, 1000], txOffDelayMs: [0, 2000], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
             for (const o of [body.advanced, body.id]) for (const [k, [lo, hi]] of Object.entries(lim)) {
               const v = o?.[k];
               if (v !== undefined && (typeof v !== 'number' || v < lo || v > hi)) return err(res, 400, `${k} must be ${lo} to ${hi}`, 'bad_request');
@@ -399,7 +402,7 @@ export function mockApi(): Plugin {
         }
         if (p === '/heard' && m === 'GET') return json(res, 200, heardJSON().slice(0, +(url.searchParams.get('limit') ?? 50)));
         if (p === '/radio' && (m === 'GET' || m === 'PUT')) {
-          if (m === 'PUT') { if (!isAdmin) return forbid(); if (typeof body.rxVolume === 'number') station.radio.rxVolume = body.rxVolume; if (typeof body.txVolume === 'number') station.radio.txVolume = body.txVolume; }
+          if (m === 'PUT') { if (!isAdmin) return forbid(); if (typeof body.rxVolume === 'number') station.radio.rxVolume = body.rxVolume; if (typeof body.txVolume === 'number') station.radio.txVolume = body.txVolume; if (typeof body.rxBoost === 'boolean') station.radio.rxBoost = body.rxBoost; }
           if (!radioPresent) return err(res, 404, 'this node has no radio', 'no_radio');
           return json(res, 200, radioLevels());
         }
@@ -411,9 +414,15 @@ export function mockApi(): Plugin {
         if (p === '/radio/info' && m === 'GET') {
           if (!isAdmin) return forbid();
           const r = resolved();
-          return json(res, 200, { present: radioPresent && r.audio, detected: radioPresent, ...usbChip, shari: radioPresent, interface: r, preset: station.radio.preset ?? '', presets, resolved: r });
+          return json(res, 200, { present: radioPresent && r.audio, detected: radioPresent, ...usbChip, shari: radioPresent, interface: r, preset: station.radio.preset ?? '', presets, resolved: r, ...(programmedFilters ? { sa818Filters: programmedFilters } : {}) });
         }
-        if (p === '/radio/program' && m === 'POST') { if (!isAdmin) return forbid(); return json(res, 200, nodeJSON()); }
+        if (p === '/radio/program' && m === 'POST') {
+          if (!isAdmin) return forbid();
+          // Like the node: Program sends the configured SA818 filters (on unless turned off) and the state file remembers them.
+          const f = station.radio.sa818Filter ?? {};
+          programmedFilters = { emphasis: f.emphasis !== false, highPass: f.highPass !== false, lowPass: f.lowPass !== false, at: iso(now()) };
+          return json(res, 200, nodeJSON());
+        }
         if (p === '/hostlists' && m === 'GET') {
           const mode = url.searchParams.get('mode') ?? '';
           return json(res, 200, { mode, items: HOSTS[mode] ?? [], etag: 'mock' });

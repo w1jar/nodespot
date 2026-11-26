@@ -22,6 +22,8 @@ type Fake struct {
 	played  []Frame
 	pttLog  []bool
 	vols    Volumes
+	boostOK bool // the fake chip has a boost control
+	boost   bool
 	closed  bool
 	pttErr  error
 	rx, tx  audio.Meter
@@ -133,6 +135,7 @@ func (f *Fake) Levels() Levels {
 	now := time.Now()
 	return Levels{
 		CaptureVolume: f.vols.Capture, PlaybackVolume: f.vols.Playback,
+		BoostAvailable: f.boostOK, Boost: f.boostOK && f.boost,
 		Rx: f.rx.Snapshot(now), Tx: f.tx.Snapshot(now), DroppedRx: f.dropped.Load(),
 	}
 }
@@ -142,6 +145,20 @@ func (f *Fake) SetVolumes(capture, playback float64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.vols = Volumes{Capture: capture, Playback: playback}
+	return nil
+}
+
+// SetBoostAvailable says whether the fake sound chip has a boost control.
+func (f *Fake) SetBoostAvailable(ok bool) { f.mu.Lock(); f.boostOK = ok; f.mu.Unlock() }
+
+// SetBoost implements Booster.
+func (f *Fake) SetBoost(on bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.boostOK {
+		return ErrNoBoost
+	}
+	f.boost = on
 	return nil
 }
 

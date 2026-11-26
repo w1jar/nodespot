@@ -27,6 +27,10 @@ var (
 	PlaybackVolumeNames = []string{"Speaker Playback Volume", "PCM Playback Volume", "Master Playback Volume"}
 	CaptureSwitchNames  = []string{"Mic Capture Switch", "Capture Switch"}
 	PlaybackSwitchNames = []string{"Speaker Playback Switch", "PCM Playback Switch", "Master Playback Switch"}
+	// BoostNames are the microphone boost controls (a switch, or a volume
+	// with a few steps) some chips have. "Auto Gain Control" is not one: it
+	// is a different feature and is left alone.
+	BoostNames = []string{"Mic Boost", "Mic Boost Capture Switch", "Mic Boost Volume"}
 )
 
 // ControlPath returns the control node of a card.
@@ -239,6 +243,28 @@ func (m *Mixer) PlaybackVolume() (float64, error) {
 	var f float64
 	err := m.First(PlaybackVolumeNames, func(n string) (err error) { f, err = m.Fraction(n); return })
 	return f, err
+}
+
+// BoostAvailable reports whether the chip has a microphone boost control.
+func (m *Mixer) BoostAvailable() bool {
+	return m.First(BoostNames, func(n string) error { _, err := m.Info(n); return err }) == nil
+}
+
+// SetBoost switches the microphone boost on (the control's maximum) or off
+// (its minimum).
+func (m *Mixer) SetBoost(on bool) error {
+	f := 0.0
+	if on {
+		f = 1
+	}
+	return m.First(BoostNames, func(n string) error { return m.SetFraction(n, f) })
+}
+
+// Boost reports whether the microphone boost is on (more than half way up).
+func (m *Mixer) Boost() (bool, error) {
+	var f float64
+	err := m.First(BoostNames, func(n string) (err error) { f, err = m.Fraction(n); return })
+	return f > 0.5, err
 }
 
 // Unmute switches the capture and playback paths on. A missing switch is not

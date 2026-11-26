@@ -21,9 +21,17 @@ type stepParams struct {
 	callsign  string
 	cw        audio.CWOptions
 	voice     string
+
+	rxGainDb, txGainDb float64
+	preEmph, deEmph    bool
+	plFilter           bool
+	rxOnDelay          time.Duration
+	hangTail           time.Duration // extra time added to hang
 }
 
-func paramsFor(c *Config) stepParams {
+// paramsFor derives the step settings; sa818 says the radio interface has an
+// SA818 (which decides the PL filter default).
+func paramsFor(c *Config, sa818 bool) stepParams {
 	st := c.Station
 	p := stepParams{
 		hang:      st.Advanced.Hang(),
@@ -32,6 +40,11 @@ func paramsFor(c *Config) stepParams {
 		callsign:  st.Callsign,
 		cw:        st.ID.CW(),
 		voice:     st.ID.VoiceFile,
+
+		rxGainDb: st.Advanced.RxGainDB, txGainDb: st.Advanced.TxGainDB,
+		preEmph: st.Advanced.PreEmphasis, deEmph: st.Advanced.DeEmphasis,
+		plFilter:  st.Advanced.PL(sa818),
+		rxOnDelay: st.Advanced.RxOnDelay(), hangTail: st.Advanced.TxOffDelay(),
 		id: idParams{
 			on:       st.ID.IDOn() && st.Callsign != "",
 			interval: st.ID.Interval(),
@@ -70,6 +83,13 @@ type simplex struct {
 	idT  idTimer
 
 	modeAGC, radioAGC *audio.AGC
+	// Station audio conditioning: PL high-pass and de-emphasis on the way
+	// from the radio, pre-emphasis on the way to it.
+	rxPL     *audio.HighPass
+	rxDeemph *audio.Emphasis
+	txPre    *audio.Emphasis
+
+	cosSince time.Time // the carrier has been present since (zero: absent)
 
 	// rx is the receive level over the last 100 ms, taken from every frame
 	// the sound chip delivers (before the AGC); rxAt is when the last one
@@ -124,7 +144,16 @@ func (e *Engine) Step(now time.Time) {
 		s.cos = carrier
 		e.publishOn(EventCOS, carrier, now)
 	}
-	rfActive := carrier && !s.ptt
+	// The carrier counts as a received signal after it has been present for
+	// the receive-on delay. While we transmit it is not trusted, and the
+	// delay starts again from the moment we unkey.
+	switch {
+	case !carrier:
+		s.cosSince = time.Time{}
+	case s.ptt, s.cosSince.IsZero():
+		s.cosSince = now
+	}
+	rfActive := carrier && !s.ptt && now.Sub(s.cosSince) >= p.rxOnDelay
 	if !carrier {
 		s.rfLocked = false
 	}
@@ -153,6 +182,7 @@ func (e *Engine) Step(now time.Time) {
 		s.netStart, s.txLocked = time.Time{}, false
 		s.netPlaying, s.prebufAt = false, time.Time{}
 		s.modeAGC.Reset()
+		s.txPre.Reset()
 	}
 	wantNet := netTalking && !rfActive && !s.txLocked
 	if wantNet {
@@ -169,6 +199,10 @@ func (e *Engine) Step(now time.Time) {
 	var out audio.Frame
 	if wantNet && haveNet {
 		out = nf
+		audio.ApplyGain(&out, p.txGainDb)
+		if p.preEmph {
+			s.txPre.Process(&out)
+		}
 		if p.modeAGC {
 			s.modeAGC.Process(&out, p.agc)
 		}
@@ -218,7 +252,7 @@ func (e *Engine) Step(now time.Time) {
 	// PTT.
 	content := wantNet || tonePlaying || idPlaying
 	if content {
-		s.hangUntil = now.Add(p.hang)
+		s.hangUntil = now.Add(p.hang + p.hangTail)
 	}
 	want := !rfActive && (content || (s.ptt && now.Before(s.hangUntil)))
 	if want != s.ptt {
@@ -263,6 +297,8 @@ func (e *Engine) stepRF(now time.Time, m mode.Mode, rfActive bool) {
 	if s.rfStart.IsZero() {
 		s.rfStart = now
 		s.radioAGC.Reset()
+		s.rxPL.Reset()
+		s.rxDeemph.Reset()
 	}
 	if now.Sub(s.rfStart) >= p.txTimeout {
 		s.rfLocked = true
@@ -288,6 +324,13 @@ func (e *Engine) stepRF(now time.Time, m mode.Mode, rfActive bool) {
 		if m == nil {
 			continue
 		}
+		if p.plFilter {
+			s.rxPL.Process(&f)
+		}
+		if p.deEmph {
+			s.rxDeemph.Process(&f)
+		}
+		audio.ApplyGain(&f, p.rxGainDb)
 		if p.radioAGC {
 			s.radioAGC.Process(&f, p.agc)
 		}

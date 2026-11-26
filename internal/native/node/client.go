@@ -225,11 +225,11 @@ func (c *Client) InputLevel(ctx context.Context) (InputLevel, error) {
 	return out, err
 }
 
-// RadioTune sets the sound chip's receive and transmit levels (nil keeps
-// one) and saves them.
-func (c *Client) RadioTune(ctx context.Context, rx, tx *float64) (radio.Levels, error) {
+// RadioTune sets the sound chip's receive and transmit levels and the
+// receive boost (nil keeps one) and saves them.
+func (c *Client) RadioTune(ctx context.Context, rx, tx *float64, boost *bool) (radio.Levels, error) {
 	var out radio.Levels
-	err := c.Call(ctx, OpRadioTune, map[string]*float64{"rxVolume": rx, "txVolume": tx}, &out)
+	err := c.Call(ctx, OpRadioTune, map[string]any{"rxVolume": rx, "txVolume": tx, "rxBoost": boost}, &out)
 	return out, err
 }
 

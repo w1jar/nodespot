@@ -39,7 +39,7 @@
   $effect(() => { pollInput(); const t = setInterval(pollInput, 250); return () => clearInterval(t); });
   $effect(() => { load(); const t = setInterval(loadLevels, 2000); return () => clearInterval(t); });
 
-  async function setLevel(p: { rxVolume?: number; txVolume?: number }) { try { lv = await api.setRadio(p); } catch (e) { toastError(e); } }
+  async function setLevel(p: { rxVolume?: number; txVolume?: number; rxBoost?: boolean }) { try { lv = await api.setRadio(p); } catch (e) { toastError(e); } }
   async function save(ev: Event) {
     ev.preventDefault();
     if (!st) return;
@@ -65,6 +65,9 @@
       <div>
         <label class="label" for="rt-rx">Receive volume (from the radio): {pct(lv.CaptureVolume)}</label>
         <input id="rt-rx" class="w-full accent-[var(--accent)]" type="range" min="0" max="100" disabled={lv.CaptureVolume < 0} value={Math.max(lv.CaptureVolume, 0)} onchange={(e) => setLevel({ rxVolume: +e.currentTarget.value })} />
+        {#if lv.BoostAvailable}
+          <label class="mt-1 flex cursor-pointer items-center gap-2 text-sm"><input id="rt-boost" type="checkbox" class="size-4 accent-[var(--accent)]" checked={!!lv.Boost} onchange={(e) => setLevel({ rxBoost: e.currentTarget.checked })} />Receive boost <span class="text-xs text-muted">(microphone boost of the sound chip)</span></label>
+        {/if}
         <p class="mt-1 text-xs text-muted tabular-nums">Level {db(lv.Rx.RMSDb)}, peak {db(lv.Rx.PeakDb)}{#if lv.Rx.Clipped} , clipped {lv.Rx.Clipped}{/if}</p>
       </div>
       <div>

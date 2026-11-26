@@ -53,7 +53,7 @@ const (
 	OpNowCalling  = "now_calling"  // -> *Calling (null when nobody is talking)
 	OpRadioLevels = "radio_levels" // -> radio.Levels
 	OpInputLevel  = "input_level"  // -> InputLevel
-	OpRadioTune   = "radio_tune"   // {rxVolume?, txVolume?} -> radio.Levels
+	OpRadioTune   = "radio_tune"   // {rxVolume?, txVolume?, rxBoost?} -> radio.Levels
 	OpRadioProg   = "radio_program"
 	OpRadioInfo   = "radio_info" // -> RadioDetail
 	OpConfig      = "config"     // -> the station settings (no mode passwords)
@@ -305,11 +305,12 @@ func (s *Server) do(ctx context.Context, req Request) (any, error) {
 		var a struct {
 			RxVolume *float64 `json:"rxVolume"`
 			TxVolume *float64 `json:"txVolume"`
+			RxBoost  *bool    `json:"rxBoost"`
 		}
 		if err := args(req.Args, &a); err != nil {
 			return nil, err
 		}
-		if err := e.Tune(a.RxVolume, a.TxVolume); err != nil {
+		if err := e.Tune(a.RxVolume, a.TxVolume, a.RxBoost); err != nil {
 			return nil, err
 		}
 		return e.Levels(), nil

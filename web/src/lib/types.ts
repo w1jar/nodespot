@@ -110,6 +110,12 @@ export interface StationId {
 export interface StationAdvanced {
   hangMs?: number; txTimeoutS?: number; courtesyTone?: boolean;
   modeAgc?: boolean; radioAgc?: boolean; agcTargetDb?: number; agcMaxDb?: number;
+  /** Static gain, -20 to 20 dB: radio to network and network to radio. 0 or unset is none. */
+  rxGainDb?: number; txGainDb?: number;
+  /** Software 75 microsecond emphasis (off by default); plFilter unset is automatic: on, unless the radio is an SA818. */
+  preEmphasis?: boolean; deEmphasis?: boolean; plFilter?: boolean;
+  /** Carrier debounce before a receive counts (0 to 1000 ms) and extra hang time (0 to 2000 ms). */
+  rxOnDelayMs?: number; txOffDelayMs?: number;
   [key: string]: unknown;
 }
 export interface Station {
@@ -122,6 +128,10 @@ export interface Station {
     preset?: string;
     pttGpio?: number; pttActiveLow?: boolean; cosSource?: string; cosActiveLow?: boolean;
     ctcssSource?: string; ctcssActiveLow?: boolean; sa818?: boolean; sa818Port?: string;
+    /** Microphone boost of the sound chip, when it has the control. */
+    rxBoost?: boolean;
+    /** The SA818's filter flags, written to the module only by Program. Unset flags are on. */
+    sa818Filter?: Sa818Filter;
   };
   id: StationId;
   advanced: StationAdvanced;
@@ -132,16 +142,20 @@ export interface RadioInterface {
   preset: string; audio: boolean; pttPin: number; pttActiveLow: boolean; cos: string; cosActiveLow: boolean;
   ctcss: string; ctcssActiveLow: boolean; sa818: boolean;
 }
+export interface Sa818Filter { emphasis?: boolean; highPass?: boolean; lowPass?: boolean }
+/** What the SA818's filters were last programmed to (from its state file); absent when never programmed. */
+export interface Sa818Programmed { emphasis: boolean; highPass: boolean; lowPass: boolean; at?: string }
 export interface RadioPreset { name: string; title: string; description: string; defaults: RadioInterface }
 /** GET /api/radio/info (admin). */
 export interface RadioInfo {
   present: boolean; detected: boolean; chip?: string; usbId?: string; product?: string; busPath?: string; shari: boolean;
   interface: RadioInterface; preset: string; presets: RadioPreset[]; resolved?: RadioInterface; restartRequired?: boolean;
+  sa818Filters?: Sa818Programmed;
 }
 export interface Reading { RMSDb: number; PeakDb: number; Active: boolean; Clipped: number; Frames: number }
 /** GET and PUT /api/radio: the sound chip's levels. -1 means the chip has no such control. */
 export interface RadioLevels {
-  CaptureVolume: number; PlaybackVolume: number; Rx: Reading; Tx: Reading; DroppedRx: number; DroppedTx: number; Xruns: number;
+  CaptureVolume: number; PlaybackVolume: number; BoostAvailable?: boolean; Boost?: boolean; Rx: Reading; Tx: Reading; DroppedRx: number; DroppedTx: number; Xruns: number;
 }
 
 /** One row of GET /api/heard: who was heard on which mode. */

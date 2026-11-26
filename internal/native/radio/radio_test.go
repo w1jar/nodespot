@@ -386,3 +386,32 @@ func TestSavedSA818(t *testing.T) {
 		t.Error("default state path changed")
 	}
 }
+
+type boostMixer struct {
+	fakeMixer
+	on bool
+}
+
+func (m *boostMixer) BoostAvailable() bool   { return true }
+func (m *boostMixer) Boost() (bool, error)   { return m.on, nil }
+func (m *boostMixer) SetBoost(on bool) error { m.on = on; return nil }
+
+func TestCoreBoost(t *testing.T) {
+	r, _, _, _, _ := newCore()
+	defer r.Close()
+	if l := r.Levels(); l.BoostAvailable {
+		t.Fatal("boost reported on a mixer without it")
+	}
+	if err := r.(Booster).SetBoost(true); !errors.Is(err, ErrNoBoost) {
+		t.Fatalf("SetBoost without a control: %v", err)
+	}
+	m := &boostMixer{}
+	r2 := New(Parts{Capture: newFakeSource(), Playback: &fakeSink{}, PTT: &fakeKeyer{changes: make(chan bool, 4)}, Mixer: m})
+	defer r2.Close()
+	if err := r2.(Booster).SetBoost(true); err != nil || !m.on {
+		t.Fatalf("SetBoost: %v, on %v", err, m.on)
+	}
+	if l := r2.Levels(); !l.BoostAvailable || !l.Boost {
+		t.Fatalf("levels %+v", l)
+	}
+}

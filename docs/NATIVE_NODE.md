@@ -315,6 +315,15 @@ The card edits `station.advanced` and `station.id`. A save is validated by `Conf
 
 | Setting | Key | Range | Default |
 |---|---|---|---|
+| Receive gain, radio to network | `advanced.rxGainDb` | -20 to 20 dB | 0 |
+| Transmit gain, network to radio | `advanced.txGainDb` | -20 to 20 dB | 0 |
+| Software pre-emphasis (transmit) | `advanced.preEmphasis` | on/off | off |
+| Software de-emphasis (receive) | `advanced.deEmphasis` | on/off | off |
+| PL filter (receive) | `advanced.plFilter` | on/off; unset is automatic | on, off for an SA818 |
+| SA818 filters | `radio.sa818Filter.{emphasis,highPass,lowPass}` | on/off each | all on |
+| Receive boost | `radio.rxBoost` | on/off, only if the chip has the control | chip default |
+| Receive-on delay | `advanced.rxOnDelayMs` | 0 to 1000 ms | 0 |
+| Transmit-off delay | `advanced.txOffDelayMs` | 0 to 2000 ms | 0 |
 | AGC, network to radio | `advanced.modeAgc` | on/off | on |
 | AGC, radio to network | `advanced.radioAgc` | on/off | off |
 | AGC target (both directions) | `advanced.agcTargetDb` | -40 to -6 dBFS | -22 |
@@ -330,5 +339,13 @@ The card edits `station.advanced` and `station.id`. A save is validated by `Conf
 | CW pitch | `id.pitchHz` | 200 to 2000 Hz | 800 |
 | CW level | `id.levelDb` | -60 to -1 dBFS | -24 |
 | Voice file | `id.voiceFile` | absolute path of an 8 kHz mono WAV, else CW | CW |
+
+Audio processing order. Receive (radio to network): PL filter, software de-emphasis, receive gain, AGC. Transmit (network to radio): transmit gain, software pre-emphasis, AGC. The core runs at 8 kHz in 20 ms frames; the filters are designed for that rate (`internal/native/audio/dsp.go`). The static gain is exact (a power of ten of the dB value) and soft-limited. The emphasis filters are first order with a 75 microsecond constant (corner 2122 Hz), normalized to 0 dB at 1 kHz, and pre-emphasis is the exact inverse of de-emphasis. The PL filter is a 4th-order Butterworth at 300 Hz (about -3 dB at 300 Hz and more than 20 dB down at 100 Hz).
+
+SA818 filters: `radio.sa818Filter` flags (unset means on, the module's default `AT+SETFILTER=1,1,1`) are written to the module only by the Program button and the other explicit programming paths, never when settings are saved. Settings shows the filters recorded in `/etc/nodespot/sa818.json` when the module was last programmed, or "unknown until programmed". The module's polarity for the flags (1 = filter on) is not confirmed on hardware. On an SA818 radio the software emphasis switches are hidden and the PL filter is off unless set.
+
+Delays: with a receive-on delay, a carrier must be present for `rxOnDelayMs` before the node starts passing receive audio, so that much of the start of a transmission is dropped. The transmit-off delay is added to the hang time before PTT is released.
+
+Receive boost: `PUT /api/radio` accepts `rxBoost`; the control is the sound chip's microphone boost ALSA mixer control, and `GET /api/radio` reports `BoostAvailable` and `Boost`. A chip without the control ignores the setting.
 
 The web card saves by reading the current station, replacing only `advanced` and `id`, and PUTting it to `/api/station`, so other fields (and unknown keys such as `md380`) survive.

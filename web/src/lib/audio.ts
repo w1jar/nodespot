@@ -1,11 +1,25 @@
 // The "Audio and timers" card: limits, defaults and checks for station.advanced and station.id. Pure functions, tested in
 // audio.test.ts. The limits match Validate in internal/native/node/config.go; 0 or unset means the node's default.
-import type { Station, StationAdvanced, StationId } from './types';
+import type { Sa818Filter, Station, StationAdvanced, StationId } from './types';
 
 export interface NumField { key: string; label: string; unit: string; min: number; max: number; step: number; def: number; help: string }
 
 /** Defaults of the node (config.go and audio/agc.go). */
-export const AGC_DEFAULTS = { modeAgc: true, radioAgc: false, courtesyTone: true } as const;
+export const AGC_DEFAULTS = { modeAgc: true, radioAgc: false, courtesyTone: true, preEmphasis: false, deEmphasis: false } as const;
+
+/** The SA818 filter flags: each is on unless set to false (the node's default, 1,1,1). */
+export const SA818_FILTER_KEYS = ['emphasis', 'highPass', 'lowPass'] as const;
+
+/** Static gain, radio to network (rx) and network to radio (tx), applied before the AGC. */
+export const GAIN_FIELDS: NumField[] = [
+  { key: 'rxGainDb', label: 'Receive gain', unit: 'dB', min: -20, max: 20, step: 0.5, def: 0, help: 'Radio to network, -20 to 20. Applied before the AGC; peaks are soft-limited, never wrapped.' },
+  { key: 'txGainDb', label: 'Transmit gain', unit: 'dB', min: -20, max: 20, step: 0.5, def: 0, help: 'Network to radio, -20 to 20. Applied before the AGC.' },
+];
+/** Delays: how long a carrier must last before it counts as a receive, and extra time the transmitter stays keyed. */
+export const DELAY_FIELDS: NumField[] = [
+  { key: 'rxOnDelayMs', label: 'Receive-on delay', unit: 'ms', min: 0, max: 1000, step: 10, def: 0, help: 'A carrier must last this long before the node treats it as a receive. The first part of the audio is dropped. 0 to 1000.' },
+  { key: 'txOffDelayMs', label: 'Transmit-off delay', unit: 'ms', min: 0, max: 2000, step: 10, def: 0, help: 'Extra time the transmitter stays keyed after the hang time, 0 to 2000.' },
+];
 
 export const AGC_FIELDS: NumField[] = [
   { key: 'agcTargetDb', label: 'Target level', unit: 'dBFS', min: -40, max: -6, step: 1, def: -22, help: 'Speech level the AGC aims for, -40 to -6.' },
@@ -38,7 +52,7 @@ export function fieldError(f: NumField, v: unknown): string {
 
 /** The whole card: an error text or ''. */
 export function audioError(adv: StationAdvanced, id: StationId): string {
-  for (const f of [...AGC_FIELDS, ...TIMER_FIELDS]) { const e = fieldError(f, adv[f.key]); if (e) return e; }
+  for (const f of [...GAIN_FIELDS, ...AGC_FIELDS, ...TIMER_FIELDS, ...DELAY_FIELDS]) { const e = fieldError(f, adv[f.key]); if (e) return e; }
   for (const f of ID_FIELDS) { const e = fieldError(f, id[f.key]); if (e) return e; }
   const v = (id.voiceFile ?? '').trim();
   if (v !== '' && !v.startsWith('/')) return 'Voice file must be an absolute path, such as /var/lib/nodespot/id.wav';
@@ -64,18 +78,38 @@ function cleanBool(o: Record<string, unknown>, key: keyof typeof AGC_DEFAULTS): 
 
 /** The station to save: `base` (the latest saved station) with advanced and id replaced by the edited ones; every other key,
  * known or not, is carried over. */
-export function audioBody(base: Station, adv: StationAdvanced, id: StationId): Station {
-  const a = cleanNums({ ...adv }, [...AGC_FIELDS, ...TIMER_FIELDS]) as Record<string, unknown>;
+export function audioBody(base: Station, adv: StationAdvanced, id: StationId, filt?: Sa818Filter): Station {
+  const a = cleanNums({ ...adv }, [...GAIN_FIELDS, ...AGC_FIELDS, ...TIMER_FIELDS, ...DELAY_FIELDS]) as Record<string, unknown>;
+  if (typeof a.plFilter !== 'boolean') delete a.plFilter; // unset is automatic
   for (const k of Object.keys(AGC_DEFAULTS) as (keyof typeof AGC_DEFAULTS)[]) cleanBool(a, k);
   const i = cleanNums({ ...id }, ID_FIELDS) as Record<string, unknown>;
   if (typeof i.voiceFile === 'string') { const v = i.voiceFile.trim(); if (v === '') delete i.voiceFile; else i.voiceFile = v; }
   if (i.enabled === true) delete i.enabled; // on is the default
-  return { ...base, advanced: a as StationAdvanced, id: i as StationId };
+  const out: Station = { ...base, advanced: a as StationAdvanced, id: i as StationId };
+  if (filt !== undefined) {
+    // Only flags turned off are stored; all on is the default and is left out.
+    const f: Sa818Filter = {};
+    for (const k of SA818_FILTER_KEYS) if (filt[k] === false) f[k] = false;
+    const radio = { ...base.radio } as Record<string, unknown>;
+    if (Object.keys(f).length) radio.sa818Filter = f; else delete radio.sa818Filter;
+    out.radio = radio as Station['radio'];
+  }
+  return out;
 }
 
 /** Whether the edited card differs from the saved one (compared as they would be saved). */
-export function audioDirty(base: Station, adv: StationAdvanced, id: StationId): boolean {
-  const a = audioBody(base, base.advanced, base.id), b = audioBody(base, adv, id);
-  return JSON.stringify([sortKeys(a.advanced), sortKeys(a.id)]) !== JSON.stringify([sortKeys(b.advanced), sortKeys(b.id)]);
+export function audioDirty(base: Station, adv: StationAdvanced, id: StationId, filt?: Sa818Filter): boolean {
+  const a = audioBody(base, base.advanced, base.id, base.radio?.sa818Filter ?? {}), b = audioBody(base, adv, id, filt ?? base.radio?.sa818Filter ?? {});
+  return JSON.stringify([sortKeys(a.advanced), sortKeys(a.id), sortKeys((a.radio?.sa818Filter ?? {}) as Record<string, unknown>)])
+    !== JSON.stringify([sortKeys(b.advanced), sortKeys(b.id), sortKeys((b.radio?.sa818Filter ?? {}) as Record<string, unknown>)]);
+}
+
+/** The PL filter as the node will run it: the saved choice, else automatic (on unless the radio is an SA818). */
+export function effectivePL(adv: StationAdvanced, sa818: boolean): boolean { return adv.plFilter ?? !sa818; }
+
+/** What to show for the SA818's filters as last programmed: a text per flag, or 'unknown until programmed'. */
+export function programmedText(p?: { emphasis: boolean; highPass: boolean; lowPass: boolean }): string {
+  if (!p) return 'Unknown until programmed';
+  return `Programmed: emphasis ${p.emphasis ? 'on' : 'off'}, high-pass ${p.highPass ? 'on' : 'off'}, low-pass ${p.lowPass ? 'on' : 'off'}`;
 }
 function sortKeys(o: Record<string, unknown>): Record<string, unknown> { return Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]])); }

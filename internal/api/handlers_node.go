@@ -431,8 +431,8 @@ func (s *Server) handleRadioInput(w http.ResponseWriter, r *http.Request, _ stor
 	writeJSON(w, 200, l)
 }
 
-// handleRadioPut sets the sound chip's levels {rxVolume, txVolume} (0 to 1;
-// an absent one is kept); the node saves them.
+// handleRadioPut sets the sound chip's levels {rxVolume, txVolume} (0 to 1)
+// and receive boost {rxBoost} (an absent one is kept); the node saves them.
 func (s *Server) handleRadioPut(w http.ResponseWriter, r *http.Request, u store.User) {
 	if !s.nodeReady(w) {
 		return
@@ -440,6 +440,7 @@ func (s *Server) handleRadioPut(w http.ResponseWriter, r *http.Request, u store.
 	var in struct {
 		RxVolume *float64 `json:"rxVolume"`
 		TxVolume *float64 `json:"txVolume"`
+		RxBoost  *bool    `json:"rxBoost"`
 	}
 	if !decode(w, r, &in, false) {
 		return
@@ -450,18 +451,18 @@ func (s *Server) handleRadioPut(w http.ResponseWriter, r *http.Request, u store.
 			return
 		}
 	}
-	if in.RxVolume == nil && in.TxVolume == nil {
-		writeErr(w, 400, "bad_request", "set rxVolume or txVolume")
+	if in.RxVolume == nil && in.TxVolume == nil && in.RxBoost == nil {
+		writeErr(w, 400, "bad_request", "set rxVolume, txVolume or rxBoost")
 		return
 	}
 	ctx, cancel := nodeCtx(r)
 	defer cancel()
-	l, err := s.d.Node.RadioTune(ctx, in.RxVolume, in.TxVolume)
+	l, err := s.d.Node.RadioTune(ctx, in.RxVolume, in.TxVolume, in.RxBoost)
 	if err != nil {
 		s.nodeErr(w, err)
 		return
 	}
-	s.audit(u, "radio.tune", map[string]any{"rxVolume": in.RxVolume, "txVolume": in.TxVolume})
+	s.audit(u, "radio.tune", map[string]any{"rxVolume": in.RxVolume, "txVolume": in.TxVolume, "rxBoost": in.RxBoost})
 	writeJSON(w, 200, l)
 }
 

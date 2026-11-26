@@ -1,10 +1,13 @@
 package node
 
 import (
+	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/w1jar/nodespot/internal/native/mode"
 	_ "github.com/w1jar/nodespot/internal/native/mode/all"
@@ -74,6 +77,20 @@ func TestValidate(t *testing.T) {
 		{name: "AGC max negative", mod: func(c *Config) { c.Station.Advanced.AGCMax = -1 }, want: "maximum gain"},
 		{name: "AGC max high", mod: func(c *Config) { c.Station.Advanced.AGCMax = 31 }, want: "maximum gain"},
 		{name: "AGC max ok", mod: func(c *Config) { c.Station.Advanced.AGCMax = 30 }},
+		{name: "rx gain low", mod: func(c *Config) { c.Station.Advanced.RxGainDB = -20.5 }, want: "receive gain"},
+		{name: "rx gain high", mod: func(c *Config) { c.Station.Advanced.RxGainDB = 21 }, want: "receive gain"},
+		{name: "rx gain min", mod: func(c *Config) { c.Station.Advanced.RxGainDB = -20 }},
+		{name: "rx gain max", mod: func(c *Config) { c.Station.Advanced.RxGainDB = 20 }},
+		{name: "tx gain low", mod: func(c *Config) { c.Station.Advanced.TxGainDB = -21 }, want: "transmit gain"},
+		{name: "tx gain high", mod: func(c *Config) { c.Station.Advanced.TxGainDB = 20.1 }, want: "transmit gain"},
+		{name: "tx gain ok", mod: func(c *Config) { c.Station.Advanced.TxGainDB = 7.5 }},
+		{name: "gain nan", mod: func(c *Config) { c.Station.Advanced.TxGainDB = math.NaN() }, want: "transmit gain"},
+		{name: "rx on delay negative", mod: func(c *Config) { c.Station.Advanced.RxOnDelayMS = -1 }, want: "receive-on delay"},
+		{name: "rx on delay high", mod: func(c *Config) { c.Station.Advanced.RxOnDelayMS = 1001 }, want: "receive-on delay"},
+		{name: "rx on delay max", mod: func(c *Config) { c.Station.Advanced.RxOnDelayMS = 1000 }},
+		{name: "tx off delay negative", mod: func(c *Config) { c.Station.Advanced.TxOffDelayMS = -1 }, want: "transmit-off delay"},
+		{name: "tx off delay high", mod: func(c *Config) { c.Station.Advanced.TxOffDelayMS = 2001 }, want: "transmit-off delay"},
+		{name: "tx off delay max", mod: func(c *Config) { c.Station.Advanced.TxOffDelayMS = 2000 }},
 		{name: "unknown mode", mod: func(c *Config) { c.Modes["fm"] = mode.Settings{} }, want: `"fm"`},
 		{name: "bad mode setting", mod: func(c *Config) {
 			c.Modes[mode.AllStar] = mode.Settings{Values: map[string]string{"node": "12"}}
@@ -188,7 +205,7 @@ func TestLoadSave(t *testing.T) {
 
 func TestDefaults(t *testing.T) {
 	var c Config
-	p := paramsFor(&c)
+	p := paramsFor(&c, false)
 	if p.hang != DefaultHang || p.txTimeout != DefaultTxTimeout || !p.courtesy ||
 		!p.modeAGC || p.radioAGC || p.id.interval != DefaultIDInterval {
 		t.Fatalf("defaults = %+v", p)
@@ -216,5 +233,54 @@ func TestLoadOldConfigKeys(t *testing.T) {
 	}
 	if a := c.Station.Active; a == nil || a.Target == nil || a.Target.ID != "10100" {
 		t.Fatalf("active %+v", a)
+	}
+}
+
+func TestAudioDefaults(t *testing.T) {
+	var c Config
+	for _, sa818 := range []bool{false, true} {
+		p := paramsFor(&c, sa818)
+		if p.rxGainDb != 0 || p.txGainDb != 0 || p.preEmph || p.deEmph || p.rxOnDelay != 0 || p.hangTail != 0 {
+			t.Fatalf("defaults = %+v", p)
+		}
+		if p.plFilter != !sa818 {
+			t.Fatalf("PL filter with sa818=%v: %v", sa818, p.plFilter)
+		}
+	}
+	c.Station.Advanced = Advanced{PLFilter: bp(true), PreEmphasis: true, DeEmphasis: true, RxGainDB: 3, TxGainDB: -4, RxOnDelayMS: 50, TxOffDelayMS: 300}
+	p := paramsFor(&c, true)
+	if !p.plFilter || !p.preEmph || !p.deEmph || p.rxGainDb != 3 || p.txGainDb != -4 ||
+		p.rxOnDelay != 50*time.Millisecond || p.hangTail != 300*time.Millisecond {
+		t.Fatalf("params = %+v", p)
+	}
+}
+
+// The SA818 filter flags default to the settings the node has always
+// programmed (all on, AT+SETFILTER=1,1,1), so an unchanged config sends the
+// same commands as before.
+func TestSA818Filters(t *testing.T) {
+	r := RadioConfig{FrequencyMHz: 446.1}
+	s, err := r.SA818()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmds, _ := s.Commands()
+	if got := cmds[2]; got != "AT+SETFILTER=1,1,1" {
+		t.Fatalf("default filter command %q", got)
+	}
+	r.SA818Filter = &SA818Filter{Emphasis: bp(false), LowPass: bp(false)}
+	s, _ = r.SA818()
+	cmds, _ = s.Commands()
+	if got := cmds[2]; got != "AT+SETFILTER=0,1,0" {
+		t.Fatalf("filter command %q, want emphasis 0, high-pass 1, low-pass 0", got)
+	}
+	// Changing only the filters is not a channel change: nothing is programmed.
+	old := RadioConfig{FrequencyMHz: 446.1}
+	if channelChanged(old, r) {
+		t.Fatal("a filter change counts as a channel change")
+	}
+	b, _ := json.Marshal(r)
+	if !strings.Contains(string(b), `"sa818Filter":{"emphasis":false,"lowPass":false}`) {
+		t.Fatalf("json %s", b)
 	}
 }

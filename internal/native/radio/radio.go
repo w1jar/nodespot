@@ -20,6 +20,9 @@ type Levels struct {
 	// 0 to 1. They are -1 when the chip has no such control.
 	CaptureVolume  float64
 	PlaybackVolume float64
+	// BoostAvailable says the sound chip has a microphone boost control, and
+	// Boost whether it is on.
+	BoostAvailable, Boost bool
 	// Rx and Tx meter the audio from and to the radio.
 	Rx, Tx audio.Reading
 	// DroppedRx counts captured frames the consumer was too slow to take;
@@ -27,6 +30,15 @@ type Levels struct {
 	DroppedRx, DroppedTx uint64
 	// Xruns counts device overruns and underruns that were recovered.
 	Xruns uint64
+}
+
+// ErrNoBoost is returned by SetBoost when the sound chip has no boost control.
+var ErrNoBoost = errors.New("radio: the sound chip has no microphone boost control")
+
+// Booster is implemented by a [Radio] that can switch the receive (microphone)
+// boost of its sound chip. Levels says whether the chip has the control.
+type Booster interface {
+	SetBoost(on bool) error
 }
 
 // Radio is the interface to a radio, real or fake.
