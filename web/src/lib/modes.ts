@@ -2,10 +2,10 @@
 import type { Favorite, Heard, LinkStats, ModeField, ModeInfo, NowCall, Station, Target, Vocoder } from './types';
 
 /** The modes in the order the UI lists them. */
-export const MODE_ORDER = ['allstar', 'echolink', 'bm', 'dmr', 'tgif', 'ysf', 'p25', 'nxdn', 'm17'] as const;
+export const MODE_ORDER = ['allstar', 'echolink', 'bm', 'dmr', 'tgif', 'ysf', 'p25', 'nxdn', 'm17', 'echotest'] as const;
 
 const TITLES: Record<string, string> = {
-  allstar: 'AllStar', echolink: 'EchoLink', bm: 'BrandMeister', dmr: 'DMR', tgif: 'TGIF', ysf: 'YSF', p25: 'P25', nxdn: 'NXDN', m17: 'M17',
+  allstar: 'AllStar', echolink: 'EchoLink', bm: 'BrandMeister', dmr: 'DMR', tgif: 'TGIF', ysf: 'YSF', p25: 'P25', nxdn: 'NXDN', m17: 'M17', echotest: 'Echo test',
 };
 
 /** The display name of a mode; the server's title wins when the list is loaded. */
@@ -155,3 +155,122 @@ export function stateText(state: string | undefined, detail?: string, err?: stri
   const s = ({ idle: 'Idle', starting: 'Starting', ready: 'Ready', connecting: 'Connecting', connected: 'Connected', error: 'Error' } as Record<string, string>)[state ?? ''] ?? '';
   return detail && state !== 'idle' ? `${s} · ${detail}` : s;
 }
+
+// ---- The Modes page: mode buttons, the tune box, favorites and the dashboard pins.
+
+/** How long a mode switch may wait for the node to report it before the page says "Not confirmed". */
+export const CONFIRM_MS = 5000;
+/** The longest name a favorite gets from the page (the server allows 120). */
+export const FAV_NAME_MAX = 40;
+
+/** A mode switch waiting for the node status to show it. */
+export interface Pending { mode: string; since: number }
+export type Outcome = 'none' | 'waiting' | 'confirmed' | 'unconfirmed';
+
+/** `confirmed` once the node reports the mode as active, `unconfirmed` after CONFIRM_MS without it, else `waiting`. */
+export function pendingOutcome(p: Pending | null, active: string | undefined, now: number): Outcome {
+  if (!p) return 'none';
+  if ((active ?? '') === p.mode) return 'confirmed';
+  return now - p.since >= CONFIRM_MS ? 'unconfirmed' : 'waiting';
+}
+
+/** True for a mode that has a target to type (the echo test has none). */
+export const hasTarget = (m: ModeInfo | undefined): boolean => !!m && m.name !== 'echotest';
+
+/** The kind of target picker a mode gets: a search of the AllStar node list, a list of reflectors, or a plain input. */
+export type PickerKind = 'nodes' | 'hosts' | 'plain' | 'none';
+export function pickerKind(m: ModeInfo | undefined): PickerKind {
+  if (!m || !hasTarget(m)) return 'none';
+  if (m.name === 'allstar' || m.name === 'echolink') return 'nodes';
+  return m.needsHost ? 'hosts' : 'plain';
+}
+
+/** The modules of an M17 reflector: A to Z. */
+export const M17_MODULES: readonly string[] = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+const M17_REFLECTOR = /^M17-[A-Z0-9]{3}$/;
+const M17_TARGET = /^M17-[A-Z0-9]{3} [A-Z]$/;
+/** The M17 target ("M17-XXX C") from the picked or typed reflector and the module. A text that already ends in a module is taken as it is; '' when it is not an M17 designator. */
+export function m17Tune(text: string, module: string): string {
+  const t = text.trim().replace(/\s+/g, ' ').toUpperCase();
+  if (M17_TARGET.test(t)) return t;
+  return M17_REFLECTOR.test(t) ? `${t} ${module.toUpperCase()}` : '';
+}
+/** An M17 target split into reflector and module; null when it is not one. */
+export function m17Split(value: string): { reflector: string; module: string } | null {
+  const v = value.trim().toUpperCase();
+  return M17_TARGET.test(v) ? { reflector: v.slice(0, 7), module: v.slice(8) } : null;
+}
+
+/** The target to connect to from what is typed: M17 adds the module, the others use the text as it is. */
+export function targetValue(mode: string, text: string, module = 'A'): string {
+  return mode === 'm17' ? m17Tune(text, module) : text.trim();
+}
+
+/** The placeholder of the target input. */
+export function targetPlaceholder(m: ModeInfo | undefined): string {
+  if (!m) return '';
+  if (m.name === 'm17') return 'Reflector (M17-XXX)';
+  if (m.name === 'allstar') return 'Node number, callsign or name';
+  return m.targetHelp?.replace(/\.$/, '') ?? '';
+}
+
+/** A short status for a mode button: a dot tone and one word. A mode that is not ready is marked; the active one shows its link state. */
+export interface Chip { tone: 'ok' | 'warn' | 'err' | 'off'; text: string }
+export function modeChip(m: ModeInfo, active: string, state: string | undefined): Chip {
+  if (!m.configured) return { tone: 'warn', text: 'Not set up' };
+  if (m.name === active) {
+    if (state === 'connected') return { tone: 'ok', text: m.name === 'echotest' ? 'Running' : 'Connected' };
+    if (state === 'error') return { tone: 'err', text: 'Error' };
+    if (state === 'connecting' || state === 'starting') return { tone: 'warn', text: 'Connecting' };
+    return { tone: 'ok', text: 'Active' };
+  }
+  if (m.error) return { tone: 'err', text: 'Error' };
+  return { tone: 'off', text: 'Ready' };
+}
+
+/** Favorites of one mode in the order the server keeps them (the order the page reorders). */
+export const favoritesInOrder = (all: Favorite[], mode: string): Favorite[] => all.filter((f) => f.mode === mode);
+
+/** The ids of a mode's favorites after moving one by `delta` places; null when it cannot move that way. */
+export function movedIds(list: Pick<Favorite, 'id'>[], id: number, delta: number): number[] | null {
+  const i = list.findIndex((f) => f.id === id), j = i + delta;
+  if (i < 0 || j < 0 || j >= list.length) return null;
+  const ids = list.map((f) => f.id);
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  return ids;
+}
+
+/** The favorite of a mode with this target, if any. */
+export const findFavorite = (all: Favorite[], mode: string, target: string): Favorite | undefined => all.find((f) => f.mode === mode && f.target === target.trim());
+
+/** Why the current target cannot be saved as a favorite ("" when it can). */
+export function favoriteBlock(all: Favorite[], mode: string, target: string): string {
+  const t = target.trim();
+  if (!t) return 'Enter or connect a target first';
+  if (findFavorite(all, mode, t)) return 'Already a favorite';
+  return '';
+}
+
+/** A name a new favorite gets: the target's name when known, else its ID, cut to FAV_NAME_MAX. */
+export function defaultFavName(target: string, name?: string): string {
+  const n = (name && name !== target ? name : target).trim();
+  return [...n].slice(0, FAV_NAME_MAX).join('');
+}
+
+/** The name of a favorite when it is valid (1 to FAV_NAME_MAX printable characters), else null. */
+export function validFavName(name: string): string | null {
+  const t = name.trim();
+  const n = [...t].length;
+  return n >= 1 && n <= FAV_NAME_MAX && ![...t].some((c) => c < ' ' || c === '\x7f') ? t : null;
+}
+
+/** The pinned favorites for the dashboard, in the server's order. */
+export const pinnedFavorites = (all: Favorite[]): Favorite[] => all.filter((f) => f.pinned);
+
+/** True when a favorite is what the node is connected to now (its mode is active and its target is the current one). */
+export function favoriteActive(f: Pick<Favorite, 'mode' | 'target'>, active: string | undefined, target: Target | undefined): boolean {
+  if (!target || f.mode !== active) return false;
+  const a = target.id.trim().toUpperCase(), b = f.target.trim().toUpperCase();
+  return a === b || (f.mode === 'm17' && b.startsWith(a + ' '));
+}
+

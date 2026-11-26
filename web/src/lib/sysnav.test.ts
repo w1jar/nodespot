@@ -5,7 +5,7 @@ import { movedPath, MOVED, OLD_IDS, isSettingsPath, settingsRoute, clampLines, a
 test('movedPath redirects every legacy route', () => {
   assert.equal(movedPath('/updates'), '/settings/system/updates');
   assert.equal(movedPath('/tune'), '/settings/station/radio');
-  assert.equal(movedPath('/digital'), '/settings/modes');
+  assert.equal(movedPath('/digital'), '/modes');
   assert.equal(movedPath('/backup'), '/settings/maintenance/backup');
   assert.equal(movedPath('/system'), '/settings/system/overview');
   assert.equal(movedPath('/system/'), '/settings/system/overview');
@@ -23,8 +23,8 @@ test('movedPath maps each old System section to its tab', () => {
 test('movedPath maps every flat settings id of the first Settings layout', () => {
   assert.equal(Object.keys(OLD_IDS).length, 21);
   assert.equal(movedPath('/settings/audio-levels'), '/settings/station/radio');
-  for (const id of ['dv-engine', 'dv-identity', 'dv-bridge', 'dv-audio']) assert.equal(movedPath('/settings/' + id), '/settings/modes');
-  assert.equal(movedPath('/settings/dv-user-list'), '/settings/modes/lookup');
+  for (const id of ['dv-engine', 'dv-identity', 'dv-bridge', 'dv-audio']) assert.equal(movedPath('/settings/' + id), '/modes');
+  assert.equal(movedPath('/settings/dv-user-list'), '/settings/station/lookup');
   assert.equal(movedPath('/settings/users'), '/settings/access');
   assert.equal(movedPath('/settings/public'), '/settings/access');
   assert.equal(movedPath('/settings/web-port'), '/settings/system/web-port');
@@ -98,4 +98,13 @@ test('auditSummary', () => {
   assert.equal(auditSummary('{"from":"node2001","to":"node2002"}'), 'from: node2001, to: node2002');
   assert.equal(auditSummary('{}'), '');
   assert.equal(auditSummary('plain'), 'plain');
+});
+
+test('the Settings -> Modes pages redirect to the Modes page, the caller lookup to Station', () => {
+  assert.equal(movedPath('/settings/modes'), '/modes');
+  assert.equal(movedPath('/settings/modes/'), '/modes');
+  assert.equal(movedPath('/settings/modes/ysf'), '/modes?mode=ysf');
+  assert.equal(movedPath('/settings/modes/echotest'), '/modes?mode=echotest');
+  assert.equal(movedPath('/settings/modes/lookup'), '/settings/station/lookup');
+  assert.equal(movedPath('/settings/modesx'), null);
 });

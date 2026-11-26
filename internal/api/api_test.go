@@ -911,6 +911,24 @@ func TestFavorites(t *testing.T) {
 	}
 }
 
+func TestFavoriteEchoLinkTargets(t *testing.T) {
+	e := newEnv(t, opts{})
+	var f api.FavoriteJSON
+	// a node number or a callsign (saved in upper case); anything else is refused
+	if c := e.do("op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "n0call-l"}, &f); c != 201 || f.Target != "N0CALL-L" || f.Label != "N0CALL-L" {
+		t.Fatal(c, f)
+	}
+	if c := e.do("op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "123456"}, &f); c != 201 || f.Target != "123456" {
+		t.Fatal(c, f)
+	}
+	expectErr(t, e, "op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "N0CALL-X"}, 400, "bad_target")
+	expectErr(t, e, "op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "no spaces"}, 400, "bad_target")
+	// AllStar still takes only node numbers
+	expectErr(t, e, "op", "POST", "/api/favorites", map[string]string{"mode": "allstar", "target": "N0CALL"}, 400, "bad_target")
+	// writes need an operator
+	expectErr(t, e, "viewer", "POST", "/api/favorites/reorder", map[string]any{"mode": "echolink", "ids": []int64{}}, 403, "forbidden")
+}
+
 func TestFavoritePins(t *testing.T) {
 	e := newEnv(t, opts{})
 	var f api.FavoriteJSON

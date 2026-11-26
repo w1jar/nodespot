@@ -38,9 +38,20 @@ export const MOVED: Readonly<Record<string, string>> = {
   ...Object.fromEntries(Object.entries(OLD_IDS).map(([id, to]) => ['/settings/' + id, route(to)])),
 };
 
+/** The Settings -> Modes pages are gone: the settings of a mode are on the Modes page (#/modes?mode=<mode>), and the caller lookup is under Station. */
+export function modesMoved(path: string): string | null {
+  const m = /^\/settings\/modes(?:\/([a-z0-9-]+))?\/?$/.exec(path);
+  if (!m) return null;
+  if (m[1] === 'lookup') return '/settings/station/lookup';
+  return m[1] ? '/modes?mode=' + m[1] : '/modes';
+}
+
 export function movedPath(path: string): string | null {
   const p = path.length > 1 ? path.replace(/\/$/, '') : path;
-  const to = Object.hasOwn(MOVED, p) ? MOVED[p] : null;
+  const mm = modesMoved(p);
+  if (mm) return mm;
+  let to = Object.hasOwn(MOVED, p) ? MOVED[p] : null;
+  if (to) to = modesMoved(to) ?? to;
   // The "same" route (about, account) maps to itself: nothing to rewrite.
   if (to && to !== p) return to;
   if (to) return null;

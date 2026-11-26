@@ -144,9 +144,12 @@ let favs: { id: number; mode: string; target: string; label: string; group: stri
   { id: 3, mode: 'bm', target: '91', label: 'World-wide', group: 'DMR', position: 0, pinned: true },
   { id: 4, mode: 'bm', target: '3100', label: 'USA', group: 'DMR', position: 1, pinned: false },
   { id: 5, mode: 'ysf', target: 'YSF-TEST', label: 'Test reflector', group: '', position: 0, pinned: false },
-  { id: 6, mode: 'm17', target: 'M17-XXX C', label: 'M17 test', group: '', position: 0, pinned: false },
+  { id: 6, mode: 'm17', target: 'M17-XXX C', label: 'M17 test', group: '', position: 0, pinned: true },
+  { id: 7, mode: 'echolink', target: 'N1CALL-L', label: 'N1CALL-L', group: '', position: 0, pinned: false },
+  { id: 8, mode: 'tgif', target: '31665', label: 'TGIF test', group: '', position: 0, pinned: false },
+  { id: 9, mode: 'p25', target: '10100', label: 'P25 test', group: '', position: 0, pinned: false },
 ];
-let nextFav = 7;
+let nextFav = 10;
 const sortedFavs = () => [...favs].sort((a, b) => a.mode.localeCompare(b.mode) || a.group.localeCompare(b.group) || a.position - b.position).map((f) => ({ ...f, info: f.mode === 'allstar' ? allstarInfo(f.target) : null }));
 
 // ---- Now calling (the lookup strip) and the public view.
@@ -235,7 +238,7 @@ export function mockApi(): Plugin {
     since = iso(now());
     if (mode && t) tunes[mode] = { target: t };
     else if (mode && !tunes[mode]?.unlinked && tunes[mode]?.target) t = tunes[mode].target;
-    if (!mode) { target = ''; state = 'idle'; } else if (t) { target = t; state = 'connecting'; setTimeout(() => { if (active === mode && target === t) { state = 'connected'; pushNode(); event('state', { state: 'connected' }); } }, 1200); } else { target = ''; state = 'idle'; }
+    if (!mode) { target = ''; state = 'idle'; } else if (t) { target = t; state = 'connecting'; setTimeout(() => { if (active === mode && target === t) { state = 'connected'; pushNode(); event('state', { state: 'connected' }); } }, 1200); } else if (mode === 'echotest') { target = ''; state = 'connected'; } else { target = ''; state = 'idle'; }
     pushNode();
   };
   const sched = createSchedules({

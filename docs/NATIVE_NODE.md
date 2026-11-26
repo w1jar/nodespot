@@ -275,7 +275,7 @@ Untested on real hardware or networks: registration against AllStarLink and the 
 6. Key the radio and check the far side hears you.
 7. Watch the ID: it should go out on RF after the activity, not before.
 8. Switch to another mode: the first one drops, the new one connects.
-9. Echo test for levels: on Settings > Radio tune, press "Switch to echo test", key the radio and talk for a few seconds. About a second after you unkey the node plays the recording back. Check the live meter and the Echo test card: peaks should sit in the shaded band (-20 to -6 dBFS) with no warnings. "clipping" means a peak above -0.5 dBFS or any full-scale sample; "too quiet" means voiced RMS under -30 dBFS or no voiced audio (frames below -50 dBFS are ignored). Change the `codec` on the Modes page to hear how a network codec sounds.
+9. Echo test for levels: on Settings > Radio tune, press "Switch to echo test", key the radio and talk for a few seconds. About a second after you unkey the node plays the recording back. Check the live meter and the Echo test card: peaks should sit in the shaded band (-20 to -6 dBFS) with no warnings. "clipping" means a peak above -0.5 dBFS or any full-scale sample; "too quiet" means voiced RMS under -30 dBFS or no voiced audio (frames below -50 dBFS are ignored). Change the `codec` in the Echo test settings on the Modes page (Echo test button) to hear how a network codec sounds.
 
 **Open questions**
 
@@ -288,7 +288,7 @@ Untested on real hardware or networks: registration against AllStarLink and the 
 
 ## AMBE vocoder (md380-emu)
 
-BrandMeister, TGIF, other DMR masters, YSF and NXDN carry AMBE voice, and the echo test uses it when its codec is set to AMBE (the other codecs need nothing extra; with the vocoder down the echo test still works and plays back as recorded, with an error shown). The node encodes and decodes it with the md380-emu package (P25 and M17 are computed in Go and need nothing extra). `install.sh` does not install md380-emu by default. An admin installs it from the Modes page: when the picked mode needs AMBE and the vocoder is not installed or not running, the page shows "Needs the AMBE vocoder (md380-emu)" with an Install button. The helper then adds the md380-emu package repository and its pinned signing key, installs the package (plus `qemu-user-static` on boards that are not armhf), keeps the service local-only with a systemd drop-in, and enables and starts it. It is safe to press again. The API is `GET /api/vocoder` and `POST /api/vocoder/install` (admin only).
+BrandMeister, TGIF, other DMR masters, YSF and NXDN carry AMBE voice, and the echo test uses it when its codec is set to AMBE (the other codecs need nothing extra; with the vocoder down the echo test still works and plays back as recorded, with an error shown). The node encodes and decodes it with the md380-emu package (P25 and M17 are computed in Go and need nothing extra). `install.sh` does not install md380-emu by default. An admin installs it from the selected mode's Settings section on the Modes page: when the picked mode needs AMBE and the vocoder is not installed or not running, the page shows "Needs the AMBE vocoder (md380-emu)" with an Install button. The helper then adds the md380-emu package repository and its pinned signing key, installs the package (plus `qemu-user-static` on boards that are not armhf), keeps the service local-only with a systemd drop-in, and enables and starts it. It is safe to press again. The API is `GET /api/vocoder` and `POST /api/vocoder/install` (admin only).
 
 ## Sources
 

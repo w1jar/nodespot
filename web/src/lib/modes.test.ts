@@ -137,3 +137,91 @@ test('linkStatsText is compact and hides zero extras', () => {
   assert.equal(linkStatsText(base), 'rx 3+120 · tx 0 · VNAK 0/0 · retx 0');
   assert.equal(linkStatsText({ ...base, gaps: 1, dropped: 30, parseErrors: 2 }), 'rx 3+120 · tx 0 · VNAK 0/0 · retx 0 · gaps 1 · dropped 30 · bad 2');
 });
+
+// ---- The Modes page helpers.
+import { CONFIRM_MS, pendingOutcome, pickerKind, m17Tune, m17Split, targetValue, modeChip, favoritesInOrder, movedIds, findFavorite, favoriteBlock, defaultFavName, validFavName, favoriteActive, pinnedFavorites, hasTarget, M17_MODULES } from './modes.ts';
+
+const fav = (id: number, mode: string, target: string, over: Partial<Favorite> = {}): Favorite => ({ id, mode, target, label: target, group: '', position: id, pinned: false, info: null, ...over });
+
+test('a mode switch is confirmed, waiting or not confirmed after five seconds', () => {
+  assert.equal(pendingOutcome(null, 'bm', 1000), 'none');
+  const p = { mode: 'ysf', since: 1000 };
+  assert.equal(pendingOutcome(p, 'ysf', 1100), 'confirmed');
+  assert.equal(pendingOutcome(p, 'bm', 1000 + CONFIRM_MS - 1), 'waiting');
+  assert.equal(pendingOutcome(p, 'bm', 1000 + CONFIRM_MS), 'unconfirmed');
+  assert.equal(pendingOutcome({ mode: '', since: 0 }, undefined, 10), 'confirmed');
+});
+
+test('each mode gets the right kind of target picker', () => {
+  const m = (name: string, needsHost = false) => ({ name, title: name, configured: true, active: false, needsHost }) as ModeInfo;
+  assert.equal(pickerKind(m('allstar')), 'nodes');
+  assert.equal(pickerKind(m('echolink')), 'nodes');
+  assert.equal(pickerKind(m('ysf', true)), 'hosts');
+  assert.equal(pickerKind(m('m17', true)), 'hosts');
+  assert.equal(pickerKind(m('bm')), 'plain');
+  assert.equal(pickerKind(m('echotest')), 'none');
+  assert.equal(pickerKind(undefined), 'none');
+  assert.equal(hasTarget(m('echotest')), false);
+});
+
+test('the M17 target joins the reflector and the module', () => {
+  assert.equal(M17_MODULES.length, 26);
+  assert.equal(m17Tune('m17-xxx', 'c'), 'M17-XXX C');
+  assert.equal(m17Tune(' M17-XXX  b ', 'C'), 'M17-XXX B');
+  assert.equal(m17Tune('nonsense', 'C'), '');
+  assert.deepEqual(m17Split('M17-XXX C'), { reflector: 'M17-XXX', module: 'C' });
+  assert.equal(m17Split('M17-XXX'), null);
+  assert.equal(targetValue('m17', 'M17-XXX', 'D'), 'M17-XXX D');
+  assert.equal(targetValue('bm', ' 91 ', 'D'), '91');
+});
+
+test('a mode button shows not set up, ready, or the link state of the active mode', () => {
+  const base = { name: 'bm', title: 'BM', configured: true, active: false } as ModeInfo;
+  assert.deepEqual(modeChip({ ...base, configured: false }, 'bm', 'connected'), { tone: 'warn', text: 'Not set up' });
+  assert.deepEqual(modeChip(base, '', undefined), { tone: 'off', text: 'Ready' });
+  assert.deepEqual(modeChip(base, 'bm', 'connected'), { tone: 'ok', text: 'Connected' });
+  assert.deepEqual(modeChip(base, 'bm', 'connecting'), { tone: 'warn', text: 'Connecting' });
+  assert.deepEqual(modeChip(base, 'bm', 'error'), { tone: 'err', text: 'Error' });
+  assert.deepEqual(modeChip({ ...base, name: 'echotest' }, 'echotest', 'connected'), { tone: 'ok', text: 'Running' });
+  assert.deepEqual(modeChip({ ...base, error: 'x' }, 'allstar', 'connected'), { tone: 'err', text: 'Error' });
+});
+
+test('favorites keep the server order and move one place at a time', () => {
+  const all = [fav(1, 'bm', '91'), fav(2, 'ysf', 'YSF-TEST'), fav(3, 'bm', '3100'), fav(4, 'bm', '9', { pinned: true })];
+  const bm = favoritesInOrder(all, 'bm');
+  assert.deepEqual(bm.map((f) => f.id), [1, 3, 4]);
+  assert.deepEqual(movedIds(bm, 3, -1), [3, 1, 4]);
+  assert.deepEqual(movedIds(bm, 3, 1), [1, 4, 3]);
+  assert.equal(movedIds(bm, 1, -1), null);
+  assert.equal(movedIds(bm, 4, 1), null);
+  assert.equal(movedIds(bm, 99, 1), null);
+  assert.deepEqual(pinnedFavorites(all).map((f) => f.id), [4]);
+});
+
+test('saving the current target as a favorite is blocked when empty or already saved', () => {
+  const all = [fav(1, 'bm', '91')];
+  assert.equal(favoriteBlock(all, 'bm', ' '), 'Enter or connect a target first');
+  assert.equal(favoriteBlock(all, 'bm', '91'), 'Already a favorite');
+  assert.equal(favoriteBlock(all, 'ysf', '91'), '');
+  assert.equal(findFavorite(all, 'bm', ' 91 ')?.id, 1);
+});
+
+test('favorite names: default and validation', () => {
+  assert.equal(defaultFavName('91', 'World-wide'), 'World-wide');
+  assert.equal(defaultFavName('91', '91'), '91');
+  assert.equal(defaultFavName('91'), '91');
+  assert.equal(defaultFavName('x', 'y'.repeat(60)).length, 40);
+  assert.equal(validFavName('  Club  '), 'Club');
+  assert.equal(validFavName('   '), null);
+  assert.equal(validFavName('a'.repeat(41)), null);
+  assert.equal(validFavName('bad\u0007name'), null);
+});
+
+test('a favorite is active when its mode is active and the target matches', () => {
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'bm', { id: '91' }), true);
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'ysf', { id: '91' }), false);
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'bm', { id: '3100' }), false);
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'bm', undefined), false);
+  assert.equal(favoriteActive({ mode: 'm17', target: 'M17-XXX C' }, 'm17', { id: 'M17-XXX' }), true);
+  assert.equal(favoriteActive({ mode: 'ysf', target: 'ysf-test' }, 'ysf', { id: 'YSF-TEST' }), true);
+});

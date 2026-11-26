@@ -103,6 +103,8 @@ NodeInfo = {"node": "50241", "callsign": "N0CALL", "description": "Hub name", "l
 
 ## Favorites (read: all roles; write: operator)
 
+Favorites are per mode (`mode`, default `allstar`) and may be pinned to the dashboard. For AllStar the target is a node number; for EchoLink it is a node number or a callsign (`N1CALL`, `N1CALL-L`, `N1CALL-R`, stored uppercase). The Modes page sends the mode and the `ids` of that mode to `POST /api/favorites/reorder`. Writes need the operator role, not admin.
+
 `Favorite = {"id": int, "node": "2000", "label": "My hub", "group": "Hubs" | "", "position": int, "pinned": bool, "info": NodeInfo|null}` (`pinned` favorites show as one-tap buttons on the dashboard overview; it is stored with the favorite on the server, so every browser sees the same pins, and it goes away with the favorite. New favorites are not pinned)
 
 | Method | Path | Body | Response |

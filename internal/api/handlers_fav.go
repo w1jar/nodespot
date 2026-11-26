@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -56,17 +57,32 @@ func cleanText(s string, max int) (string, bool) {
 }
 
 // cleanTarget checks a favorite's target: not empty, short, no control
-// characters, and for AllStar and EchoLink a node number.
+// characters, for AllStar a node number, and for EchoLink a node number or
+// a callsign (N0CALL, N0CALL-L or N0CALL-R; saved in upper case).
 func cleanTarget(m, t string) (string, string) {
 	t, ok := cleanText(t, maxTarget)
 	if !ok || t == "" {
 		return "", "target must be 1 to 64 characters without control characters"
 	}
-	if (m == modeAllStar || m == modeEchoLink) && !isDigits(t) {
-		return "", "target must be a node number"
+	switch m {
+	case modeAllStar:
+		if !isDigits(t) {
+			return "", "target must be a node number"
+		}
+	case modeEchoLink:
+		if !isDigits(t) {
+			t = strings.ToUpper(t)
+			if !reELCall.MatchString(t) {
+				return "", "target must be an EchoLink node number or a callsign such as N0CALL-L"
+			}
+		}
 	}
 	return t, ""
 }
+
+// reELCall is an EchoLink callsign: letters and digits, with an optional -L
+// or -R.
+var reELCall = regexp.MustCompile(`^[A-Z0-9]{3,10}(-[LR])?$`)
 
 func isDigits(s string) bool {
 	if s == "" || len(s) > 7 {
