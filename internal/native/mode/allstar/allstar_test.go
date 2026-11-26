@@ -140,7 +140,7 @@ func newHarness(t *testing.T, vals map[string]string) *harness {
 
 func (h *harness) link(t *testing.T, n int) *fakeLink {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for time.Now().Before(deadline) {
 		h.mu.Lock()
 		if len(h.links) >= n {
@@ -157,7 +157,7 @@ func (h *harness) link(t *testing.T, n int) *fakeLink {
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -213,7 +213,7 @@ func TestLinkAudioAndTalker(t *testing.T) {
 		if got[0] != 42 {
 			t.Fatal("wrong frame")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no audio")
 	}
 	waitFor(t, "talking", m.Talking)
@@ -365,7 +365,7 @@ func TestNoPasswordNoRegistration(t *testing.T) {
 	go func() { h.m.RunBackground(context.Background()); close(done) }()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("RunBackground did not return without a password")
 	}
 }

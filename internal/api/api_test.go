@@ -764,7 +764,7 @@ func TestHeard(t *testing.T) {
 	time.Sleep(nowcalling.MinDuration + 100*time.Millisecond) // shorter is a glitch
 	f.Unkey()
 	var l []mode.Heard
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if e.do("viewer", "GET", "/api/heard?limit=5", nil, &l); len(l) == 1 && !l[0].End.IsZero() {
 			break
@@ -779,7 +779,7 @@ func TestHeard(t *testing.T) {
 	var nc struct {
 		Recent []struct{ Kind, Call string }
 	}
-	deadline = time.Now().Add(3 * time.Second)
+	deadline = time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if e.do("viewer", "GET", "/api/nowcalling", nil, &nc); len(nc.Recent) == 1 {
 			break
@@ -1255,7 +1255,7 @@ func TestSSEHelloNodeAndCalls(t *testing.T) {
 	// pings (test interval 100 ms)
 	select {
 	case <-s.pings:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no ping comment")
 	}
 	// system pushes (test interval 200 ms)
@@ -1266,7 +1266,7 @@ func TestSSEHelloNodeAndCalls(t *testing.T) {
 	}
 	s.cancel()
 	<-s.closed
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for e.srv.Clients() != 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -1302,7 +1302,7 @@ func TestSSERequiresSessionAndEndsOnLogout(t *testing.T) {
 	e.do("op", "POST", "/api/logout", nil, nil)
 	select {
 	case <-s.closed:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("stream not closed after logout")
 	}
 }

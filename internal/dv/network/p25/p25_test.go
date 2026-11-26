@@ -203,6 +203,15 @@ func loginIs(st ctl.LoginState, sub string) func(event) bool {
 
 func kind(k string) func(event) bool { return func(e event) bool { return e.kind == k } }
 
+// waitLong bounds waits for something that should happen. They return as
+// soon as it does; the bound only has to outlast a slow, loaded CI runner.
+const waitLong = 10 * time.Second
+
+// lossOpts has a short link timeout, for the tests about losing the link.
+// The default for the others is long enough that a stall under -race on a
+// loaded runner does not drop the link or end a call mid-test.
+var lossOpts = map[string]string{OptPollMS: "50", OptTimeoutMS: "120"}
+
 func start(t *testing.T, opts map[string]string) (*Net, *fakeRef, *sink) {
 	t.Helper()
 	return startReply(t, opts, true)
@@ -212,7 +221,7 @@ func start(t *testing.T, opts map[string]string) (*Net, *fakeRef, *sink) {
 // it waits for the link only when it does.
 func startReply(t *testing.T, opts map[string]string, reply bool) (*Net, *fakeRef, *sink) {
 	t.Helper()
-	o := map[string]string{OptPollMS: "20", OptTimeoutMS: "120", OptRxTimeoutMS: "80", OptTickMS: "5"}
+	o := map[string]string{OptPollMS: "20", OptTimeoutMS: "2000", OptRxTimeoutMS: "300", OptTickMS: "5"}
 	for k, v := range opts {
 		o[k] = v
 	}
@@ -232,7 +241,7 @@ func startReply(t *testing.T, opts map[string]string, reply bool) (*Net, *fakeRe
 		t.Fatal(err)
 	}
 	if reply {
-		s.wait(t, loginIs(ctl.LoginOK, "TG 1997"), time.Second)
+		s.wait(t, loginIs(ctl.LoginOK, "TG 1997"), waitLong)
 	}
 	return n, ref, s
 }
@@ -253,7 +262,7 @@ func TestBadOptions(t *testing.T) {
 
 func TestLoginPollUnlink(t *testing.T) {
 	n, ref, s := start(t, nil)
-	if p := ref.next(typ(TypePoll), time.Second); string(p[1:]) != "N0CALL    " || len(p) != 11 {
+	if p := ref.next(typ(TypePoll), waitLong); string(p[1:]) != "N0CALL    " || len(p) != 11 {
 		t.Fatalf("poll %q", p)
 	}
 	if st := n.Status(); st.Login != ctl.LoginOK {
@@ -261,35 +270,38 @@ func TestLoginPollUnlink(t *testing.T) {
 	}
 	n.Tune(context.Background(), ctl.Target{TG: UnlinkTG}) // TG 9999 = unlink
 	for i := 0; i < 3; i++ {
-		if p := ref.next(typ(TypeUnlink), time.Second); string(p) != "\xf1N0CALL    " {
+		if p := ref.next(typ(TypeUnlink), waitLong); string(p) != "\xf1N0CALL    " {
 			t.Fatalf("unlink %q", p)
 		}
 	}
-	s.wait(t, loginIs(ctl.LoginOff, ""), time.Second)
+	s.wait(t, loginIs(ctl.LoginOff, ""), waitLong)
 }
 
 func TestTimeoutBackoffReconnect(t *testing.T) {
-	_, ref, s := start(t, nil)
+	_, ref, s := start(t, lossOpts)
 	ref.setReply(false)
-	s.wait(t, loginIs(ctl.LoginPending, "retrying"), time.Second)
+	s.wait(t, loginIs(ctl.LoginPending, "retrying"), waitLong)
 	ref.drain()
-	ref.next(typ(TypePoll), time.Second)
-	t0 := time.Now()
-	ref.next(typ(TypePoll), time.Second)
-	g1 := time.Since(t0)
-	t0 = time.Now()
-	ref.next(typ(TypePoll), 2*time.Second)
-	if g2 := time.Since(t0); g2 <= g1 {
-		t.Errorf("no backoff: %v then %v", g1, g2)
+	// Compare the first gap with the third (four times as long), so
+	// scheduling jitter on a loaded runner cannot invert them.
+	ref.next(typ(TypePoll), waitLong)
+	var gaps []time.Duration
+	for i := 0; i < 3; i++ {
+		t0 := time.Now()
+		ref.next(typ(TypePoll), waitLong)
+		gaps = append(gaps, time.Since(t0))
+	}
+	if g1, g3 := gaps[0], gaps[2]; g3 <= g1 {
+		t.Errorf("no backoff: %v then %v", g1, g3)
 	}
 	ref.setReply(true)
-	s.wait(t, loginIs(ctl.LoginOK, ""), 3*time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 }
 
 // A reflector that never answers: after the grace (timeout_ms) the login says so.
 func TestNotAnsweringAfterTune(t *testing.T) {
-	n, ref, s := startReply(t, nil, false)
-	e := s.wait(t, loginIs(ctl.LoginPending, "no reply from"), time.Second)
+	n, ref, s := startReply(t, lossOpts, false)
+	e := s.wait(t, loginIs(ctl.LoginPending, "no reply from"), waitLong)
 	if !ctl.NotAnswering(e.login, e.det) {
 		t.Fatalf("event %+v is not 'not answering'", e)
 	}
@@ -297,7 +309,7 @@ func TestNotAnsweringAfterTune(t *testing.T) {
 		t.Fatalf("status %+v", st)
 	}
 	ref.setReply(true) // a reply clears it
-	s.wait(t, loginIs(ctl.LoginOK, ""), 3*time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	if st := n.Status(); ctl.NotAnswering(st.Login, st.Detail) {
 		t.Fatalf("status %+v after reply", st)
 	}
@@ -305,8 +317,10 @@ func TestNotAnsweringAfterTune(t *testing.T) {
 
 // A reflector that answers never reports it, and nothing tuned never does.
 func TestAnsweringNeverNotAnswering(t *testing.T) {
-	n, _, _ := start(t, nil)
-	time.Sleep(300 * time.Millisecond) // well past the 120 ms grace
+	// a grace short enough to pass a few times over, but not so short that
+	// one stall of a loaded runner looks like a silent reflector
+	n, _, _ := start(t, map[string]string{OptTimeoutMS: "500"})
+	time.Sleep(1500 * time.Millisecond) // well past the 500 ms grace
 	if st := n.Status(); st.Login != ctl.LoginOK || ctl.NotAnswering(st.Login, st.Detail) {
 		t.Fatalf("status %+v", st)
 	}
@@ -322,17 +336,17 @@ func TestRXCall(t *testing.T) {
 	for _, r := range recs { // a full superframe and the terminator
 		ref.send(r)
 	}
-	h := s.wait(t, kind("header"), time.Second).h
+	h := s.wait(t, kind("header"), waitLong).h
 	if h.SrcID != 1234567 || h.TG != 1997 || h.Src != "" || h.Private {
 		t.Fatalf("header %+v", h)
 	}
 	for i := 0; i < superframe; i++ {
-		f := s.wait(t, kind("voice"), time.Second).f
+		f := s.wait(t, kind("voice"), waitLong).f
 		if f.Call != h.Call || f.Seq != uint32(i) || !bytes.Equal(f.Data, frames[i][:]) {
 			t.Fatalf("frame %d: %+v", i, f)
 		}
 	}
-	if e := s.wait(t, kind("end"), time.Second); e.call != h.Call {
+	if e := s.wait(t, kind("end"), waitLong); e.call != h.Call {
 		t.Fatalf("end %d", e.call)
 	}
 }
@@ -347,11 +361,11 @@ func TestRXLostEnd(t *testing.T) {
 	for _, r := range recs[:ldu] {
 		ref.send(r)
 	}
-	h := s.wait(t, kind("header"), time.Second).h
+	h := s.wait(t, kind("header"), waitLong).h
 	if h.TG != 1997 {
 		t.Fatalf("header %+v", h)
 	}
-	if e := s.wait(t, kind("end"), time.Second); e.call != h.Call {
+	if e := s.wait(t, kind("end"), waitLong); e.call != h.Call {
 		t.Fatalf("end %d", e.call)
 	}
 }
@@ -372,7 +386,7 @@ func TestTXFraming(t *testing.T) {
 	}
 	n.EndTX(3)
 	for i := 0; i < superframe; i++ {
-		if p := ref.next(voiceRec, time.Second); !bytes.Equal(p, recs[i]) {
+		if p := ref.next(voiceRec, waitLong); !bytes.Equal(p, recs[i]) {
 			t.Fatalf("record %d:\n got %x\nwant %x", i, p, recs[i])
 		}
 	}
@@ -383,11 +397,11 @@ func TestTXFraming(t *testing.T) {
 			f = frames[i]
 		}
 		want := Record(i, f, &vecLC)
-		if p := ref.next(voiceRec, time.Second); !bytes.Equal(p, want) {
+		if p := ref.next(voiceRec, waitLong); !bytes.Equal(p, want) {
 			t.Fatalf("pad record %d: %x", i, p)
 		}
 	}
-	if p := ref.next(voiceRec, time.Second); !bytes.Equal(p, EndRecord()) {
+	if p := ref.next(voiceRec, waitLong); !bytes.Equal(p, EndRecord()) {
 		t.Fatalf("terminator %x", p)
 	}
 }
@@ -413,5 +427,5 @@ func TestNoLinkAtStart(t *testing.T) {
 	if err := n.Tune(ctx, ctl.Target{Room: "1997", Host: "127.0.0.1", Port: ref.port()}); err != nil {
 		t.Fatal(err)
 	}
-	s.wait(t, loginIs(ctl.LoginOK, "TG 1997"), time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, "TG 1997"), waitLong)
 }

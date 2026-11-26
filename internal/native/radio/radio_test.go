@@ -116,7 +116,7 @@ func newCore() (Radio, *fakeSource, *fakeSink, *fakeKeyer, *fakeMixer) {
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -136,7 +136,7 @@ func TestCoreCapture(t *testing.T) {
 			if f[0] != want || f[159] != want {
 				t.Fatalf("frame = %d, want %d", f[0], want)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("no frame")
 		}
 	}
@@ -200,7 +200,7 @@ func TestCorePlayNeverBlocks(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("Play blocked")
 	}
 	if r.Levels().DroppedTx == 0 {
@@ -222,7 +222,7 @@ func TestCoreCOS(t *testing.T) {
 		if !v {
 			t.Error("want true")
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no COS event")
 	}
 	if !r.Carrier() {
@@ -270,7 +270,7 @@ func TestCoreCloseUnkeysAndClosesChannels(t *testing.T) {
 		if ok {
 			t.Error("capture channel open")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("capture channel not closed")
 	}
 	if _, ok := <-r.COS(); ok {

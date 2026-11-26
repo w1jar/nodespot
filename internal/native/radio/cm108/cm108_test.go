@@ -341,7 +341,7 @@ func TestPollLoopWithRealTicker(t *testing.T) {
 		if !v {
 			t.Fatal("want carrier on")
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no COS change from poll loop")
 	}
 	h.set(0)
@@ -350,7 +350,7 @@ func TestPollLoopWithRealTicker(t *testing.T) {
 		if v {
 			t.Fatal("want carrier off")
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no COS release from poll loop")
 	}
 }

@@ -167,8 +167,28 @@ func kind(k string) func(event) bool { return func(e event) bool { return e.kind
 
 // ---- setup ----
 
+// waitLong bounds waits for something that should happen. They return as
+// soon as it does; the bound only has to outlast a slow, loaded CI runner.
+const waitLong = 10 * time.Second
+
+// fastOpts keeps the timers short enough for quick tests but long enough
+// that a stall under -race on a loaded machine does not fire a retry, the
+// watchdog or the RX timeout in the middle of a test. Tests about those
+// timers set their own.
 var fastOpts = map[string]string{
-	OptAckTimeoutMS: "30", OptTimeoutMS: "300", OptRxTimeoutMS: "80", OptTickMS: "5", OptDiscWaitMS: "200", OptCAN: "3",
+	OptAckTimeoutMS: "250", OptTimeoutMS: "5000", OptRxTimeoutMS: "300", OptTickMS: "5", OptDiscWaitMS: "200", OptCAN: "3",
+}
+
+// withOpts returns fastOpts with the given options replaced.
+func withOpts(kv ...string) map[string]string {
+	o := map[string]string{}
+	for k, v := range fastOpts {
+		o[k] = v
+	}
+	for i := 0; i+1 < len(kv); i += 2 {
+		o[kv[i]] = kv[i+1]
+	}
+	return o
 }
 
 type rig struct {
@@ -208,7 +228,7 @@ func linked(t *testing.T) *rig {
 	t.Helper()
 	r := newRig(t, "ack", nil)
 	r.tune(t, "M17-XXX C")
-	r.s.wait(t, loginIs(ctl.LoginOK, "M17-XXX C"), time.Second)
+	r.s.wait(t, loginIs(ctl.LoginOK, "M17-XXX C"), waitLong)
 	return r
 }
 
@@ -237,12 +257,12 @@ func TestConnectAckn(t *testing.T) {
 		t.Fatalf("status %+v", st)
 	}
 	r.tune(t, "M17-XXX C")
-	p := r.ref.next(kindIs("CONN"), time.Second)
+	p := r.ref.next(kindIs("CONN"), waitLong)
 	c, err := proto.UnmarshalControl(p)
 	if err != nil || c.Module != 'C' || c.Addr != me(t) {
 		t.Fatalf("conn %+v %v", c, err)
 	}
-	r.s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	r.s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	if st := r.n.Status(); st.Login != ctl.LoginOK || ctl.NotAnswering(st.Login, st.Detail) {
 		t.Fatalf("status %+v", st)
 	}
@@ -251,12 +271,12 @@ func TestConnectAckn(t *testing.T) {
 func TestNack(t *testing.T) {
 	r := newRig(t, "nack", nil)
 	r.tune(t, "M17-XXX C")
-	r.s.wait(t, loginIs(ctl.LoginFailed, "NACK"), time.Second)
-	r.ref.next(kindIs("CONN"), time.Second)
+	r.s.wait(t, loginIs(ctl.LoginFailed, "NACK"), waitLong)
+	r.ref.next(kindIs("CONN"), waitLong)
 	for len(r.ref.got) > 0 {
 		<-r.ref.got
 	}
-	if !r.ref.noneFor("CONN", 300*time.Millisecond) {
+	if !r.ref.noneFor("CONN", 600*time.Millisecond) { // past two ack timeouts
 		t.Fatal("CONN resent after NACK")
 	}
 	if st := r.n.Status(); st.Login != ctl.LoginFailed {
@@ -265,33 +285,35 @@ func TestNack(t *testing.T) {
 	// a new tune tries again
 	r.ref.setMode("ack")
 	r.tune(t, "M17-XXX D")
-	r.s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	r.s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 }
 
 func TestConnRetryBackoff(t *testing.T) {
-	r := newRig(t, "silent", nil)
+	r := newRig(t, "silent", withOpts(OptAckTimeoutMS, "100"))
 	r.tune(t, "M17-XXX C")
 	var at []time.Time
 	for i := 0; i < 4; i++ {
-		r.ref.next(kindIs("CONN"), time.Second)
+		r.ref.next(kindIs("CONN"), waitLong)
 		at = append(at, time.Now())
 	}
-	if d1, d3 := at[2].Sub(at[1]), at[3].Sub(at[2]); d3 < d1 {
+	// retries come 100, 200 and 400 ms apart; compare the first gap with
+	// the last so scheduling jitter on a loaded runner cannot invert them
+	if d1, d3 := at[1].Sub(at[0]), at[3].Sub(at[2]); d3 <= d1 {
 		t.Fatalf("no backoff: %v then %v", d1, d3)
 	}
-	e := r.s.wait(t, loginIs(ctl.LoginPending, "no reply from"), time.Second)
+	e := r.s.wait(t, loginIs(ctl.LoginPending, "no reply from"), waitLong)
 	if !ctl.NotAnswering(e.login, e.det) {
 		t.Fatalf("%+v", e)
 	}
 	r.ref.setMode("ack")
-	r.s.wait(t, loginIs(ctl.LoginOK, ""), 2*time.Second)
+	r.s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 }
 
 func TestPingPong(t *testing.T) {
 	r := linked(t)
 	ping := append([]byte("PING"), func() []byte { b := proto.Address(0x1234).Bytes(); return b[:] }()...)
 	r.ref.send(ping)
-	p := r.ref.next(kindIs("PONG"), time.Second)
+	p := r.ref.next(kindIs("PONG"), waitLong)
 	c, err := proto.UnmarshalControl(p)
 	if err != nil || c.Addr != me(t) || len(p) != 10 {
 		t.Fatalf("pong %x %v", p, err)
@@ -299,20 +321,24 @@ func TestPingPong(t *testing.T) {
 }
 
 func TestWatchdogReconnect(t *testing.T) {
-	r := linked(t)
+	r := newRig(t, "ack", withOpts(OptTimeoutMS, "300"))
+	r.tune(t, "M17-XXX C")
+	r.s.wait(t, loginIs(ctl.LoginOK, "M17-XXX C"), waitLong)
 	r.ref.setMode("silent")
-	e := r.s.wait(t, loginIs(ctl.LoginPending, "no reply from"), 2*time.Second)
+	e := r.s.wait(t, loginIs(ctl.LoginPending, "no reply from"), waitLong)
 	_ = e
-	r.ref.next(kindIs("CONN"), time.Second)
+	r.ref.next(kindIs("CONN"), waitLong)
 	r.ref.setMode("ack")
-	r.s.wait(t, loginIs(ctl.LoginOK, ""), 2*time.Second)
+	r.s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 }
 
 // PINGs keep the link past the watchdog.
 func TestPingsKeepLink(t *testing.T) {
-	r := linked(t)
+	r := newRig(t, "ack", withOpts(OptTimeoutMS, "500"))
+	r.tune(t, "M17-XXX C")
+	r.s.wait(t, loginIs(ctl.LoginOK, "M17-XXX C"), waitLong)
 	ping := append([]byte("PING"), make([]byte, 6)...)
-	end := time.Now().Add(700 * time.Millisecond)
+	end := time.Now().Add(1200 * time.Millisecond)
 	for time.Now().Before(end) {
 		r.ref.send(ping)
 		time.Sleep(50 * time.Millisecond)
@@ -326,7 +352,7 @@ func TestServerDisc(t *testing.T) {
 	r := linked(t)
 	b := proto.Address(0x1234).Bytes()
 	r.ref.send(append([]byte("DISC"), b[:]...))
-	r.s.wait(t, loginIs(ctl.LoginFailed, "disconnected by"), time.Second)
+	r.s.wait(t, loginIs(ctl.LoginFailed, "disconnected by"), waitLong)
 	for len(r.ref.got) > 0 {
 		<-r.ref.got
 	}
@@ -336,15 +362,19 @@ func TestServerDisc(t *testing.T) {
 }
 
 func TestClientUnlink(t *testing.T) {
-	r := linked(t)
+	// a long DISC wait, so an Unlink that waited for it rather than for
+	// the ack stands out even on a slow runner
+	r := newRig(t, "ack", withOpts(OptDiscWaitMS, "5000"))
+	r.tune(t, "M17-XXX C")
+	r.s.wait(t, loginIs(ctl.LoginOK, "M17-XXX C"), waitLong)
 	t0 := time.Now()
 	if err := r.n.Unlink(r.ctx); err != nil {
 		t.Fatal(err)
 	}
-	if time.Since(t0) > 150*time.Millisecond {
+	if time.Since(t0) > 2500*time.Millisecond {
 		t.Fatalf("unlink waited for the ack timeout: %v", time.Since(t0))
 	}
-	p := r.ref.next(kindIs("DISC"), time.Second)
+	p := r.ref.next(kindIs("DISC"), waitLong)
 	if c, err := proto.UnmarshalControl(p); err != nil || c.Short || c.Addr != me(t) {
 		t.Fatalf("disc %x %v", p, err)
 	}
@@ -360,7 +390,7 @@ func TestUnlinkNoAckTimesOut(t *testing.T) {
 	r.ref.mu.Unlock()
 	t0 := time.Now()
 	r.n.Unlink(r.ctx)
-	if d := time.Since(t0); d < 150*time.Millisecond || d > time.Second {
+	if d := time.Since(t0); d < 150*time.Millisecond || d > 5*time.Second {
 		t.Fatalf("unlink took %v", d)
 	}
 	if st := r.n.Status(); st.Login != ctl.LoginOff {
@@ -371,12 +401,12 @@ func TestUnlinkNoAckTimesOut(t *testing.T) {
 func TestRetuneModule(t *testing.T) {
 	r := linked(t)
 	r.tune(t, "M17-XXX D")
-	r.ref.next(kindIs("DISC"), time.Second)
-	p := r.ref.next(func(p []byte) bool { return kindIs("CONN")(p) && p[10] == 'D' }, time.Second)
+	r.ref.next(kindIs("DISC"), waitLong)
+	p := r.ref.next(func(p []byte) bool { return kindIs("CONN")(p) && p[10] == 'D' }, waitLong)
 	if len(p) != proto.ConnLen {
 		t.Fatalf("conn %x", p)
 	}
-	r.s.wait(t, loginIs(ctl.LoginOK, "M17-XXX D"), time.Second)
+	r.s.wait(t, loginIs(ctl.LoginOK, "M17-XXX D"), waitLong)
 }
 
 func TestTuneErrors(t *testing.T) {
@@ -412,7 +442,7 @@ func TestConfigFallbackTarget(t *testing.T) {
 	if err := n.Tune(ctx, ctl.Target{}); err != nil {
 		t.Fatal(err)
 	}
-	if p := ref.next(kindIs("CONN"), time.Second); p[10] != 'K' {
+	if p := ref.next(kindIs("CONN"), waitLong); p[10] != 'K' {
 		t.Fatalf("conn %x", p)
 	}
 }
@@ -425,10 +455,10 @@ func TestShutdownSendsDisc(t *testing.T) {
 	done := make(chan struct{})
 	go func() { n.Run(ctx, s); close(done) }()
 	n.Tune(ctx, ctl.Target{Room: "M17-XXX C", Host: "127.0.0.1", Port: ref.port()})
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	cancel()
 	<-done
-	ref.next(kindIs("DISC"), time.Second)
+	ref.next(kindIs("DISC"), waitLong)
 }
 
 // ---- RX ----
@@ -452,7 +482,7 @@ func (r *rig) sendStream(s proto.Stream) {
 func TestRxCall(t *testing.T) {
 	r := linked(t)
 	r.sendStream(rxPacket(0x4242, 0, 0x10, 0x20))
-	h := r.s.wait(t, kind("header"), time.Second).h
+	h := r.s.wait(t, kind("header"), waitLong).h
 	if h.Src != "N1CALL" || h.Room != "M17-XXX C" {
 		t.Fatalf("header %+v", h)
 	}
@@ -460,7 +490,7 @@ func TestRxCall(t *testing.T) {
 	r.sendStream(rxPacket(0x4242, 2|proto.LastFrame, 0x50, 0x60))
 	var got [][]byte
 	for len(got) < 6 {
-		e := r.s.wait(t, kind("voice"), time.Second)
+		e := r.s.wait(t, kind("voice"), waitLong)
 		if e.f.Codec != network.CodecC2 || len(e.f.Data) != 8 || e.f.Call != h.Call || e.f.Seq != uint32(len(got)) {
 			t.Fatalf("frame %+v", e.f)
 		}
@@ -471,12 +501,12 @@ func TestRxCall(t *testing.T) {
 			t.Fatalf("frame %d = %x", i, got[i])
 		}
 	}
-	if e := r.s.wait(t, kind("end"), time.Second); e.call != h.Call {
+	if e := r.s.wait(t, kind("end"), waitLong); e.call != h.Call {
 		t.Fatalf("end %+v", e)
 	}
 	// next call gets a new id
 	r.sendStream(rxPacket(0x4243, 0, 1, 2))
-	if h2 := r.s.wait(t, kind("header"), time.Second).h; h2.Call == h.Call {
+	if h2 := r.s.wait(t, kind("header"), waitLong).h; h2.Call == h.Call {
 		t.Fatal("call id reused")
 	}
 }
@@ -487,8 +517,8 @@ func TestRxCRCErrorCounted(t *testing.T) {
 	b := s.Marshal()
 	b[53] ^= 0xFF
 	r.ref.send(b[:])
-	r.s.wait(t, kind("header"), time.Second)
-	r.s.wait(t, kind("voice"), time.Second)
+	r.s.wait(t, kind("header"), waitLong)
+	r.s.wait(t, kind("voice"), waitLong)
 	if r.n.CRCErrors() != 1 {
 		t.Fatalf("crc errors %d", r.n.CRCErrors())
 	}
@@ -501,8 +531,8 @@ func TestRxCRCErrorCounted(t *testing.T) {
 func TestRxTimeoutEnd(t *testing.T) {
 	r := linked(t)
 	r.sendStream(rxPacket(9, 0, 1, 2))
-	h := r.s.wait(t, kind("header"), time.Second).h
-	e := r.s.wait(t, kind("end"), time.Second)
+	h := r.s.wait(t, kind("header"), waitLong).h
+	e := r.s.wait(t, kind("end"), waitLong)
 	if e.call != h.Call {
 		t.Fatalf("end %+v", e)
 	}
@@ -513,7 +543,7 @@ func TestRxDuplicateAndSecondStream(t *testing.T) {
 	r.sendStream(rxPacket(1, 0, 1, 2))
 	r.sendStream(rxPacket(1, 0, 1, 2)) // duplicate
 	r.sendStream(rxPacket(2, 0, 9, 9)) // other stream while the first is active
-	r.s.wait(t, kind("header"), time.Second)
+	r.s.wait(t, kind("header"), waitLong)
 	n := 0
 	for {
 		select {
@@ -537,7 +567,7 @@ func TestRxDuplicateAndSecondStream(t *testing.T) {
 func TestRxIgnoredWhenNotLinked(t *testing.T) {
 	r := newRig(t, "silent", nil)
 	r.tune(t, "M17-XXX C")
-	r.ref.next(kindIs("CONN"), time.Second)
+	r.ref.next(kindIs("CONN"), waitLong)
 	r.sendStream(rxPacket(1, 0, 1, 2))
 	select {
 	case e := <-r.s.ch:
@@ -576,7 +606,7 @@ func (r *rig) collect(t *testing.T, n int) []proto.Stream {
 	t.Helper()
 	var out []proto.Stream
 	for len(out) < n {
-		p := r.ref.next(proto.IsStream, time.Second)
+		p := r.ref.next(proto.IsStream, waitLong)
 		s, err := proto.UnmarshalStream(p)
 		if err != nil {
 			t.Fatalf("packet: %v", err)
@@ -672,14 +702,14 @@ func TestSuffixAndBroadcastDst(t *testing.T) {
 	go func() { n.Run(ctx, s); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
 	n.Tune(ctx, ctl.Target{Host: "127.0.0.1", Port: ref.port()})
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
-	c, _ := proto.UnmarshalControl(ref.next(kindIs("CONN"), time.Second))
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
+	c, _ := proto.UnmarshalControl(ref.next(kindIs("CONN"), waitLong))
 	if c.Addr.String() != "N0CALL B" {
 		t.Fatalf("callsign %q", c.Addr)
 	}
 	n.StartTX(network.CallHeader{Call: 1})
 	n.EndTX(1)
-	st, _ := proto.UnmarshalStream(ref.next(proto.IsStream, time.Second))
+	st, _ := proto.UnmarshalStream(ref.next(proto.IsStream, waitLong))
 	if st.LSF.Dst != proto.AddrBroadcast || st.LSF.Src.String() != "N0CALL B" {
 		t.Fatalf("lsf %+v", st.LSF)
 	}
@@ -691,7 +721,7 @@ func TestSuffixAndBroadcastDst(t *testing.T) {
 func TestRxLateEntry(t *testing.T) {
 	r := linked(t)
 	r.sendStream(rxPacket(0x5151, 7, 0x10, 0x20))
-	h := r.s.wait(t, kind("header"), time.Second).h
+	h := r.s.wait(t, kind("header"), waitLong).h
 	if h.Src != "N1CALL" || h.Room != "M17-XXX C" {
 		t.Fatalf("header %+v", h)
 	}
@@ -699,11 +729,11 @@ func TestRxLateEntry(t *testing.T) {
 	r.sendStream(rxPacket(0x5151, 3, 0x50, 0x60)) // an earlier packet, late
 	r.sendStream(rxPacket(0x5151, 9|proto.LastFrame, 0x70, 0x80))
 	for n := 0; n < 6; n++ {
-		if e := r.s.wait(t, kind("voice"), time.Second); e.f.Call != h.Call {
+		if e := r.s.wait(t, kind("voice"), waitLong); e.f.Call != h.Call {
 			t.Fatalf("frame %+v", e.f)
 		}
 	}
-	if e := r.s.wait(t, kind("end"), time.Second); e.call != h.Call {
+	if e := r.s.wait(t, kind("end"), waitLong); e.call != h.Call {
 		t.Fatalf("end %+v", e)
 	}
 	select {

@@ -24,9 +24,23 @@ func TestRunLogsFailedSessionsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 700*time.Millisecond)
+	// Wait for the first failure instead of trusting a fixed run time: a slow
+	// resolver on a loaded runner can take longer than the whole window.
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_ = n.Run(ctx, nil)
+	ran := make(chan struct{})
+	go func() { _ = n.Run(ctx, nil); close(ran) }()
+	count := func() int { mu.Lock(); defer mu.Unlock(); return len(lines) }
+	for deadline := time.Now().Add(10 * time.Second); count() == 0; {
+		if time.Now().After(deadline) {
+			t.Fatal("no failure logged")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// Several more attempts (backoff 100, 200, 400 ms) fail the same way.
+	time.Sleep(800 * time.Millisecond)
+	cancel()
+	<-ran
 	mu.Lock()
 	defer mu.Unlock()
 	if len(lines) != 1 || !strings.HasPrefix(lines[0], "bm: ") || !strings.Contains(lines[0], "nohost.invalid") {

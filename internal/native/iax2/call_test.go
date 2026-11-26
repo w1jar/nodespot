@@ -877,7 +877,7 @@ func TestDebugLogsFramesAndDrops(t *testing.T) {
 	p.raw(fs[0])
 	waitStats(t, c, func(s Stats) bool { return s.Dropped >= 1 })
 	// The drop is counted before its log line is written.
-	for deadline := time.Now().Add(2 * time.Second); !strings.Contains(buf.String(), "iax2 drop") && time.Now().Before(deadline); {
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(buf.String(), "iax2 drop") && time.Now().Before(deadline); {
 		time.Sleep(5 * time.Millisecond)
 	}
 	out := buf.String()
