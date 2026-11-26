@@ -194,6 +194,11 @@ type Advanced struct {
 	// hang time.
 	RxOnDelayMS  int `json:"rxOnDelayMs,omitempty"`
 	TxOffDelayMS int `json:"txOffDelayMs,omitempty"`
+	// TxOnDelayMS is the key-up delay: when the network keys the
+	// transmitter, its audio waits this long after PTT so the transmitter
+	// (and the squelch of the radios listening) is up before the first
+	// word. Unset is DefaultTxOnDelay; 0 turns it off.
+	TxOnDelayMS *int `json:"txOnDelayMs,omitempty"`
 	// MD380 is the md380-emu address for AMBE (default 127.0.0.1:2470).
 	MD380          string `json:"md380,omitempty"`
 	MD380TimeoutMS int    `json:"md380TimeoutMs,omitempty"`
@@ -203,6 +208,7 @@ type Advanced struct {
 const (
 	DefaultHang        = 500 * time.Millisecond
 	DefaultTxTimeout   = 180 * time.Second
+	DefaultTxOnDelay   = 200 * time.Millisecond
 	DefaultIDInterval  = 600 * time.Second
 	DefaultIDTail      = 60 * time.Second
 	DefaultIDEndQuiet  = 60 * time.Second
@@ -216,6 +222,7 @@ const (
 	MaxStaticGainDb = audio.MaxStaticGainDb // gain is -20 to +20 dB
 	MaxRxOnDelayMS  = 1000
 	MaxTxOffDelayMS = 2000
+	MaxTxOnDelayMS  = 1000
 )
 
 func on(b *bool, def bool) bool {
@@ -308,6 +315,14 @@ func (a Advanced) PL(sa818 bool) bool { return on(a.PLFilter, !sa818) }
 
 // RxOnDelay is the carrier debounce.
 func (a Advanced) RxOnDelay() time.Duration { return time.Duration(a.RxOnDelayMS) * time.Millisecond }
+
+// TxOnDelay is the key-up delay before network audio plays.
+func (a Advanced) TxOnDelay() time.Duration {
+	if a.TxOnDelayMS == nil {
+		return DefaultTxOnDelay
+	}
+	return time.Duration(*a.TxOnDelayMS) * time.Millisecond
+}
 
 // TxOffDelay is the extra transmitter tail added to the hang time.
 func (a Advanced) TxOffDelay() time.Duration { return time.Duration(a.TxOffDelayMS) * time.Millisecond }
@@ -472,6 +487,9 @@ func (c *Config) Validate() error {
 	}
 	if a.TxOffDelayMS < 0 || a.TxOffDelayMS > MaxTxOffDelayMS {
 		errs = append(errs, fmt.Errorf("audio: transmit-off delay must be 0 to %d ms", MaxTxOffDelayMS))
+	}
+	if a.TxOnDelayMS != nil && (*a.TxOnDelayMS < 0 || *a.TxOnDelayMS > MaxTxOnDelayMS) {
+		errs = append(errs, fmt.Errorf("audio: key-up delay must be 0 to %d ms", MaxTxOnDelayMS))
 	}
 	if st.Active != nil {
 		if _, ok := mode.Lookup(st.Active.Mode); !ok {

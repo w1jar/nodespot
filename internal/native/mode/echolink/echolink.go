@@ -69,6 +69,7 @@ type Mode struct {
 	linkWG   sync.WaitGroup
 	conn     Conn
 	sending  bool
+	over0    uint64 // the receive queue's overflow when conn connected
 }
 
 var _ mode.Mode = (*Mode)(nil)
@@ -108,7 +109,7 @@ func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
 		opt.Retry = el.DefaultRetry
 	}
 	m := &Mode{env: env, cfg: cfg, opt: opt}
-	m.Init(mode.EchoLink, "EchoLink", env.Clock())
+	m.InitBuffer(mode.EchoLink, "EchoLink", env.Clock(), recvBuffer)
 	return m, nil
 }
 
@@ -222,9 +223,11 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 		}
 		return
 	}
+	over0 := m.Overflow()
 	m.mu.Lock()
 	m.conn = c
 	m.sending = false
+	m.over0 = over0
 	m.mu.Unlock()
 	st := c.Station()
 	if st.Location != "" && t.Name == "" {
@@ -233,12 +236,17 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 	}
 	m.env.Logger().Info("echolink: connected", "station", st.Callsign)
 	m.SetState(mode.StateConnected, "connected to "+st.Callsign, "")
-	m.SetLinkStats(linkStats(c.Status()))
+	// The counters are the connection's: the receive queue's overflow
+	// counts from over0, and from the start of each transmission for its
+	// log line.
+	stats := func() *mode.LinkStats { return linkStats(c.Status(), m.Overflow()-over0) }
+	spurtOver := over0
+	m.SetLinkStats(stats())
 	defer func() {
 		m.mu.Lock()
 		m.conn = nil
 		m.mu.Unlock()
-		m.SetLinkStats(linkStats(c.Status()))
+		m.SetLinkStats(stats())
 		m.TalkEnd()
 	}()
 	statTick := time.NewTicker(statsEvery)
@@ -248,7 +256,7 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 	for {
 		select {
 		case <-statTick.C:
-			m.SetLinkStats(linkStats(c.Status()))
+			m.SetLinkStats(stats())
 		case <-ctx.Done():
 			_ = c.Close()
 			return
@@ -274,9 +282,12 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 					call = st.Callsign
 				}
 				m.TalkStart(mode.Talker{Callsign: call, Name: name, Target: t.ID})
+				spurtOver = m.Overflow()
 			case el.EventTalkStop:
 				m.TalkEnd()
-				m.SetLinkStats(linkStats(c.Status()))
+				m.SetLinkStats(stats())
+				m.env.Logger().Info(fmt.Sprintf("echolink: received %d packets (late %d, dropped %d)",
+					ev.Packets, ev.Late, ev.Dropped+m.Overflow()-spurtOver), "station", st.Callsign)
 			case el.EventPeer:
 				peerName = ev.Name
 				m.UpdateTalker("", ev.Name, "")
@@ -305,12 +316,19 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 // statsEvery is how often the link counters are copied to the status.
 const statsEvery = time.Second
 
-// linkStats converts connection counters for the status.
-func linkStats(st el.ConnStatus) *mode.LinkStats {
+// recvBuffer is the mode's receive queue, in 20 ms frames: thirty seconds,
+// so a station (the echo test's parrot) that sends faster than real time
+// is queued, not cut short.
+const recvBuffer = 1500
+
+// linkStats converts connection counters for the status. overflow is the
+// frames the mode's receive queue dropped on this connection, counted with
+// the connection's own drops.
+func linkStats(st el.ConnStatus, overflow uint64) *mode.LinkStats {
 	return &mode.LinkStats{
 		Proto:       "echolink",
 		RxVoiceFull: st.RxPackets, TxVoice: st.TxPackets,
-		ParseErrors: st.RxBad, Dropped: st.RxDropped, Late: st.RxLate, TxErrors: st.TxErrors,
+		ParseErrors: st.RxBad, Dropped: st.RxDropped + overflow, Late: st.RxLate, TxErrors: st.TxErrors,
 	}
 }
 
@@ -387,9 +405,10 @@ func (m *Mode) EndTx() {
 	c := m.conn
 	was := m.sending
 	m.sending = false
+	over0 := m.over0
 	m.mu.Unlock()
 	if c != nil && was {
 		_ = c.Flush()
-		m.SetLinkStats(linkStats(c.Status()))
+		m.SetLinkStats(linkStats(c.Status(), m.Overflow()-over0))
 	}
 }

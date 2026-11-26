@@ -85,9 +85,12 @@ type EventKind string
 
 // Node event kinds.
 const (
-	EventMode   EventKind = "mode"   // Mode carries an event from a mode
-	EventPTT    EventKind = "ptt"    // On: the transmitter keyed or unkeyed
-	EventCOS    EventKind = "cos"    // On: a local signal opened or closed the squelch
+	EventMode EventKind = "mode" // Mode carries an event from a mode
+	EventPTT  EventKind = "ptt"  // On: the transmitter keyed or unkeyed
+	EventCOS  EventKind = "cos"  // On: a local signal opened or closed the squelch
+	// EventRx: On: a local transmission started or stopped going to the
+	// active mode (Status.Radio.RxActive).
+	EventRx     EventKind = "rx"
 	EventSelect EventKind = "select" // Text: the active mode changed (empty: idle)
 	EventID     EventKind = "id"     // Text: the station ID started (why)
 	EventConfig EventKind = "config" // the config was saved or reloaded

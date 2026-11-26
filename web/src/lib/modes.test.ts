@@ -143,6 +143,8 @@ test('linkStatsText shows EchoLink packet counters', () => {
   const base = { proto: 'echolink', rxVoiceFull: 310, rxVoiceMini: 0, txVoice: 25, vnakSent: 0, vnakRecv: 0, retransmits: 0, parseErrors: 0, dropped: 0, gaps: 0 };
   assert.equal(linkStatsText(base), 'rx 310 pkts · tx 25 pkts');
   assert.equal(linkStatsText({ ...base, late: 2, dropped: 4, parseErrors: 1, txErrors: 3 }), 'rx 310 pkts · tx 25 pkts · late 2 · dropped 4 · bad 1 · send errors 3');
+  assert.equal(linkStatsText(base, 50), 'rx 310 pkts · tx 25 pkts · not played 50');
+  assert.equal(linkStatsText(base, 0), 'rx 310 pkts · tx 25 pkts');
   assert.match(linkStatsTitle(base), /audio packets/);
   assert.match(linkStatsTitle({ ...base, proto: undefined }), /VNAK/);
 });

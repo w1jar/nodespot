@@ -25,6 +25,7 @@ type stepParams struct {
 	preEmph, deEmph    bool
 	plFilter           bool
 	rxOnDelay          time.Duration
+	txOnDelay          time.Duration // key-up delay before network audio
 	hangTail           time.Duration // extra time added to hang
 }
 
@@ -43,6 +44,7 @@ func paramsFor(c *Config, sa818 bool) stepParams {
 		preEmph: st.Advanced.PreEmphasis, deEmph: st.Advanced.DeEmphasis,
 		plFilter:  st.Advanced.PL(sa818),
 		rxOnDelay: st.Advanced.RxOnDelay(), hangTail: st.Advanced.TxOffDelay(),
+		txOnDelay: st.Advanced.TxOnDelay(),
 		id: idParams{
 			on:       st.ID.IDOn() && st.Callsign != "",
 			interval: st.ID.Interval(),
@@ -57,6 +59,7 @@ func paramsFor(c *Config, sa818 bool) stepParams {
 // simplex is the radio-side state the step keeps. Guarded by Engine.mu.
 type simplex struct {
 	ptt       bool
+	pttAt     time.Time // when PTT last keyed
 	hangUntil time.Time
 	// pttStuck: unkeying failed, so the transmitter may still be keyed
 	// although ptt is false. Every step tries to unkey again.
@@ -78,6 +81,12 @@ type simplex struct {
 	// so that network jitter does not cause gaps on the air.
 	netPlaying bool
 	prebufAt   time.Time // when the spurt's first frame was seen waiting
+
+	// netDropped counts frames of the active mode's audio the node threw
+	// away rather than played: the receiver had priority (a local station
+	// transmitting) or the transmit timeout had locked the network out.
+	// It restarts when the active mode changes.
+	netDropped uint64
 
 	id  audio.Source // ID playing
 	idT idTimer
@@ -158,18 +167,24 @@ func (e *Engine) Step(now time.Time) {
 		s.rfLocked = false
 	}
 	e.stepRF(now, m, rfActive)
-	s.rfOn = rfActive && !s.rfLocked && m != nil
+	if on := rfActive && !s.rfLocked && m != nil; on != s.rfOn {
+		s.rfOn = on
+		e.publishOn(EventRx, on, now)
+	}
 
 	// Network side: the active mode's audio for the radio.
 	var nf audio.Frame
 	haveNet, netTalking := false, false
 	if m != nil {
 		if rfActive {
-			drain(m.Recv()) // the receiver has priority
+			s.netDropped += uint64(drain(m.Recv())) // the receiver has priority
 			s.netPlaying, s.prebufAt = false, time.Time{}
 		} else {
 			e.prebuffer(now, m)
-			if s.netPlaying {
+			// After the network keys the transmitter its audio waits for
+			// the key-up delay, so the first word goes out on the air.
+			keyedUp := p.txOnDelay <= 0 || (s.ptt && now.Sub(s.pttAt) >= p.txOnDelay)
+			if s.netPlaying && (keyedUp || s.txLocked) {
 				select {
 				case nf = <-m.Recv():
 					haveNet = true
@@ -194,6 +209,9 @@ func (e *Engine) Step(now time.Time) {
 			s.txLocked, wantNet = true, false
 			e.logf(now, "transmit timeout: the network has keyed the radio for %s", p.txTimeout)
 		}
+	}
+	if haveNet && !wantNet {
+		s.netDropped++ // locked out by the transmit timeout
 	}
 
 	// Mix what goes on the air.
@@ -382,7 +400,9 @@ func (e *Engine) setPTT(on bool, now time.Time) {
 		e.sx.pttStuck = false
 	}
 	e.sx.ptt = on
-	if !on {
+	if on {
+		e.sx.pttAt = now
+	} else {
 		e.sx.netStart = time.Time{}
 	}
 	e.publishOn(EventPTT, on, now)
@@ -426,12 +446,15 @@ func (e *Engine) logf(now time.Time, format string, args ...any) {
 	e.hub.publish(ev)
 }
 
-func drain(c <-chan audio.Frame) {
+// drain empties c and returns how many frames it held.
+func drain(c <-chan audio.Frame) int {
+	n := 0
 	for {
 		select {
 		case <-c:
+			n++
 		default:
-			return
+			return n
 		}
 	}
 }

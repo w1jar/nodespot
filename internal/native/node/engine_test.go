@@ -29,6 +29,8 @@ type rig struct {
 
 func off() *bool { b := false; return &b }
 
+func intp(v int) *int { return &v }
+
 // quietConfig is a station with the AGCs and ID off, so a
 // test turns on only what it checks.
 func quietConfig() *Config {
@@ -37,7 +39,8 @@ func quietConfig() *Config {
 		Station: Station{
 			Callsign: "N0CALL",
 			ID:       IDConfig{Enabled: off()},
-			Advanced: Advanced{ModeAGC: off(), RadioAGC: off()},
+			// No key-up delay: tests count frames from the step PTT keys.
+			Advanced: Advanced{ModeAGC: off(), RadioAGC: off(), TxOnDelayMS: intp(0)},
 		},
 		Modes: map[string]mode.Settings{
 			mode.AllStar: {Values: map[string]string{"node": "1999"}},
@@ -850,5 +853,95 @@ func TestRadioWiringChangeAsksForRestart(t *testing.T) {
 				t.Fatalf("restart asked %v, status %v, want %v", got, e.Status().RestartRequired, tt.want)
 			}
 		})
+	}
+}
+
+// TestKeyUpDelay: network audio waits for the key-up delay after PTT, so
+// the first word reaches a transmitter that is up; nothing is lost and
+// the order is kept.
+func TestKeyUpDelay(t *testing.T) {
+	cfg := quietConfig()
+	cfg.Station.Advanced.TxOnDelayMS = nil // the default, 200 ms
+	g := newRig(t, cfg)
+	g.sel(mode.BM, &mode.Target{ID: "91"})
+	bm := g.fake(mode.BM)
+	var fs []audio.Frame
+	for i := 0; i < 20; i++ {
+		fs = append(fs, frame(int16(1000+i)))
+	}
+	bm.Key("N1CALL", fs...)
+	g.step(1)
+	if !g.r.PTT() {
+		t.Fatal("PTT not keyed for network audio")
+	}
+	keyed := g.clock()
+	var first time.Time
+	for i := 0; i < 50 && first.IsZero(); i++ {
+		g.step(1)
+		if countLoud(g.r.Played()) > 0 {
+			first = g.clock()
+		}
+	}
+	if d := first.Sub(keyed); first.IsZero() || d < DefaultTxOnDelay || d > DefaultTxOnDelay+audio.FrameDuration {
+		t.Fatalf("first frame played %v after PTT, want %v", d, DefaultTxOnDelay)
+	}
+	g.run(time.Second)
+	bm.Unkey()
+	var got []int16
+	for _, f := range g.r.Played() {
+		if loud(f) {
+			got = append(got, f[0])
+		}
+	}
+	if len(got) != 20 || got[0] != 1000 || got[19] != 1019 {
+		t.Fatalf("played %v", got)
+	}
+	// A transmission that starts while the transmitter is still keyed
+	// (the hang) plays at once.
+	g.run(100 * time.Millisecond)
+	bm.Key("N1CALL", frame(2000), frame(2001))
+	g.step(1)
+	if p := g.r.Played(); p[len(p)-1][0] != 2000 {
+		t.Fatal("audio held although the transmitter was already up")
+	}
+	bm.Unkey()
+}
+
+// TestNetDroppedAndRxEvents: network audio thrown away while a local
+// station has the receiver is counted, and the start and end of a local
+// transmission going to the mode are published (the Dashboard's "Local
+// station").
+func TestNetDroppedAndRxEvents(t *testing.T) {
+	g := newRig(t, quietConfig())
+	g.sel(mode.BM, &mode.Target{ID: "91"})
+	bm := g.fake(mode.BM)
+	evs, stop := g.e.Subscribe()
+	defer stop()
+	g.r.SetCarrier(true)
+	g.step(1)
+	bm.Key("N1CALL", frame(1000), frame(1001), frame(1002), frame(1003), frame(1004))
+	g.step(10)
+	if st := g.e.Status().Radio; !st.RxActive || st.NetDropped != 5 {
+		t.Fatalf("radio %+v, want rxActive and 5 frames not played", st)
+	}
+	g.r.SetCarrier(false)
+	bm.Unkey()
+	g.step(2)
+	if st := g.e.Status().Radio; st.RxActive {
+		t.Fatalf("radio %+v, want rxActive off", st)
+	}
+	var rx []bool
+	for len(evs) > 0 {
+		if ev := <-evs; ev.Kind == EventRx && ev.On != nil {
+			rx = append(rx, *ev.On)
+		}
+	}
+	if len(rx) != 2 || !rx[0] || rx[1] {
+		t.Fatalf("rx events %v, want [true false]", rx)
+	}
+	// A mode change starts the count again.
+	g.sel(mode.AllStar, nil)
+	if n := g.e.Status().Radio.NetDropped; n != 0 {
+		t.Fatalf("netDropped %d after a mode change", n)
 	}
 }

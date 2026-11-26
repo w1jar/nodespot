@@ -482,6 +482,7 @@ func (e *Engine) resetRadioLocked() {
 	e.sx.rfSentTo = nil
 	e.sx.netStart, e.sx.txLocked = time.Time{}, false
 	e.sx.netPlaying, e.sx.prebufAt = false, time.Time{}
+	e.sx.netDropped = 0
 	e.sx.modeAGC.Reset()
 }
 

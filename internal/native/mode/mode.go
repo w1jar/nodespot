@@ -114,8 +114,9 @@ type Registration struct {
 // diagnosing audio problems. Proto says which: "" (AllStar, the IAX2
 // counters) or "echolink" (audio packets; RxVoiceFull is the packets
 // received, TxVoice the packets sent, Late the duplicate or late packets
-// dropped, ParseErrors the undecodable ones, Dropped the frames the node
-// did not take in time and TxErrors the packets the socket refused).
+// dropped, ParseErrors the undecodable ones, Dropped the frames lost
+// because a receive queue was full, in the connection or the mode, and
+// TxErrors the packets the socket refused).
 type LinkStats struct {
 	Proto       string `json:"proto,omitempty"`
 	RxVoiceFull uint64 `json:"rxVoiceFull"` // voice full frames received

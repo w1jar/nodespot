@@ -1,8 +1,10 @@
 package echolink
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -127,11 +129,15 @@ func (g *loginGate) login(ctx context.Context, cfg el.Config) (Directory, error)
 
 func newMode(t *testing.T, g *loginGate, vals map[string]string) *Mode {
 	t.Helper()
+	return newModeEnv(t, g, vals, mode.Env{Callsign: "n0call"})
+}
+
+func newModeEnv(t *testing.T, g *loginGate, vals map[string]string, env mode.Env) *Mode {
+	t.Helper()
 	s := mode.Settings{Values: map[string]string{KeyPassword: "pw-secret"}}
 	for k, v := range vals {
 		s.Values[k] = v
 	}
-	env := mode.Env{Callsign: "n0call"}
 	if err := Spec().CheckEnv(env, s); err != nil {
 		t.Fatal(err)
 	}
@@ -252,4 +258,45 @@ func TestNotFound(t *testing.T) {
 		t.Fatalf("error %q", m.Status().Error)
 	}
 	_ = m.Stop()
+}
+
+// syncBuf is a goroutine-safe log sink.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *syncBuf) Write(p []byte) (int, error) { b.mu.Lock(); defer b.mu.Unlock(); return b.b.Write(p) }
+func (b *syncBuf) String() string              { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+// TestReceivedLogAndOverflow: frames the mode's receive queue drops count
+// as dropped, in the link counters and in the info line logged at the end
+// of each received transmission.
+func TestReceivedLogAndOverflow(t *testing.T) {
+	var buf syncBuf
+	env := mode.Env{Callsign: "n0call", Log: slog.New(slog.NewTextHandler(&buf, nil))}
+	g := &loginGate{dir: &fakeDir{}}
+	m := newModeEnv(t, g, nil, env)
+	if cap(m.Recv()) != recvBuffer {
+		t.Fatalf("receive queue %d frames, want %d", cap(m.Recv()), recvBuffer)
+	}
+	_ = m.Start(context.Background())
+	defer m.Stop()
+	_ = m.Connect(context.Background(), mode.Target{ID: "*ECHOTEST*"})
+	c := g.dir.conn(t, 1)
+	waitFor(t, "connected", func() bool { return m.Status().State == mode.StateConnected })
+	c.events <- el.Event{Kind: el.EventTalkStart, Callsign: "*ECHOTEST*"}
+	waitFor(t, "talker", func() bool { return m.Talking() })
+	var f el.Frame
+	for i := 0; i < recvBuffer+7; i++ { // nobody plays the queue
+		c.recv <- f
+	}
+	waitFor(t, "overflow", func() bool { return m.Overflow() == 7 })
+	c.events <- el.Event{Kind: el.EventTalkStop, Packets: 377, Late: 2, Dropped: 1}
+	waitFor(t, "log", func() bool {
+		return strings.Contains(buf.String(), `msg="echolink: received 377 packets (late 2, dropped 8)" station=*ECHOTEST*`)
+	})
+	if l := m.Status().Link; l == nil || l.Dropped != 3+7 {
+		t.Fatalf("link stats %+v, want dropped %d", l, 3+7)
+	}
 }

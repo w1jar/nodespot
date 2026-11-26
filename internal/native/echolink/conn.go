@@ -61,7 +61,8 @@ const (
 	EventDisconnected
 	// EventTalkStart: audio started arriving; Callsign is the talker.
 	EventTalkStart
-	// EventTalkStop: audio stopped arriving.
+	// EventTalkStop: audio stopped arriving. Packets, Late, Dropped and Bad
+	// count the transmission that ended.
 	EventTalkStop
 	// EventInfo: station info text arrived in Text.
 	EventInfo
@@ -83,6 +84,11 @@ type Event struct {
 	Name     string
 	Text     string
 	Err      error
+
+	// EventTalkStop: the received transmission's audio packets accepted,
+	// late or duplicate packets dropped, frames dropped because Recv was
+	// full, and undecodable packets or frames.
+	Packets, Late, Dropped, Bad uint64
 }
 
 // ConnStatus is a snapshot of a connection for the UI.
@@ -146,8 +152,9 @@ type Conn struct {
 	haveSeq   bool
 	lastSeq   uint16
 	refusedAt map[netip.Addr]time.Time
-	// Counters of the talk spurt being received, for the debug log.
-	rxSpurt struct{ pkts, late, bad uint64 }
+	// Counters of the talk spurt being received, for the log and
+	// EventTalkStop.
+	rxSpurt struct{ pkts, late, dropped, bad uint64 }
 }
 
 // reorderWindow is how far back, in packets, a sequence number counts as a
@@ -267,6 +274,12 @@ func (c *Conn) Send(f Frame) error {
 	if !c.txOn {
 		c.txOn, c.txPkts, c.txErrLog = true, 0, false
 		c.cfg.Logger.Info("echolink: sending", "station", c.station.Callsign)
+		// What the station sends after this transmission is a new
+		// stream (a parrot plays it back with our own numbering), even
+		// if it starts within TalkHang of what it sent before.
+		c.mu.Lock()
+		c.haveSeq = false
+		c.mu.Unlock()
 	}
 	pcm := [gsm.FrameSamples]int16(f)
 	b := c.enc.Encode(&pcm)
@@ -383,7 +396,7 @@ func (c *Conn) closeWith(reason error) {
 		}
 		if c.st.Talking {
 			c.st.Talking = false
-			c.emitLocked(Event{Kind: EventTalkStop, Callsign: c.st.Talker})
+			c.emitLocked(c.talkStopLocked(c.cfg.Clock.Now()))
 		}
 		c.emitLocked(Event{Kind: EventDisconnected, Err: reason})
 		c.mu.Unlock()
@@ -487,7 +500,7 @@ func (c *Conn) handleAudio(p []byte, from netip.AddrPort) {
 	c.lastAudio = now
 	if !c.st.Talking {
 		c.st.Talking = true
-		c.rxSpurt.pkts, c.rxSpurt.late, c.rxSpurt.bad = 0, 0, 0
+		c.rxSpurt = struct{ pkts, late, dropped, bad uint64 }{}
 		c.cfg.Logger.Debug("echolink: rx start", "from", from.String(), "seq", seq, "bytes", len(p))
 		c.emitLocked(Event{Kind: EventTalkStart, Time: now, Callsign: c.st.Talker})
 	}
@@ -517,6 +530,7 @@ func (c *Conn) handleAudio(p []byte, from netip.AddrPort) {
 		case c.recv <- f:
 		default:
 			c.st.RxDropped++
+			c.rxSpurt.dropped++
 		}
 	}
 }
@@ -583,6 +597,14 @@ func (c *Conn) refuse(info rtcpInfo, src netip.AddrPort, now time.Time) {
 
 const refuseInterval = 10 * time.Second
 
+// talkStopLocked is the EventTalkStop of the transmission being received.
+// c.mu must be held.
+func (c *Conn) talkStopLocked(now time.Time) Event {
+	r := c.rxSpurt
+	return Event{Kind: EventTalkStop, Time: now, Callsign: c.st.Talker,
+		Packets: r.pkts, Late: r.late, Dropped: r.dropped, Bad: r.bad}
+}
+
 func (c *Conn) timerLoop(start time.Time) {
 	defer c.wg.Done()
 	nextKeepalive := start.Add(c.cfg.Keepalive)
@@ -608,8 +630,8 @@ func (c *Conn) timerLoop(start time.Time) {
 		if reason == nil && c.st.Talking && now.Sub(c.lastAudio) >= c.cfg.TalkHang {
 			c.st.Talking = false
 			c.cfg.Logger.Debug("echolink: rx end", "packets", c.rxSpurt.pkts, "late", c.rxSpurt.late,
-				"bad", c.rxSpurt.bad, "last_seq", c.lastSeq)
-			c.emitLocked(Event{Kind: EventTalkStop, Time: now, Callsign: c.st.Talker})
+				"dropped", c.rxSpurt.dropped, "bad", c.rxSpurt.bad, "last_seq", c.lastSeq)
+			c.emitLocked(c.talkStopLocked(now))
 		}
 		c.mu.Unlock()
 		if reason != nil {

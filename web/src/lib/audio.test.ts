@@ -42,6 +42,19 @@ test('emphasis and PL in the body', () => {
   assert.equal(audioBody(b, { ...b.advanced, plFilter: undefined }, b.id).advanced.plFilter, undefined);
 });
 
+test('key-up delay: empty is the default, 0 is off and kept', () => {
+  const f = DELAY_FIELDS.find((x) => x.key === 'txOnDelayMs')!;
+  assert.deepEqual([f.min, f.max, f.def], [0, 1000, 200]);
+  assert.equal(audioError({ txOnDelayMs: 1000 }, {}), '');
+  assert.notEqual(audioError({ txOnDelayMs: 1001 }, {}), '');
+  assert.notEqual(audioError({ txOnDelayMs: -10 }, {}), '');
+  const b = base();
+  assert.equal(audioBody(b, { ...b.advanced, txOnDelayMs: 0 }, b.id).advanced.txOnDelayMs, 0);
+  assert.equal(audioBody(b, { ...b.advanced, txOnDelayMs: '300' as unknown as number }, b.id).advanced.txOnDelayMs, 300);
+  assert.equal('txOnDelayMs' in audioBody(b, { ...b.advanced, txOnDelayMs: undefined }, b.id).advanced, false);
+  assert.equal(audioDirty(b, { ...b.advanced, txOnDelayMs: 0 }, b.id), true);
+});
+
 test('effective PL', () => {
   assert.equal(effectivePL({}, false), true);
   assert.equal(effectivePL({}, true), false);

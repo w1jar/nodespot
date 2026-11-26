@@ -142,7 +142,7 @@ export const vocoderBusy = (v: Vocoder | null): boolean => v?.job === 'running';
  * One compact line of the link counters, or "" without them: AllStar "rx 120+3400 · tx 0 · VNAK 0/0 · retx 0 · gaps 0",
  * EchoLink "rx 310 pkts · tx 25 pkts · late 2 · bad 1".
  */
-export function linkStatsText(l: LinkStats | undefined): string {
+export function linkStatsText(l: LinkStats | undefined, notPlayed = 0): string {
   if (!l) return '';
   if (l.proto === 'echolink') {
     const el = [`rx ${l.rxVoiceFull} pkts`, `tx ${l.txVoice} pkts`];
@@ -150,20 +150,22 @@ export function linkStatsText(l: LinkStats | undefined): string {
     if (l.dropped) el.push(`dropped ${l.dropped}`);
     if (l.parseErrors) el.push(`bad ${l.parseErrors}`);
     if (l.txErrors) el.push(`send errors ${l.txErrors}`);
+    if (notPlayed) el.push(`not played ${notPlayed}`);
     return el.join(' · ');
   }
   const parts = [`rx ${l.rxVoiceFull}+${l.rxVoiceMini}`, `tx ${l.txVoice}`, `VNAK ${l.vnakSent}/${l.vnakRecv}`, `retx ${l.retransmits}`];
   if (l.gaps) parts.push(`gaps ${l.gaps}`);
   if (l.dropped) parts.push(`dropped ${l.dropped}`);
   if (l.parseErrors) parts.push(`bad ${l.parseErrors}`);
+  if (notPlayed) parts.push(`not played ${notPlayed}`);
   return parts.join(' · ');
 }
 
 /** The title of the link counters line. */
 export function linkStatsTitle(l: LinkStats | undefined): string {
   return l?.proto === 'echolink'
-    ? 'Link counters: audio packets received and sent; late or duplicate packets dropped, frames dropped, undecodable packets and send errors when there are any'
-    : 'Link counters: voice full+mini frames received, voice frames sent, VNAKs sent/received, retransmits';
+    ? 'Link counters: audio packets received and sent; late or duplicate packets dropped, frames dropped because a receive queue was full, undecodable packets, send errors, and frames not played on the radio (a local station had the receiver, or the transmit timeout) when there are any'
+    : 'Link counters: voice full+mini frames received, voice frames sent, VNAKs sent/received, retransmits; frames not played on the radio (a local station had the receiver, or the transmit timeout) when there are any';
 }
 
 /** A short line for a mode's link state, for the mode cards. */

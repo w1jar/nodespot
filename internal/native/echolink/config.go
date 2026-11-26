@@ -28,7 +28,7 @@ const (
 	DefaultConnectTimeout = 30 * time.Second
 	DefaultTalkHang       = 400 * time.Millisecond
 	defaultTick           = 100 * time.Millisecond
-	defaultRecvBuffer     = 50 // frames, one second
+	defaultRecvBuffer     = 250 // frames, five seconds
 	defaultEventBuffer    = 64
 )
 

@@ -480,7 +480,7 @@ func TestTransmissionLog(t *testing.T) {
 		`msg="echolink: tx start"`, `seq=0 bytes=144`, `seq=2 bytes=144`,
 		`msg="echolink: tx end" packets=2 last_seq=1`,
 		`msg="echolink: rx start"`, `seq=7`,
-		`msg="echolink: rx end" packets=1 late=0 bad=0 last_seq=7`,
+		`msg="echolink: rx end" packets=1 late=0 dropped=0 bad=0 last_seq=7`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("log lacks %q:\n%s", want, out)
@@ -491,5 +491,78 @@ func TestTransmissionLog(t *testing.T) {
 	}
 	if st := c.Status(); st.TxPackets != 3 || st.TxErrors != 0 {
 		t.Fatalf("status %+v", st)
+	}
+}
+
+// TestPlaybackRightAfterGreeting is the first echo test after connecting:
+// we key up right after the greeting, within TalkHang of its last packet,
+// and the parrot plays our recording back numbered below the greeting.
+// Our transmission starts a new stream, so none of it is dropped as late,
+// and EventTalkStop counts the whole received transmission.
+func TestPlaybackRightAfterGreeting(t *testing.T) {
+	s := newConnSetup(t, true)
+	c := s.connect(t)
+	defer c.Close()
+	<-s.st.audioIn // info packet
+
+	for seq := uint16(0); seq < 40; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 40, 0)
+	nextEvent(t, c, EventTalkStart)
+	for len(c.Recv()) > 0 { // the radio plays the greeting
+		<-c.Recv()
+	}
+	for i := 0; i < 4; i++ {
+		if err := c.Send(tone(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// No clock advance: the greeting's spurt has not ended yet. The
+	// playback's first packets are within the reorder window below the
+	// greeting's last one; they used to be dropped as late.
+	for seq := uint16(30); seq < 60; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 70, 0)
+	s.clk.run(t, 3*time.Second, time.Second)
+	ev := nextEvent(t, c, EventTalkStop)
+	if ev.Packets != 70 || ev.Late != 0 || ev.Dropped != 0 || ev.Bad != 0 {
+		t.Fatalf("talk stop %+v", ev)
+	}
+}
+
+// TestTalkStopCounts checks that EventTalkStop counts the late packets and
+// the frames dropped because Recv was full, for that transmission only.
+func TestTalkStopCounts(t *testing.T) {
+	s := newConnSetup(t, true)
+	c := s.connect(t)
+	defer c.Close()
+
+	// 65 packets are 260 frames, 10 more than Recv holds.
+	for seq := uint16(0); seq < 65; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	s.st.sendAudio(t, c, gsmPacket(60)) // late
+	waitRx(t, c, 65, 1)
+	s.clk.run(t, 3*time.Second, time.Second)
+	ev := nextEvent(t, c, EventTalkStop)
+	if ev.Packets != 65 || ev.Late != 1 || ev.Dropped != 10 {
+		t.Fatalf("talk stop %+v", ev)
+	}
+	if st := c.Status(); st.RxDropped != 10 {
+		t.Fatalf("status %+v", st)
+	}
+	for len(c.Recv()) > 0 {
+		<-c.Recv()
+	}
+	s.st.sendAudio(t, c, gsmPacket(70))
+	waitRx(t, c, 66, 1)
+	s.clk.run(t, 3*time.Second, time.Second)
+	if ev := nextEvent(t, c, EventTalkStop); ev.Packets != 1 || ev.Late != 0 || ev.Dropped != 0 {
+		t.Fatalf("second talk stop %+v", ev)
 	}
 }

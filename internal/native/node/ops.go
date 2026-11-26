@@ -62,8 +62,13 @@ type RadioStatus struct {
 	// RxActive: a local station is transmitting into the receiver and its
 	// audio is being sent to the active mode.
 	RxActive bool `json:"rxActive,omitempty"`
-	RxLocked bool `json:"rxLocked,omitempty"` // a local transmission timed out
-	TxLocked bool `json:"txLocked,omitempty"` // the network timed out the transmitter
+	// NetDropped counts frames of the active mode's audio the node threw
+	// away instead of playing them: a local station was transmitting into
+	// the receiver (it has priority) or the transmit timeout had locked
+	// the network out. It restarts when the active mode changes.
+	NetDropped uint64 `json:"netDropped,omitempty"`
+	RxLocked   bool   `json:"rxLocked,omitempty"` // a local transmission timed out
+	TxLocked   bool   `json:"txLocked,omitempty"` // the network timed out the transmitter
 	// PTTStuck: unkeying the transmitter failed and is being retried, so
 	// it may still be on the air.
 	PTTStuck bool `json:"pttStuck,omitempty"`
@@ -99,7 +104,7 @@ func (e *Engine) Status() Status {
 			Level:  e.inputLevelLocked(),
 			Preset: string(e.info.Interface.Preset), Chip: e.info.Chip, USBID: e.info.USBID,
 			Product: e.info.Product, Detected: e.info.Detected, SA818: e.info.Interface.SA818,
-			RxActive: e.sx.rfOn, RxLocked: e.sx.rfLocked, TxLocked: e.sx.txLocked, PTTStuck: e.sx.pttStuck,
+			RxActive: e.sx.rfOn, NetDropped: e.sx.netDropped, RxLocked: e.sx.rfLocked, TxLocked: e.sx.txLocked, PTTStuck: e.sx.pttStuck,
 		},
 		ID: IDStatus{
 			Enabled: e.params.id.on, Owed: e.sx.idT.owed,

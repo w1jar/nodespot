@@ -388,7 +388,7 @@ export function mockApi(): Plugin {
               Object.assign(station.radio, body.radio);
             }
             // Like the node: the sent id and advanced replace the saved ones, and the limits are the node's.
-            const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], agcTargetDb: [-40, -6], agcMaxDb: [1, 30], rxGainDb: [-20, 20], txGainDb: [-20, 20], rxOnDelayMs: [0, 1000], txOffDelayMs: [0, 2000], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
+            const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], agcTargetDb: [-40, -6], agcMaxDb: [1, 30], rxGainDb: [-20, 20], txGainDb: [-20, 20], rxOnDelayMs: [0, 1000], txOnDelayMs: [0, 1000], txOffDelayMs: [0, 2000], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
             for (const o of [body.advanced, body.id]) for (const [k, [lo, hi]] of Object.entries(lim)) {
               const v = o?.[k];
               if (v !== undefined && (typeof v !== 'number' || v < lo || v > hi)) return err(res, 400, `${k} must be ${lo} to ${hi}`, 'bad_request');

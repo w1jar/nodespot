@@ -2,12 +2,16 @@ package node
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
+	"log/slog"
 	"math"
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -101,6 +105,7 @@ type parrot struct {
 	audio, ctrl *net.UDPConn
 	clientAudio netip.AddrPort
 	quiet       time.Duration
+	opt         parrotOptions
 
 	mu       sync.Mutex
 	greeted  bool
@@ -113,8 +118,35 @@ type parrot struct {
 	stop     chan struct{}
 }
 
-func newParrot(t *testing.T, clientAudio int) *parrot {
+// parrotOptions vary how the parrot greets and plays back.
+type parrotOptions struct {
+	// greetFrames is the greeting's length (0: three seconds);
+	// greetSeq0 its first sequence number.
+	greetFrames int
+	greetSeq0   uint16
+	// quiet is how long the station must be silent before the playback
+	// (0: 400 ms).
+	quiet time.Duration
+	// burst sends the playback this many times faster than real time
+	// (0 or 1: real time).
+	burst int
+	// pauseAfter, with pause, stops the playback for pause after that
+	// many packets.
+	pauseAfter int
+	pause      time.Duration
+}
+
+func newParrot(t *testing.T, clientAudio int, opt parrotOptions) *parrot {
 	t.Helper()
+	if opt.greetFrames == 0 {
+		opt.greetFrames = 150
+	}
+	if opt.quiet == 0 {
+		opt.quiet = 400 * time.Millisecond
+	}
+	if opt.burst < 1 {
+		opt.burst = 1
+	}
 	lo := net.IPv4(127, 0, 0, 1)
 	a, err := net.ListenUDP("udp4", &net.UDPAddr{IP: lo})
 	if err != nil {
@@ -124,7 +156,7 @@ func newParrot(t *testing.T, clientAudio int) *parrot {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &parrot{t: t, audio: a, ctrl: c, quiet: 400 * time.Millisecond, stop: make(chan struct{}),
+	p := &parrot{t: t, audio: a, ctrl: c, quiet: opt.quiet, opt: opt, stop: make(chan struct{}),
 		clientAudio: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), uint16(clientAudio))}
 	go p.readCtrl()
 	go p.readAudio()
@@ -171,7 +203,7 @@ func (p *parrot) readCtrl() {
 		p.greeted = true
 		p.mu.Unlock()
 		if greet {
-			go p.play(tone(2000, 150)) // a three-second greeting
+			go p.play(tone(2000, p.opt.greetFrames), p.opt.greetSeq0)
 		}
 	}
 }
@@ -242,11 +274,19 @@ func (p *parrot) loop() {
 	}
 }
 
-// replay sends recorded packets back unchanged at real-time pacing.
+// replay sends recorded packets back unchanged at real-time pacing, or
+// burst times faster, with the pause the options ask for.
 func (p *parrot) replay(pkts [][]byte) {
-	tk := time.NewTicker(4 * audio.FrameDuration)
+	tk := time.NewTicker(4 * audio.FrameDuration / time.Duration(p.opt.burst))
 	defer tk.Stop()
-	for _, b := range pkts {
+	for i, b := range pkts {
+		if p.opt.pause > 0 && i == p.opt.pauseAfter {
+			select {
+			case <-p.stop:
+				return
+			case <-time.After(p.opt.pause):
+			}
+		}
 		_, _ = p.audio.WriteToUDPAddrPort(b, p.clientAudio)
 		select {
 		case <-p.stop:
@@ -260,10 +300,9 @@ func (p *parrot) replay(pkts [][]byte) {
 }
 
 // play sends frames to the station as GSM RTP at real-time pacing, with
-// sequence numbers from zero.
-func (p *parrot) play(frames []audio.Frame) {
+// sequence numbers from seq.
+func (p *parrot) play(frames []audio.Frame, seq uint16) {
 	enc := gsm.NewEncoder()
-	var seq uint16
 	tk := time.NewTicker(4 * audio.FrameDuration)
 	defer tk.Stop()
 	for i := 0; i+4 <= len(frames); i += 4 {
@@ -323,10 +362,14 @@ type elRig struct {
 	mode *elmode.Mode
 }
 
-func newELRig(t *testing.T) *elRig {
+func newELRig(t *testing.T) *elRig { return newELRigWith(t, parrotOptions{}, nil, nil) }
+
+// newELRigWith is newELRig with a parrot built from opt, the station
+// config changed by edit and the node logging to log.
+func newELRigWith(t *testing.T, opt parrotOptions, edit func(*Config), log *slog.Logger) *elRig {
 	t.Helper()
 	clientAudio, clientCtrl := freeUDPPort(t), freeUDPPort(t)
-	p := newParrot(t, clientAudio)
+	p := newParrot(t, clientAudio, opt)
 	list := "@@@\n1\n*ECHOTEST*\nEcho test server [ON 12:00]\n9999\n127.0.0.1\n+++\n"
 	dir := fakeELDirectory(t, list)
 
@@ -336,6 +379,9 @@ func newELRig(t *testing.T) *elRig {
 	cfg.Modes[mode.EchoLink] = mode.Settings{Values: map[string]string{
 		elmode.KeyCallsign: "N0CALL-L", elmode.KeyPassword: "secret", elmode.KeyName: "Test",
 	}}
+	if edit != nil {
+		edit(cfg)
+	}
 	login := func(ctx context.Context, c el.Config) (elmode.Directory, error) {
 		c.Servers = []string{dir}
 		c.LocalAudioAddr = "127.0.0.1:" + strconv.Itoa(clientAudio)
@@ -350,6 +396,7 @@ func newELRig(t *testing.T) *elRig {
 	e, err := New(cfg, Options{
 		Radio: g.r,
 		Now:   g.clock,
+		Log:   log,
 		Build: func(n string, env mode.Env, s mode.Settings) (mode.Mode, error) {
 			if n != mode.EchoLink {
 				return modetest.New(n), nil
@@ -473,5 +520,176 @@ func TestEchoLinkParrotThroughTheNode(t *testing.T) {
 	}
 	if r := rmsOf(played); r < 300 {
 		t.Errorf("playback RMS %.0f is too quiet", r)
+	}
+}
+
+// logBuf is a goroutine-safe log sink.
+type logBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *logBuf) Write(p []byte) (int, error) { b.mu.Lock(); defer b.mu.Unlock(); return b.b.Write(p) }
+func (b *logBuf) String() string              { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+// echoCase is one way the echo test can go in the field.
+type echoCase struct {
+	name   string
+	parrot parrotOptions
+	// keyUp leaves the key-up delay at its default (the other cases turn
+	// it off to count frames from the step PTT keys).
+	keyUp bool
+	// after is how long after the greeting the local station keys, tx
+	// how long it talks, and gap a short carrier drop in the middle.
+	after, tx, gap time.Duration
+}
+
+// TestEchoLinkParrotCases runs the echo test the ways it can go wrong:
+// long transmissions, a playback faster than real time, a pause in the
+// playback, a transmission right after a greeting numbered above the
+// playback, a carrier that drops for a moment. The parrot must get all we
+// sent, and all of its playback must come out of the radio, with no
+// counter showing a loss.
+func TestEchoLinkParrotCases(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs in real time")
+	}
+	cases := []echoCase{
+		{name: "ten seconds in real time", after: 200 * time.Millisecond, tx: 10 * time.Second},
+		{name: "ten seconds played back in bursts", after: 200 * time.Millisecond, tx: 10 * time.Second,
+			parrot: parrotOptions{burst: 4}},
+		{name: "pause mid-playback", after: 200 * time.Millisecond, tx: 4 * time.Second,
+			parrot: parrotOptions{pauseAfter: 20, pause: time.Second}},
+		// The greeting ends at sequence 10, the playback starts at 0,
+		// within the reorder window, and comes soon after.
+		{name: "first transmission right after the greeting", after: 0, tx: 2 * time.Second,
+			parrot: parrotOptions{greetSeq0: 65536 + 10 - 36, quiet: 100 * time.Millisecond}},
+		{name: "carrier drops for a moment", after: 200 * time.Millisecond, tx: 4 * time.Second, gap: 60 * time.Millisecond},
+		{name: "default key-up delay", keyUp: true, after: 200 * time.Millisecond, tx: 3 * time.Second},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			runEchoCase(t, c)
+		})
+	}
+}
+
+func runEchoCase(t *testing.T, c echoCase) {
+	var logs logBuf
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+	edit := func(cfg *Config) {
+		if c.keyUp {
+			cfg.Station.Advanced.TxOnDelayMS = nil
+		}
+	}
+	g := newELRigWith(t, c.parrot, edit, log)
+	g.sel(mode.EchoLink, &mode.Target{ID: "*ECHOTEST*"})
+	if !g.liveUntil(5*time.Second, func() bool { return g.mode.State() == mode.StateConnected }) {
+		t.Fatalf("not connected: %+v", g.mode.Status())
+	}
+
+	// The greeting. Its first frames reach the radio only after the
+	// transmitter has been keyed for the key-up delay.
+	var pttAt, loudAt time.Time
+	talker := ""
+	watch := func() {
+		if pttAt.IsZero() && g.r.PTT() {
+			pttAt = g.clock()
+		}
+		if loudAt.IsZero() && countLoud(g.r.Played()) > 0 {
+			loudAt = g.clock()
+		}
+		if st := g.e.Status(); st.Mode != nil && st.Mode.Talker != nil {
+			talker = st.Mode.Talker.Callsign
+		}
+	}
+	if !g.liveUntil(5*time.Second, func() bool { watch(); return !loudAt.IsZero() }) {
+		t.Fatal("the greeting never reached the radio")
+	}
+	delay := time.Duration(0)
+	if c.keyUp {
+		delay = DefaultTxOnDelay
+	}
+	if d := loudAt.Sub(pttAt); d < delay || d > delay+3*audio.FrameDuration {
+		t.Errorf("greeting played %v after PTT, want %v", d, delay)
+	}
+	if !g.liveUntil(8*time.Second, func() bool { watch(); return !g.r.PTT() && !g.mode.Talking() }) {
+		t.Fatal("the radio stayed keyed after the greeting")
+	}
+	if talker != "*ECHOTEST*" {
+		t.Errorf("talker during the greeting %q, want *ECHOTEST*", talker)
+	}
+	greetLoud := countLoud(g.r.Played())
+	if want := c.parrot.greetFrames; want == 0 && (greetLoud < 146 || greetLoud > 150) {
+		t.Errorf("greeting: %d loud frames on the radio, want 150", greetLoud)
+	}
+	greeting := len(g.r.Played())
+	g.live(c.after, nil)
+
+	// The local station talks, the status shows it.
+	g.r.SetCarrier(true)
+	k := 0
+	feed := func() (audio.Frame, bool) { k++; return sine(3277, k), true }
+	half := c.tx / 2
+	g.live(half, feed)
+	if st := g.e.Status(); !st.Radio.RxActive {
+		t.Errorf("status does not show the local transmission: %+v", st.Radio)
+	}
+	if c.gap > 0 {
+		g.r.SetCarrier(false)
+		g.live(c.gap, nil)
+		g.r.SetCarrier(true)
+	}
+	g.live(c.tx-half, feed)
+	g.r.SetCarrier(false)
+	sentFrames := int(c.tx / audio.FrameDuration)
+
+	// The parrot gets all of it and plays it back.
+	talker = ""
+	if !g.liveUntil(c.tx+5*time.Second, func() bool { watch(); _, _, _, n := g.p.recording(); return n >= 1 }) {
+		_, seqs, _, _ := g.p.recording()
+		t.Fatalf("the parrot played nothing back; it got %d packets", len(seqs))
+	}
+	rec, seqs, bad, _ := g.p.recording()
+	if bad != 0 {
+		t.Errorf("%d bad packets or frames at the parrot", bad)
+	}
+	for i := 1; i < len(seqs); i++ {
+		if seqs[i] != seqs[i-1]+1 {
+			t.Errorf("sequence %d after %d", seqs[i], seqs[i-1])
+		}
+	}
+	if d := len(rec) - sentFrames; d < -4 || d > 4 {
+		t.Errorf("parrot recorded %d frames, want %d", len(rec), sentFrames)
+	}
+	if !g.liveUntil(c.tx+5*time.Second, func() bool {
+		watch()
+		return !g.r.PTT() && !g.mode.Talking() && len(g.mode.Recv()) == 0
+	}) {
+		t.Fatal("the radio stayed keyed after the playback")
+	}
+	if talker != "*ECHOTEST*" {
+		t.Errorf("talker during the playback %q, want *ECHOTEST*", talker)
+	}
+	played := countLoud(g.r.Played()[greeting:])
+	if d := played - len(rec); d < -4 || d > 4 {
+		t.Errorf("playback: %d loud frames on the radio, the parrot sent %d", played, len(rec))
+	}
+	st := g.e.Status()
+	if l := st.Mode.Link; l == nil || l.Late != 0 || l.Dropped != 0 || l.ParseErrors != 0 || st.Radio.NetDropped != 0 {
+		t.Errorf("counters show a loss: link %+v, radio %+v", l, st.Radio)
+	}
+	// One line per received transmission: a pause longer than the talk
+	// hang splits the playback in two.
+	wants := []int{len(seqs)}
+	if n := c.parrot.pauseAfter; c.parrot.pause > 0 {
+		wants = []int{n, len(seqs) - n}
+	}
+	for _, n := range wants {
+		want := fmt.Sprintf(`msg="echolink: received %d packets (late 0, dropped 0)" station=*ECHOTEST*`, n)
+		if out := logs.String(); !strings.Contains(out, want) {
+			t.Errorf("log lacks %s:\n%s", want, out)
+		}
 	}
 }

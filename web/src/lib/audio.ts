@@ -2,7 +2,8 @@
 // audio.test.ts. The limits match Validate in internal/native/node/config.go; 0 or unset means the node's default.
 import type { Sa818Filter, Station, StationAdvanced, StationId } from './types';
 
-export interface NumField { key: string; label: string; unit: string; min: number; max: number; step: number; def: number; help: string }
+/** keepZero: 0 is a value of its own (off), saved as such; only empty is the node's default. */
+export interface NumField { key: string; label: string; unit: string; min: number; max: number; step: number; def: number; help: string; keepZero?: boolean }
 
 /** Defaults of the node (config.go and audio/agc.go). */
 export const AGC_DEFAULTS = { modeAgc: true, radioAgc: false, preEmphasis: false, deEmphasis: false } as const;
@@ -15,9 +16,11 @@ export const GAIN_FIELDS: NumField[] = [
   { key: 'rxGainDb', label: 'Receive gain', unit: 'dB', min: -20, max: 20, step: 0.5, def: 0, help: 'Radio to network, -20 to 20. Applied before the AGC; peaks are soft-limited, never wrapped.' },
   { key: 'txGainDb', label: 'Transmit gain', unit: 'dB', min: -20, max: 20, step: 0.5, def: 0, help: 'Network to radio, -20 to 20. Applied before the AGC.' },
 ];
-/** Delays: how long a carrier must last before it counts as a receive, and extra time the transmitter stays keyed. */
+/** Delays: how long a carrier must last before it counts as a receive, how long the transmitter is keyed before network
+ * audio plays, and extra time the transmitter stays keyed. */
 export const DELAY_FIELDS: NumField[] = [
   { key: 'rxOnDelayMs', label: 'Receive-on delay', unit: 'ms', min: 0, max: 1000, step: 10, def: 0, help: 'A carrier must last this long before the node treats it as a receive. The first part of the audio is dropped. 0 to 1000.' },
+  { key: 'txOnDelayMs', label: 'Key-up delay', unit: 'ms', min: 0, max: 1000, step: 10, def: 200, keepZero: true, help: 'Network audio waits this long after the transmitter keys, so the radio is up before the first word. Empty is 200; 0 turns it off. 0 to 1000.' },
   { key: 'txOffDelayMs', label: 'Transmit-off delay', unit: 'ms', min: 0, max: 2000, step: 10, def: 0, help: 'Extra time the transmitter stays keyed after the hang time, 0 to 2000.' },
 ];
 
@@ -59,14 +62,15 @@ export function audioError(adv: StationAdvanced, id: StationId): string {
   return '';
 }
 
-/** Copy of o with the number keys cleaned: empty and 0 are left out (the node's default), the rest are numbers. */
+/** Copy of o with the number keys cleaned: empty and 0 are left out (the node's default), the rest are numbers. A keepZero
+ * field keeps 0. */
 function cleanNums<T extends Record<string, unknown>>(o: T, fields: NumField[]): T {
   const out: Record<string, unknown> = { ...o };
   for (const f of fields) {
     const v = out[f.key];
     if (!isSet(v)) { delete out[f.key]; continue; }
     const n = Number(typeof v === 'string' ? v.trim() : v);
-    if (n === 0 || !Number.isFinite(n)) delete out[f.key]; else out[f.key] = n;
+    if ((n === 0 && !f.keepZero) || !Number.isFinite(n)) delete out[f.key]; else out[f.key] = n;
   }
   return out as T;
 }

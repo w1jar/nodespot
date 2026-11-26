@@ -243,8 +243,26 @@ func TestBase(t *testing.T) {
 	if f := <-b.Recv(); f[0] != 5 {
 		t.Fatalf("oldest frame %d, want 5 (dropped oldest)", f[0])
 	}
+	if b.Overflow() != 5 {
+		t.Fatalf("overflow %d, want 5", b.Overflow())
+	}
 	b.Flush()
 	if len(b.Recv()) != 0 {
 		t.Fatal("Flush")
+	}
+}
+
+func TestBaseInitBuffer(t *testing.T) {
+	var b Base
+	b.InitBuffer("echolink", "EchoLink", nil, 500)
+	for i := 0; i < 500; i++ {
+		b.Deliver(audio.Frame{})
+	}
+	if len(b.Recv()) != 500 || b.Overflow() != 0 {
+		t.Fatalf("queued %d, overflow %d; want 500 and 0", len(b.Recv()), b.Overflow())
+	}
+	b.Deliver(audio.Frame{})
+	if b.Overflow() != 1 {
+		t.Fatalf("overflow %d, want 1", b.Overflow())
 	}
 }

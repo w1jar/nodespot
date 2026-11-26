@@ -54,6 +54,9 @@ export interface NodeJSON {
   callsign?: string; started: string;
   radio: {
     present: boolean; ptt: boolean; cos: boolean; rxActive?: boolean; rxLocked?: boolean; txLocked?: boolean;
+    /** Network frames thrown away because a local station had the receiver or the transmit timeout had locked the
+     * network out; restarts when the active mode changes. */
+    netDropped?: number;
     /** The preset in use and the interface found (chip name, USB id). */
     preset?: string; chip?: string; usbId?: string; product?: string; detected?: boolean; sa818?: boolean;
     level?: InputLevel;
@@ -124,6 +127,8 @@ export interface StationAdvanced {
   preEmphasis?: boolean; deEmphasis?: boolean; plFilter?: boolean;
   /** Carrier debounce before a receive counts (0 to 1000 ms) and extra hang time (0 to 2000 ms). */
   rxOnDelayMs?: number; txOffDelayMs?: number;
+  /** Key-up delay: network audio waits this long after PTT (0 to 1000 ms); unset is 200, 0 is off. */
+  txOnDelayMs?: number;
   [key: string]: unknown;
 }
 export interface Station {

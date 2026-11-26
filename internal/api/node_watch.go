@@ -246,13 +246,18 @@ func (s *Server) refreshModes(ctx context.Context) {
 // nodeEvent folds one event of the node's stream.
 func (s *Server) nodeEvent(ctx context.Context, ev node.Event) {
 	switch ev.Kind {
-	case node.EventPTT, node.EventCOS:
+	case node.EventPTT, node.EventCOS, node.EventRx:
 		if ev.On != nil {
 			s.nw.mu.Lock()
-			if ev.Kind == node.EventPTT {
+			switch ev.Kind {
+			case node.EventPTT:
 				s.nw.st.Radio.PTT = *ev.On
-			} else {
+			case node.EventCOS:
 				s.nw.st.Radio.COS = *ev.On
+			default:
+				// A local station's audio started or stopped going to
+				// the active mode: the Dashboard's "Local station".
+				s.nw.st.Radio.RxActive = *ev.On
 			}
 			s.nw.mu.Unlock()
 			s.broadcastNodeStatus()

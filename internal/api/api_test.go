@@ -1345,3 +1345,40 @@ func TestRadioInputLevel(t *testing.T) {
 	}
 	expectErr(t, e, "viewer", "GET", "/api/radio/input", nil, 403, "forbidden")
 }
+
+// TestSSELocalStation: the Dashboard's "Local station" follows the node's
+// rxActive as it changes, not only when something else refreshes the
+// status.
+func TestSSELocalStation(t *testing.T) {
+	e := newEnv(t, opts{})
+	if c := e.do("op", "POST", "/api/select", map[string]string{"mode": "allstar", "target": "2000"}, nil); c != 200 {
+		t.Fatalf("select: %d", c)
+	}
+	e.waitNode("connected", func(n api.NodeJSON) bool {
+		return n.Active == mode.AllStar && n.Mode != nil && n.Mode.State == mode.StateConnected
+	})
+	time.Sleep(500 * time.Millisecond) // the select's own refreshes are over
+	s := e.stream("admin")
+	s.first()
+	// The rig's engine has no clock of its own: step it in real time.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		tk := time.NewTicker(20 * time.Millisecond)
+		defer tk.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case now := <-tk.C:
+				e.node.Engine.Step(now)
+			}
+		}
+	}()
+	e.node.Radio.SetCarrier(true)
+	s.wait(func(ev sseEvent) bool { return ev.name == "node" && strings.Contains(ev.data, `"rxActive":true`) })
+	e.node.Radio.SetCarrier(false)
+	s.wait(func(ev sseEvent) bool {
+		return ev.name == "node" && strings.Contains(ev.data, `"cos":false`) && !strings.Contains(ev.data, `"rxActive":true`)
+	})
+}

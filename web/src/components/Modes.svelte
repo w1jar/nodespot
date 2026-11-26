@@ -265,7 +265,7 @@
               </div>
             </div>
           </div>
-          {#if isActive && st?.link}<p class="break-words font-mono text-xs text-muted" data-testid="link-stats" title={linkStatsTitle(st.link)}>{linkStatsText(st.link)}</p>{/if}
+          {#if isActive && st?.link}<p class="break-words font-mono text-xs text-muted" data-testid="link-stats" title={linkStatsTitle(st.link)}>{linkStatsText(st.link, app.node?.radio.netDropped)}</p>{/if}
           {#if isActive && st?.registration && !st.registration.registered}<p class="text-xs text-warn">Not registered yet{st.registration.lastError ? `: ${st.registration.lastError}` : ''}</p>{/if}
           {#if sel === 'echotest'}
             <p class="text-sm text-muted">{isActive ? 'Key the radio and talk, then unkey: the node plays your recording back.' : 'Start it, key the radio, talk and unkey: the node plays your recording back.'}</p>
