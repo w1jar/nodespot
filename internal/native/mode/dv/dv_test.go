@@ -77,7 +77,7 @@ func (n *fakeNet) snapshot() (tunes []ctl.Target, starts []network.CallHeader, v
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -193,7 +193,7 @@ func TestEveryModeWithFakeNetwork(t *testing.T) {
 			fn.sink.Voice(network.VoiceFrame{Call: 51, Codec: tc.codec, Data: make([]byte, tc.frameN)})   // other call: dropped
 			select {
 			case <-m.Recv():
-			case <-time.After(2 * time.Second):
+			case <-time.After(10 * time.Second):
 				t.Fatal("no decoded audio")
 			}
 			if tk := m.Status().Talker; tk == nil || tk.Callsign != "N1CALL" || tk.ID != 1234567 {

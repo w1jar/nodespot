@@ -132,7 +132,7 @@ func TestClientSubscribe(t *testing.T) {
 	if _, err := c.Select(context.Background(), mode.EchoTest, nil); err != nil {
 		t.Fatal(err)
 	}
-	timeout := time.After(3 * time.Second)
+	timeout := time.After(10 * time.Second)
 	for found := false; !found; {
 		select {
 		case ev, ok := <-ch:

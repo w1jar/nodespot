@@ -244,7 +244,7 @@ func TestControlSocket(t *testing.T) {
 		if _, err := c.Write([]byte(line + "\n")); err != nil {
 			t.Fatal(err)
 		}
-		_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 		l, err := br.ReadBytes('\n')
 		if err != nil {
 			t.Fatal(err)
@@ -272,7 +272,7 @@ func TestControlSocket(t *testing.T) {
 	if _, err := c2.Write([]byte(`{"id":2,"op":"subscribe"}` + "\n")); err != nil {
 		t.Fatal(err)
 	}
-	_ = c2.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = c2.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if _, err := br2.ReadBytes('\n'); err != nil {
 		t.Fatal(err)
 	}

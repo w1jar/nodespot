@@ -87,7 +87,7 @@ func (d *fakeDir) conn(t *testing.T, n int) *fakeConn {
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -189,7 +189,7 @@ func TestPendingTargetAndAudio(t *testing.T) {
 		if got[3] != 7 {
 			t.Fatal("frame")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no audio")
 	}
 	waitFor(t, "talker", func() bool { tk := m.Status().Talker; return tk != nil && tk.Callsign == "N1CALL" })

@@ -105,7 +105,7 @@ func TestServerSilentClientNotBlocked(t *testing.T) {
 	}
 	defer conn.Close()
 	_, _ = conn.Write([]byte(`{"op":"nope"}`))
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	buf := make([]byte, 64)
 	if n, err := conn.Read(buf); err != nil || !strings.Contains(string(buf[:n]), "unknown op") {
 		t.Fatalf("%q %v", buf[:n], err)

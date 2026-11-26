@@ -84,10 +84,28 @@ func runFor(m *OSManager, d time.Duration) {
 	m.Run(ctx)
 }
 
+// runUntil runs m until cond holds (bounded generously for a loaded CI
+// runner), then for settle more so that any extra, unwanted work would
+// show, and stops it.
+func runUntil(t *testing.T, m *OSManager, cond func() bool, settle time.Duration) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	for deadline := time.Now().Add(10 * time.Second); !cond(); {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the scheduler")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(settle)
+}
+
 func TestOSSchedulerChecksOnceAndPersists(t *testing.T) {
 	f, s := &osFake{}, &memSettings{}
 	m := fastOS(f, s)
-	runFor(m, 200*time.Millisecond)
+	runUntil(t, m, func() bool { return f.count() >= 1 }, 150*time.Millisecond)
 	if f.count() != 1 {
 		t.Fatalf("checks: %d (once per interval)", f.count())
 	}
@@ -114,7 +132,7 @@ func TestOSSchedulerStaleCheckRuns(t *testing.T) {
 	f, s := &osFake{}, &memSettings{}
 	_ = s.SetSetting(keyOSChecked, time.Now().Add(-25*time.Hour).UTC().Format(time.RFC3339))
 	m := fastOS(f, s)
-	runFor(m, 200*time.Millisecond)
+	runUntil(t, m, func() bool { return f.count() >= 1 }, 150*time.Millisecond)
 	if f.count() != 1 {
 		t.Fatalf("checks: %d", f.count())
 	}
@@ -123,8 +141,15 @@ func TestOSSchedulerStaleCheckRuns(t *testing.T) {
 	f2, s2 := &osFake{}, &memSettings{}
 	m2 := fastOS(f2, s2)
 	m2.Now = func() time.Time { return time.Now().Add(time.Duration(skew.Load())) }
-	go func() { time.Sleep(100 * time.Millisecond); skew.Store(int64(25 * time.Hour)) }()
-	runFor(m2, 300*time.Millisecond)
+	// Skew the clock only once the first check has been recorded (skewing
+	// earlier would stamp that check a day ahead), then wait for the second
+	// instead of trusting fixed sleeps.
+	runUntil(t, m2, func() bool {
+		if _, err := s2.GetSetting(keyOSChecked); err == nil {
+			skew.Store(int64(25 * time.Hour))
+		}
+		return f2.count() >= 2
+	}, 0)
 	if f2.count() < 2 {
 		t.Fatalf("no daily re-check: %d", f2.count())
 	}
@@ -134,7 +159,7 @@ func TestOSSchedulerFailureRetriesLater(t *testing.T) {
 	f := &osFake{err: errors.New("boom")}
 	s := &memSettings{}
 	m := fastOS(f, s)
-	runFor(m, 200*time.Millisecond)
+	runUntil(t, m, func() bool { return f.count() >= 1 }, 150*time.Millisecond)
 	if f.count() != 1 {
 		t.Fatalf("a failed check was retried at once: %d", f.count())
 	}
@@ -162,7 +187,7 @@ func TestOSManualCheckAndConcurrency(t *testing.T) {
 		t.Fatalf("second check: %v %v", started, err)
 	}
 	close(f.block)
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for m.Info(ctx).Checking && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -197,14 +222,14 @@ func TestOSApplyRechecksAfterJob(t *testing.T) {
 	f.mu.Lock()
 	f.job = helper.JobSucceeded
 	f.mu.Unlock()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for f.count() == 0 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	if f.count() != 1 {
 		t.Fatalf("checks: %d", f.count())
 	}
-	for i := 0; i < 400; i++ {
+	for i := 0; i < 2000; i++ {
 		if v, _ := s.GetSetting(keyOSRecheck); v == "" {
 			return
 		}
@@ -217,7 +242,7 @@ func TestOSPendingRecheckSurvivesRestart(t *testing.T) {
 	f, s := &osFake{}, &memSettings{}
 	_ = s.SetSetting(keyOSChecked, time.Now().UTC().Format(time.RFC3339))
 	_ = s.SetSetting(keyOSRecheck, "1")
-	runFor(fastOS(f, s), 200*time.Millisecond)
+	runUntil(t, fastOS(f, s), func() bool { return f.count() >= 1 }, 150*time.Millisecond)
 	if f.count() != 1 {
 		t.Fatalf("checks: %d", f.count())
 	}

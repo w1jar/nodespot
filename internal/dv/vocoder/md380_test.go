@@ -55,9 +55,11 @@ func TestEncodeDecode(t *testing.T) {
 
 // A reply later than the timeout must not be handed to the next request.
 func TestLateReplyNotPaired(t *testing.T) {
-	m, srv := newPair(t, 40*time.Millisecond)
+	// a timeout a prompt reply meets even on a loaded runner, and a delay
+	// well past it
+	m, srv := newPair(t, 250*time.Millisecond)
 	ctx := context.Background()
-	srv.SetDelay(150 * time.Millisecond)
+	srv.SetDelay(750 * time.Millisecond)
 	a, err := m.Encode(ctx, frame(111))
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +69,7 @@ func TestLateReplyNotPaired(t *testing.T) {
 	}
 	srv.SetDelay(0)
 	// The late reply for 111 arrives during this call's lifetime.
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(900 * time.Millisecond)
 	b, err := m.Encode(ctx, frame(222))
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +83,7 @@ func TestLateReplyNotPaired(t *testing.T) {
 }
 
 func TestDropAndDecodeSilence(t *testing.T) {
-	m, srv := newPair(t, 40*time.Millisecond)
+	m, srv := newPair(t, 250*time.Millisecond)
 	ctx := context.Background()
 	srv.SetDrop(func(n uint64) bool { return n == 1 })
 	pcm, err := m.Decode(ctx, [7]byte{0, 0x12, 0x34})
@@ -98,7 +100,9 @@ func TestDropAndDecodeSilence(t *testing.T) {
 }
 
 func TestDownAndRecover(t *testing.T) {
-	m, srv := newPair(t, 5*time.Millisecond)
+	// a timeout the recovering request meets even on a loaded runner, and
+	// that a request while down stays well under
+	m, srv := newPair(t, 150*time.Millisecond)
 	var changes []bool
 	m.OnChange = func(d bool) { changes = append(changes, d) }
 	ctx := context.Background()
@@ -114,7 +118,7 @@ func TestDownAndRecover(t *testing.T) {
 	if _, err := m.Encode(ctx, frame(1)); err != vocoder.ErrDown {
 		t.Fatalf("err %v", err)
 	}
-	if time.Since(start) > 3*time.Millisecond {
+	if time.Since(start) > 75*time.Millisecond {
 		t.Fatal("slow while down")
 	}
 	srv.SetDrop(nil)

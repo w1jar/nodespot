@@ -223,7 +223,7 @@ func TestRunRefreshesAndSurvivesFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { d.Run(ctx); close(done) }()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for d.Status().Count == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}

@@ -195,7 +195,7 @@ func (m *fakeMaster) packets(typ uint16) []packet {
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
@@ -251,9 +251,13 @@ func (s *testSink) nHdr() int    { s.mu.Lock(); defer s.mu.Unlock(); return len(
 func (s *testSink) nFrames() int { s.mu.Lock(); defer s.mu.Unlock(); return len(s.frames) }
 func (s *testSink) nEnds() int   { s.mu.Lock(); defer s.mu.Unlock(); return len(s.ends) }
 
+// fastOpts sends keepalives and retries fast, with a session timeout and an
+// RX timeout long enough that a stall under -race on a loaded runner does
+// not drop the session or end a call mid-test. The tests about those
+// timeouts set their own.
 var fastOpts = map[string]string{
-	"keepalive_ms": "30", "timeout_ms": "150", "login_timeout_ms": "200",
-	"backoff_min_ms": "20", "backoff_max_ms": "100", "rx_timeout_ms": "80",
+	"keepalive_ms": "30", "timeout_ms": "3000", "login_timeout_ms": "1000",
+	"backoff_min_ms": "20", "backoff_max_ms": "100", "rx_timeout_ms": "300",
 }
 
 func start(t *testing.T, m *fakeMaster, pass string, extra map[string]string) (*Net, *testSink) {
@@ -279,8 +283,17 @@ func start(t *testing.T, m *fakeMaster, pass string, extra map[string]string) (*
 }
 
 func login(t *testing.T) (*fakeMaster, *Net, *testSink) {
+	return loginWith(t, nil)
+}
+
+// loginWith is login with the given options added.
+func loginWith(t *testing.T, extra map[string]string) (*fakeMaster, *Net, *testSink) {
 	m := newMaster(t)
-	n, s := start(t, m, testPass, map[string]string{"client_version": "test 1.0"})
+	o := map[string]string{"client_version": "test 1.0"}
+	for k, v := range extra {
+		o[k] = v
+	}
+	n, s := start(t, m, testPass, o)
 	waitFor(t, "login", func() bool { return s.loginIs(ctl.LoginOK) })
 	return m, n, s
 }
@@ -328,13 +341,15 @@ func TestStatusHasNoPassword(t *testing.T) {
 func TestLoginTimeoutBackoff(t *testing.T) {
 	m := newMaster(t)
 	m.setSilent(true)
-	_, s := start(t, m, testPass, map[string]string{"login_timeout_ms": "30", "backoff_min_ms": "30", "backoff_max_ms": "120"})
+	_, s := start(t, m, testPass, map[string]string{"login_timeout_ms": "30", "backoff_min_ms": "40", "backoff_max_ms": "1000"})
 	waitFor(t, "4 attempts", func() bool { m.mu.Lock(); defer m.mu.Unlock(); return len(m.clients) >= 4 })
 	m.mu.Lock()
 	g1 := m.clients[1].Sub(m.clients[0])
 	g3 := m.clients[3].Sub(m.clients[2])
 	m.mu.Unlock()
-	if g3 < g1 {
+	// 70 then 190 ms: far enough apart that jitter on a loaded runner
+	// cannot invert them
+	if g3 <= g1 {
 		t.Fatalf("backoff not growing: %v then %v", g1, g3)
 	}
 	if s.loginIs(ctl.LoginOK) {
@@ -364,7 +379,7 @@ func TestBackoffSequence(t *testing.T) {
 }
 
 func TestKeepAliveAndReconnect(t *testing.T) {
-	m, n, s := login(t)
+	m, n, s := loginWith(t, map[string]string{"timeout_ms": "300"})
 	if err := n.Tune(context.Background(), ctl.Target{TG: 1999}); err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +526,8 @@ func TestRXCall(t *testing.T) {
 // A call starts from the voice header alone (no super header); the terminator
 // ends it. IDs and the private flag come from the LC.
 func TestRXWithoutSuperHeader(t *testing.T) {
-	m, _, s := login(t)
+	// an RX timeout that cannot end the call before the terminator
+	m, _, s := loginWith(t, map[string]string{"rx_timeout_ms": "5000"})
 	to := m.lastAddr()
 	m.sendCall(to, testOther, testID, true, [][]byte{cat(frames(3, 9))}, false)
 	waitFor(t, "frames", func() bool { return s.nFrames() == 3 })

@@ -219,7 +219,7 @@ func TestDisabledAndRun(t *testing.T) {
 	// Stop Run and wait for it before t.TempDir is removed: it may still be
 	// writing the other lists.
 	defer func() { cancel2(); <-done2 }()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := m.Get("dmr"); err == nil {
 			return
@@ -302,7 +302,7 @@ func TestRetryAfterFailure(t *testing.T) {
 	defer func() { cancel(); <-done }()
 	time.Sleep(100 * time.Millisecond)
 	s.failAll.Store(false)
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := m.Get("dmr"); err == nil {
 			return

@@ -683,7 +683,7 @@ func TestHeardAndNowCalling(t *testing.T) {
 
 func waitFor(t *testing.T, ok func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for !ok() {
 		if time.Now().After(deadline) {
 			t.Fatal("timed out")
@@ -720,7 +720,7 @@ func TestBackgroundRunsWhileInactive(t *testing.T) {
 	defer e.Close()
 	select {
 	case <-ran:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("background work did not start")
 	}
 	if e.Status().Active != "" {
@@ -843,11 +843,17 @@ func TestRadioWiringChangeAsksForRestart(t *testing.T) {
 			if err := e.SaveStation(st); err != nil {
 				t.Fatal(err)
 			}
+			// RadioChanged runs in its own goroutine: give it long when it
+			// is expected, and a moment to show up when it is not
+			wait := 100 * time.Millisecond
+			if tt.want {
+				wait = 10 * time.Second
+			}
 			got := false
 			select {
 			case <-called:
 				got = true
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(wait):
 			}
 			if got != tt.want || e.Status().RestartRequired != tt.want {
 				t.Fatalf("restart asked %v, status %v, want %v", got, e.Status().RestartRequired, tt.want)

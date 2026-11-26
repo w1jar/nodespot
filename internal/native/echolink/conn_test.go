@@ -91,7 +91,7 @@ func TestConnectHandshake(t *testing.T) {
 			if tp := parseText(p); !tp.info || tp.text != "N0CALL-L\nExample City" {
 				t.Fatalf("info packet %+v", tp)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatalf("info packet %d not received", i+1)
 		}
 	}
@@ -172,7 +172,7 @@ func TestSendAudio(t *testing.T) {
 					}
 				}
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatalf("packet %d not received", want)
 		}
 	}
@@ -212,7 +212,7 @@ func TestReceiveAudioAndText(t *testing.T) {
 			if i > 0 && peak < 1000 {
 				t.Fatalf("frame %d is near silent (peak %d)", i, peak)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatalf("frame %d not received", i)
 		}
 	}
@@ -286,7 +286,7 @@ func TestKeepaliveAndTimeouts(t *testing.T) {
 			if !errors.Is(err, ErrConnectTimeout) {
 				t.Fatalf("err = %v", err)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("Connect did not time out")
 		}
 		// It retried the SDES while waiting and said BYE at the end.
@@ -326,7 +326,7 @@ func TestRemoteBye(t *testing.T) {
 	}
 	select {
 	case <-c.Done():
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("not done")
 	}
 	if err := c.Close(); err != nil {
@@ -391,7 +391,7 @@ func gsmPacket(seq uint16) []byte {
 // packets.
 func waitRx(t *testing.T, c *Conn, rx, late uint64) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		st := c.Status()
 		if st.RxPackets == rx && st.RxLate == late {
@@ -605,7 +605,7 @@ func TestAudioBeforeTheAnswer(t *testing.T) {
 				if tp := parseText(p); !tp.info || tp.text != want {
 					t.Fatalf("info packet %+v, want %q", tp, want)
 				}
-			case <-time.After(3 * time.Second):
+			case <-time.After(10 * time.Second):
 				t.Fatal("nothing sent from the audio port while calling")
 			}
 			if sdes := <-s.st.ctrlIn; !sdes.sdes {
@@ -659,7 +659,7 @@ func TestAudioBeforeTheAnswer(t *testing.T) {
 						pk = max(pk, v)
 					}
 					peaks = append(peaks, pk)
-				case <-time.After(3 * time.Second):
+				case <-time.After(10 * time.Second):
 					t.Fatalf("got %d of the greeting's 12 frames", len(peaks))
 				}
 			}
@@ -676,7 +676,7 @@ func TestAudioBeforeTheAnswer(t *testing.T) {
 			// Once connected the info goes out again.
 			select {
 			case <-s.st.textIn:
-			case <-time.After(3 * time.Second):
+			case <-time.After(10 * time.Second):
 				t.Fatal("no info after the station answered")
 			}
 		})

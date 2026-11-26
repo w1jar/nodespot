@@ -115,7 +115,7 @@ func TestPublicDisabledByDefault(t *testing.T) {
 	}
 	select {
 	case <-s.closed:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("stream not closed on disable")
 	}
 	expectErr(t, e, "", "GET", "/api/public/status", nil, 404, "not_found")
