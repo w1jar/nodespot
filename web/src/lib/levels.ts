@@ -49,3 +49,20 @@ export function reportSummary(r: EchoReport | undefined): string {
   const w = r.warnings?.length ? r.warnings.map(warningText).join(' ') : 'Levels look good.';
   return `Peak ${dbText(r.peakDb)}, RMS ${dbText(r.rmsDb)}, ${durationText(r.durationMs)}. ${w}`;
 }
+
+/** The node reports and accepts mixer levels as fractions 0..1 (-1 means the sound chip has no such control). The page shows percent. */
+export const levelAvailable = (v: number): boolean => Number.isFinite(v) && v >= 0;
+
+/** A node level (0..1) as a whole percent for the slider and label; unavailable or not finite counts as 0. */
+export function levelPercent(v: number): number {
+  return levelAvailable(v) ? Math.min(100, Math.round(v * 100)) : 0;
+}
+
+/** The slider's percent (0..100) as the fraction the node accepts; out of range values are clamped. */
+export function levelFraction(pct: number): number {
+  if (!Number.isFinite(pct)) return 0;
+  return Math.min(100, Math.max(0, Math.round(pct))) / 100;
+}
+
+/** The label text for a node level: "60%", or "n/a" when the chip has no such control. */
+export const levelText = (v: number): string => (levelAvailable(v) ? `${levelPercent(v)}%` : 'n/a');

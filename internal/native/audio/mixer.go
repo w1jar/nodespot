@@ -56,8 +56,8 @@ func (m *Mixer) AddInput(name string, gainDb float64, activeHang int) (*Input, e
 }
 
 // AddOutput registers an output. It never hears the input of the same name,
-// nor any input listed in exclude (for example the node keeps its ID and
-// courtesy tone inputs on the RF output only by excluding them elsewhere).
+// nor any input listed in exclude (for example the node keeps its ID
+// input on the RF output only by excluding them elsewhere).
 func (m *Mixer) AddOutput(name string, gainDb float64, exclude ...string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

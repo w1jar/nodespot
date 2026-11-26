@@ -65,7 +65,7 @@ const HOSTS: Record<string, { value: string; name: string; detail?: string; addr
 };
 
 // ---- Station and node state.
-const station: Record<string, any> & { callsign: string; radio: Record<string, any>; id: Record<string, any>; advanced: Record<string, any> } = { callsign: 'N0CALL', dmrId: 1234567, radio: { frequencyMHz: 146.52, tone: '100.0', squelch: 4, narrow: false, rxVolume: 60, txVolume: 55, preset: '', sa818Port: '/dev/ttyUSB0' }, id: { enabled: true, intervalS: 600, wpm: 20, pitchHz: 800, levelDb: -12 }, advanced: { hangMs: 600, modeAgc: true } };
+const station: Record<string, any> & { callsign: string; radio: Record<string, any>; id: Record<string, any>; advanced: Record<string, any> } = { callsign: 'N0CALL', dmrId: 1234567, radio: { frequencyMHz: 146.52, tone: '100.0', squelch: 4, narrow: false, rxVolume: 0.6, txVolume: 0.55, preset: '', sa818Port: '/dev/ttyUSB0' }, id: { enabled: true, intervalS: 600, wpm: 20, pitchHz: 800, levelDb: -12 }, advanced: { hangMs: 600, modeAgc: true } };
 // What the SA818's filters were last programmed to; unknown until the Program button is used.
 let programmedFilters: { emphasis: boolean; highPass: boolean; lowPass: boolean; at: string } | null = null;
 let stationSet = process.env.MOCK_STATION_SETUP !== '1';
@@ -402,7 +402,8 @@ export function mockApi(): Plugin {
         }
         if (p === '/heard' && m === 'GET') return json(res, 200, heardJSON().slice(0, +(url.searchParams.get('limit') ?? 50)));
         if (p === '/radio' && (m === 'GET' || m === 'PUT')) {
-          if (m === 'PUT') { if (!isAdmin) return forbid(); if (typeof body.rxVolume === 'number') station.radio.rxVolume = body.rxVolume; if (typeof body.txVolume === 'number') station.radio.txVolume = body.txVolume; if (typeof body.rxBoost === 'boolean') station.radio.rxBoost = body.rxBoost; }
+          if (m === 'PUT') { if (!isAdmin) return forbid(); for (const k of ['rxVolume', 'txVolume']) if (body[k] != null && !(typeof body[k] === 'number' && body[k] >= 0 && body[k] <= 1)) return err(res, 400, `${k} must be 0 to 1`, 'bad_request');
+            if (typeof body.rxVolume === 'number') station.radio.rxVolume = body.rxVolume; if (typeof body.txVolume === 'number') station.radio.txVolume = body.txVolume; if (typeof body.rxBoost === 'boolean') station.radio.rxBoost = body.rxBoost; }
           if (!radioPresent) return err(res, 404, 'this node has no radio', 'no_radio');
           return json(res, 200, radioLevels());
         }

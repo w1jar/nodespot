@@ -5,7 +5,7 @@ import type { Sa818Filter, Station, StationAdvanced, StationId } from './types';
 export interface NumField { key: string; label: string; unit: string; min: number; max: number; step: number; def: number; help: string }
 
 /** Defaults of the node (config.go and audio/agc.go). */
-export const AGC_DEFAULTS = { modeAgc: true, radioAgc: false, courtesyTone: true, preEmphasis: false, deEmphasis: false } as const;
+export const AGC_DEFAULTS = { modeAgc: true, radioAgc: false, preEmphasis: false, deEmphasis: false } as const;
 
 /** The SA818 filter flags: each is on unless set to false (the node's default, 1,1,1). */
 export const SA818_FILTER_KEYS = ['emphasis', 'highPass', 'lowPass'] as const;

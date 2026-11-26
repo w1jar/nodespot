@@ -29,7 +29,7 @@ type rig struct {
 
 func off() *bool { b := false; return &b }
 
-// quietConfig is a station with the AGCs, ID and courtesy tone off, so a
+// quietConfig is a station with the AGCs and ID off, so a
 // test turns on only what it checks.
 func quietConfig() *Config {
 	return &Config{
@@ -37,7 +37,7 @@ func quietConfig() *Config {
 		Station: Station{
 			Callsign: "N0CALL",
 			ID:       IDConfig{Enabled: off()},
-			Advanced: Advanced{CourtesyTone: off(), ModeAGC: off(), RadioAGC: off()},
+			Advanced: Advanced{ModeAGC: off(), RadioAGC: off()},
 		},
 		Modes: map[string]mode.Settings{
 			mode.AllStar: {Values: map[string]string{"node": "1999"}},
@@ -403,10 +403,8 @@ func TestReceiverHasPriority(t *testing.T) {
 	}
 }
 
-func TestCourtesyTone(t *testing.T) {
-	cfg := quietConfig()
-	cfg.Station.Advanced.CourtesyTone = nil // on
-	g := newRig(t, cfg)
+func TestNoKeyAfterLocalTransmission(t *testing.T) {
+	g := newRig(t, quietConfig())
 	g.sel(mode.BM, nil)
 	bm := g.fake(mode.BM)
 	g.r.SetCarrier(true)
@@ -416,31 +414,14 @@ func TestCourtesyTone(t *testing.T) {
 	}
 	g.r.SetCarrier(false)
 	g.run(2 * time.Second)
-	if keyings(g.r.PTTLog()) != 1 || g.r.PTT() {
-		t.Fatalf("PTT log %v, want one keying for the tone", g.r.PTTLog())
+	if keyings(g.r.PTTLog()) != 0 || g.r.PTT() {
+		t.Fatalf("PTT log %v, want the radio never keyed", g.r.PTTLog())
 	}
-	if countLoud(g.r.Played()) == 0 {
-		t.Fatal("no courtesy tone played")
-	}
-	for _, f := range bm.Sent() {
-		if f[0] != 700 {
-			t.Fatal("the courtesy tone reached the mode")
-		}
+	if countLoud(g.r.Played()) != 0 {
+		t.Fatal("audio played on the radio after a local transmission")
 	}
 	if len(bm.Sent()) != 10 {
 		t.Fatalf("mode got %d frames, want 10", len(bm.Sent()))
-	}
-
-	// No mode heard the transmission (idle): no tone.
-	g.sel("", nil)
-	before := len(g.r.PTTLog())
-	g.r.SetCarrier(true)
-	g.r.Inject(frame(700))
-	g.step(5)
-	g.r.SetCarrier(false)
-	g.run(time.Second)
-	if len(g.r.PTTLog()) != before {
-		t.Fatal("tone sent with no mode active")
 	}
 }
 

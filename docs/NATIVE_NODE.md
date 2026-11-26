@@ -62,7 +62,7 @@ IAX2 linking is the largest and riskiest piece; the radio side is bounded and we
 | --- | --- | --- | --- |
 | IAX2 client, outgoing only (call token, MD5 auth, ulaw, jitter buffer, keepalives) | XL | 3,000–5,000 | Interop with every app\_rpt node; no public port to secure |
 | app\_rpt link text conventions (link lists, keyup) | M | 600–1,200 | Undocumented; needs packet captures and the app\_rpt source |
-| Simplex node logic (COS/PTT, timeout, hang, ID, courtesy tone; no DTMF) | M | 1,500–2,500 | Matching app\_rpt behavior people expect |
+| Simplex node logic (COS/PTT, timeout, hang, ID; no DTMF) | M | 1,500–2,500 | Matching app\_rpt behavior people expect |
 | Radio interface for SHARI (USB sound chip audio, HID PTT/COS, resampling, AGC and levels, SA818 programming) | M–L | 2,000–3,000 | Clock drift and audio quality |
 | EchoLink, required (directory login, UDP 5198/5199, GSM) | M–L | 1,800–2,800 | Directory strings and timers not documented |
 | Registration and node lookup (stats posting later, opt-in) | S–M | 500–900 | Low; stats posting is opt-in and comes later |
@@ -95,7 +95,7 @@ nodespot needs a small part of what Asterisk and app\_rpt offer: AllStar linking
 4. **EchoLink (required).** Directory login, UDP 5198/5199 and GSM. It is a mode of its own next to AllStar and DV, not an optional extra.
 5. **Mixer.** One AllStar link at a time (a hub we link to still arrives as one stream), EchoLink, the radio and the DV bridge in one mix, never echoing a source back to itself. Jitter buffer, timeout timer, hang time.
 6. **Radio.** The SHARI interface (see Radio hardware below); a radioless node skips it.
-7. **ID, on RF only.** The rule (Part 97.119 in the US) covers radio transmissions, so the ID goes into the local transmit path after the mixer and never to the AllStar, EchoLink or DV legs; each far-end RF station IDs itself. It plays only after activity: if the radio keyed up (for any source, local or net audio) since the last ID, the node IDs within 10 minutes and once at the end. An idle node stays silent. The ID rides the tail of a transmission already in progress where possible, as fast, low-level CW (voice ID optional). On by default; the operator can turn it off, with a note that the licensee is responsible for IDing. Courtesy tone optional.
+7. **ID, on RF only.** The rule (Part 97.119 in the US) covers radio transmissions, so the ID goes into the local transmit path after the mixer and never to the AllStar, EchoLink or DV legs; each far-end RF station IDs itself. It plays only after activity: if the radio keyed up (for any source, local or net audio) since the last ID, the node IDs within 10 minutes and once at the end. An idle node stays silent. The ID rides the tail of a transmission already in progress where possible, as fast, low-level CW (voice ID optional). On by default; the operator can turn it off, with a note that the licensee is responsible for IDing.
 8. **DV bridge.** Audio goes straight into the mixer instead of through Asterisk over USRP.
 
 **One audio path we own.** With every source in our own process, the same AGC, levels and meters the DV module uses apply to every leg: radio to network, network to radio, EchoLink and DV. No more tuning levels in chan\_simpleusb and again in the DV engine.
@@ -256,14 +256,14 @@ Start with feasibility and the radio side; the native IAX2 node runs on a test n
 2. **Path A: radio side in Go.** The SHARI radio interface and EchoLink as Go components talking USRP to Asterisk, with the DV module's AGC on every leg. Port the tune page to the native device and add SA818 programming.
 3. **Native registration.** The continuous HTTPS registration and DNS check from the section above, on a test node number.
 4. **IAX2 link, radioless node.** Framing, call token, MD5, ulaw, jitter buffer, keyup, link lists; the DV bridge attached through the existing USRP interface. Run beside Asterisk.
-5. **Simplex node logic.** COS/PTT, timeout, hang, ID, courtesy tone and announcements. DTMF control later, if ever needed.
+5. **Simplex node logic.** COS/PTT, timeout, hang, ID and announcements. DTMF control later, if ever needed.
 6. **Parity and cutover.** Opt-in stats posting, config migration, backup and restore, rollback to Asterisk, a security review (no inbound ports), a soak of several weeks.
 
 Keep the API and UI behind a `Node` interface backed today by `internal/rpt`, so each step ships without a UI rewrite.
 
-**Status (branch try/native-node).** Built: the `nodespot-node` daemon (`internal/native/...`) with the radio (CM108 HID PTT/COS, ALSA audio, SA818 programming, a fake radio), the node engine (one active mode, simplex logic, hang, transmit timeouts, courtesy tone, AGCs, ID on RF only after activity, playout prebuffer), the modes (AllStar over native IAX2 with background registration, EchoLink with GSM and the directory, and the DV networks on the existing protocol and vocoder code), the control socket, the web app and UI rebuilt around modes, the first-run setup, backups and packaging without ASL3. The echo test mode (`echotest`) with level reports and a live input meter on the Radio tune page is built. Unit tests use loopback fakes and fake clocks only.
+**Status (branch try/native-node).** Built: the `nodespot-node` daemon (`internal/native/...`) with the radio (CM108 HID PTT/COS, ALSA audio, SA818 programming, a fake radio), the node engine (one active mode, simplex logic, hang, transmit timeouts, AGCs, ID on RF only after activity, playout prebuffer), the modes (AllStar over native IAX2 with background registration, EchoLink with GSM and the directory, and the DV networks on the existing protocol and vocoder code), the control socket, the web app and UI rebuilt around modes, the first-run setup, backups and packaging without ASL3. The echo test mode (`echotest`) with level reports and a live input meter on the Radio tune page is built. Unit tests use loopback fakes and fake clocks only.
 
-Untested on real hardware or networks: registration against AllStarLink and the DNS check; IAX2 calls to real app\_rpt nodes (call token, MD5, keying, link lists, disconnect and hangup handling); EchoLink directory login and QSOs behind a home router; each DV network's login and audio (and the md380-emu AMBE vocoder); the echo test on a real radio (levels and the warning thresholds); CM108 PTT/COS on a real SHARI, ALSA timing and levels, SA818 programming; the ID and courtesy tone on air; the self-restart after a radio wiring change; the .deb install on a fresh OS.
+Untested on real hardware or networks: registration against AllStarLink and the DNS check; IAX2 calls to real app\_rpt nodes (call token, MD5, keying, link lists, disconnect and hangup handling); EchoLink directory login and QSOs behind a home router; each DV network's login and audio (and the md380-emu AMBE vocoder); the echo test on a real radio (levels and the warning thresholds); CM108 PTT/COS on a real SHARI, ALSA timing and levels, SA818 programming; the ID on air; the self-restart after a radio wiring change; the .deb install on a fresh OS.
 
 **Morning test.**
 
@@ -330,7 +330,6 @@ The card edits `station.advanced` and `station.id`. A save is validated by `Conf
 | AGC maximum gain (both directions) | `advanced.agcMaxDb` | 1 to 30 dB (0 = default) | 18 |
 | Hang time | `advanced.hangMs` | 1 to 10000 ms | 500 |
 | Transmit timeout, both ways | `advanced.txTimeoutS` | 1 to 1800 s | 180 |
-| Courtesy tone | `advanced.courtesyTone` (boolean) | on/off | on |
 | Station ID | `id.enabled` | on/off | on |
 | ID interval | `id.intervalS` | 1 to 600 s | 600 |
 | Tail window | `id.tailWindowS` | 1 to 600 s | 60 |

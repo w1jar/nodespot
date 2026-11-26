@@ -206,7 +206,7 @@ func TestLoadSave(t *testing.T) {
 func TestDefaults(t *testing.T) {
 	var c Config
 	p := paramsFor(&c, false)
-	if p.hang != DefaultHang || p.txTimeout != DefaultTxTimeout || !p.courtesy ||
+	if p.hang != DefaultHang || p.txTimeout != DefaultTxTimeout ||
 		!p.modeAGC || p.radioAGC || p.id.interval != DefaultIDInterval {
 		t.Fatalf("defaults = %+v", p)
 	}
@@ -282,5 +282,20 @@ func TestSA818Filters(t *testing.T) {
 	b, _ := json.Marshal(r)
 	if !strings.Contains(string(b), `"sa818Filter":{"emphasis":false,"lowPass":false}`) {
 		t.Fatalf("json %s", b)
+	}
+}
+
+func TestOldCourtesyToneKeyIgnored(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "node.json")
+	body := `{"version":1,"station":{"callsign":"N0CALL","advanced":{"hangMs":400,"courtesyTone":true}}}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("a config with courtesyTone must load: %v", err)
+	}
+	if c.Station.Advanced.HangMS != 400 {
+		t.Fatalf("hangMs = %d", c.Station.Advanced.HangMS)
 	}
 }

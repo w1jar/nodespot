@@ -168,9 +168,8 @@ type IDConfig struct {
 
 // Advanced holds tuning most stations leave alone.
 type Advanced struct {
-	HangMS       int   `json:"hangMs,omitempty"`       // transmitter hang (default 500)
-	TxTimeoutS   int   `json:"txTimeoutS,omitempty"`   // longest transmission either way (default 180)
-	CourtesyTone *bool `json:"courtesyTone,omitempty"` // tone after a local transmission (default on)
+	HangMS     int `json:"hangMs,omitempty"`     // transmitter hang (default 500)
+	TxTimeoutS int `json:"txTimeoutS,omitempty"` // longest transmission either way (default 180)
 	// AGC on the mode's audio for the radio (default on) and on the
 	// radio's audio for the mode (default off).
 	ModeAGC   *bool   `json:"modeAgc,omitempty"`
@@ -271,8 +270,25 @@ func (a Advanced) Hang() time.Duration {
 // TxTimeout is the longest transmission.
 func (a Advanced) TxTimeout() time.Duration { return secs(a.TxTimeoutS, DefaultTxTimeout) }
 
-// Courtesy reports whether the courtesy tone is on.
-func (a Advanced) Courtesy() bool { return on(a.CourtesyTone, true) }
+// UnmarshalJSON reads Advanced, ignoring the retired "courtesyTone" key so
+// config files written by earlier builds keep loading (the strict decoder
+// would refuse it). The key is dropped on the next save.
+func (a *Advanced) UnmarshalJSON(b []byte) error {
+	type plain Advanced
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["courtesyTone"]; !ok {
+		return json.Unmarshal(b, (*plain)(a))
+	}
+	delete(raw, "courtesyTone")
+	nb, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(nb, (*plain)(a))
+}
 
 // AGC returns the AGC parameters and which AGCs are on.
 func (a Advanced) AGC() (p audio.AGCParams, modeOn, radioOn bool) {

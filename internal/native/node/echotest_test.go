@@ -97,7 +97,7 @@ func TestEchoTestThroughTheNode(t *testing.T) {
 		t.Fatal("keyed before the playback")
 	}
 
-	// A second later (the courtesy tone is off) the radio keys and plays.
+	// A second later the radio keys and plays.
 	deadline := time.Now().Add(5 * time.Second)
 	for !g.r.PTT() && time.Now().Before(deadline) {
 		g.stepBoth(5)

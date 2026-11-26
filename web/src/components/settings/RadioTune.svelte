@@ -5,7 +5,7 @@
   import { toast, toastError } from '../../lib/toast.svelte';
   import { stationBody, validateStation } from '../../lib/station';
   import { hasSA818, isShari, pinError, radioBody, resolveInterface } from '../../lib/radio';
-  import { barPercent, targetBand, isHot, dbText, warningText, durationText } from '../../lib/levels';
+  import { barPercent, targetBand, isHot, dbText, warningText, durationText, levelAvailable, levelFraction, levelPercent, levelText } from '../../lib/levels';
   import type { InputLevel, RadioInfo, RadioLevels, Station } from '../../lib/types';
   import StationFields from '../StationFields.svelte';
   import RadioPicker from '../RadioPicker.svelte';
@@ -17,7 +17,6 @@
   const iface = $derived(st && info ? resolveInterface(st.radio, info.presets, isShari(info)) : undefined);
   // Without the info (an old node) the SA818 port decides, as before presets existed.
   const sa818 = $derived(info ? hasSA818(iface) : !!st?.radio.sa818Port);
-  const pct = (n: number) => (n < 0 ? 'n/a' : `${Math.round(n)}%`);
   const db = (n: number) => (Number.isFinite(n) ? `${n.toFixed(0)} dB` : '–');
 
   async function loadLevels() { try { lv = await api.radio(); } catch { /* the radio may be absent */ } }
@@ -63,16 +62,16 @@
   {:else if lv}
     <div class="grid gap-4 sm:grid-cols-2">
       <div>
-        <label class="label" for="rt-rx">Receive volume (from the radio): {pct(lv.CaptureVolume)}</label>
-        <input id="rt-rx" class="w-full accent-[var(--accent)]" type="range" min="0" max="100" disabled={lv.CaptureVolume < 0} value={Math.max(lv.CaptureVolume, 0)} onchange={(e) => setLevel({ rxVolume: +e.currentTarget.value })} />
+        <label class="label" for="rt-rx">Receive volume (from the radio): {levelText(lv.CaptureVolume)}</label>
+        <input id="rt-rx" class="w-full accent-[var(--accent)]" type="range" min="0" max="100" step="1" disabled={!levelAvailable(lv.CaptureVolume)} value={levelPercent(lv.CaptureVolume)} onchange={(e) => setLevel({ rxVolume: levelFraction(+e.currentTarget.value) })} />
         {#if lv.BoostAvailable}
           <label class="mt-1 flex cursor-pointer items-center gap-2 text-sm"><input id="rt-boost" type="checkbox" class="size-4 accent-[var(--accent)]" checked={!!lv.Boost} onchange={(e) => setLevel({ rxBoost: e.currentTarget.checked })} />Receive boost <span class="text-xs text-muted">(microphone boost of the sound chip)</span></label>
         {/if}
         <p class="mt-1 text-xs text-muted tabular-nums">Level {db(lv.Rx.RMSDb)}, peak {db(lv.Rx.PeakDb)}{#if lv.Rx.Clipped} , clipped {lv.Rx.Clipped}{/if}</p>
       </div>
       <div>
-        <label class="label" for="rt-tx">Transmit volume (to the radio): {pct(lv.PlaybackVolume)}</label>
-        <input id="rt-tx" class="w-full accent-[var(--accent)]" type="range" min="0" max="100" disabled={lv.PlaybackVolume < 0} value={Math.max(lv.PlaybackVolume, 0)} onchange={(e) => setLevel({ txVolume: +e.currentTarget.value })} />
+        <label class="label" for="rt-tx">Transmit volume (to the radio): {levelText(lv.PlaybackVolume)}</label>
+        <input id="rt-tx" class="w-full accent-[var(--accent)]" type="range" min="0" max="100" step="1" disabled={!levelAvailable(lv.PlaybackVolume)} value={levelPercent(lv.PlaybackVolume)} onchange={(e) => setLevel({ txVolume: levelFraction(+e.currentTarget.value) })} />
         <p class="mt-1 text-xs text-muted tabular-nums">Level {db(lv.Tx.RMSDb)}, peak {db(lv.Tx.PeakDb)}{#if lv.Tx.Clipped} , clipped {lv.Tx.Clipped}{/if}</p>
       </div>
     </div>

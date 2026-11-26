@@ -95,7 +95,7 @@ func testNodeConfig() *node.Config {
 		Station: node.Station{
 			Callsign: "N0CALL",
 			ID:       node.IDConfig{Enabled: &off},
-			Advanced: node.Advanced{CourtesyTone: &off, ModeAGC: &off, RadioAGC: &off},
+			Advanced: node.Advanced{ModeAGC: &off, RadioAGC: &off},
 		},
 		Modes: map[string]mode.Settings{
 			mode.AllStar: {Values: map[string]string{"node": localNode, "password": "test-node-secret"}},

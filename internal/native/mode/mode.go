@@ -7,7 +7,7 @@
 // bridged to each other.
 //
 // Audio is 8 kHz audio.Frame both ways. A Mode never generates local
-// telemetry: the ID and courtesy tone belong to the node and reach the radio
+// telemetry: the ID belongs to the node and reaches the radio
 // only.
 package mode
 

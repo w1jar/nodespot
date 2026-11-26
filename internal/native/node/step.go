@@ -13,7 +13,6 @@ import (
 type stepParams struct {
 	hang      time.Duration
 	txTimeout time.Duration
-	courtesy  bool
 	agc       audio.AGCParams
 	modeAGC   bool
 	radioAGC  bool
@@ -36,7 +35,6 @@ func paramsFor(c *Config, sa818 bool) stepParams {
 	p := stepParams{
 		hang:      st.Advanced.Hang(),
 		txTimeout: st.Advanced.TxTimeout(),
-		courtesy:  st.Advanced.Courtesy(),
 		callsign:  st.Callsign,
 		cw:        st.ID.CW(),
 		voice:     st.ID.VoiceFile,
@@ -78,9 +76,8 @@ type simplex struct {
 	netPlaying bool
 	prebufAt   time.Time // when the spurt's first frame was seen waiting
 
-	tone audio.Source // courtesy tone playing
-	id   audio.Source // ID playing
-	idT  idTimer
+	id  audio.Source // ID playing
+	idT idTimer
 
 	modeAGC, radioAGC *audio.AGC
 	// Station audio conditioning: PL high-pass and de-emphasis on the way
@@ -207,26 +204,13 @@ func (e *Engine) Step(now time.Time) {
 			s.modeAGC.Process(&out, p.agc)
 		}
 	}
-	if rfActive {
-		s.tone = nil
-	}
-	tonePlaying := false
-	if s.tone != nil {
-		var tf audio.Frame
-		if s.tone.Next(&tf) {
-			mix(&out, &tf)
-			tonePlaying = true
-		} else {
-			s.tone = nil
-		}
-	}
-	if wantNet || tonePlaying {
+	if wantNet {
 		s.idT.transmitted(now, p.id)
 	}
 
 	// The station ID: RF only.
 	if s.id == nil {
-		inTail := s.ptt && !wantNet && !tonePlaying
+		inTail := s.ptt && !wantNet
 		if why := s.idT.due(now, p.id, s.ptt, inTail, rfActive); why != idNone {
 			if src := e.idSource(now); src != nil {
 				if !s.ptt {
@@ -250,7 +234,7 @@ func (e *Engine) Step(now time.Time) {
 	}
 
 	// PTT.
-	content := wantNet || tonePlaying || idPlaying
+	content := wantNet || idPlaying
 	if content {
 		s.hangUntil = now.Add(p.hang + p.hangTail)
 	}
@@ -353,19 +337,15 @@ func (e *Engine) drainRX(c <-chan audio.Frame, now time.Time) {
 }
 
 // endRF finishes a local transmission: the mode that got its audio hears
-// the end, and the courtesy tone follows on the radio.
+// the end. The radio is not keyed for it.
 func (e *Engine) endRF(now time.Time, m mode.Mode) {
 	s := &e.sx
 	sent := s.rfSentTo
-	locked := s.rfLocked
 	s.rfStart, s.rfSentTo = time.Time{}, nil
 	if sent == nil {
 		return
 	}
 	sent.EndTx()
-	if e.params.courtesy && sent == m && !locked {
-		s.tone = audio.CourtesyTone()
-	}
 }
 
 // idSource builds the ID audio, or nil with a logged reason.
@@ -428,7 +408,7 @@ func (e *Engine) dropPTT() {
 		e.sx.ptt = false
 		e.publishOn(EventPTT, false, e.now())
 	}
-	e.sx.tone, e.sx.id = nil, nil
+	e.sx.id = nil
 }
 
 func (e *Engine) publishOn(k EventKind, on bool, now time.Time) {

@@ -95,7 +95,6 @@ test('body keeps other fields and leaves defaults out', () => {
   assert.equal(out.dmrId, 1234567);
   assert.deepEqual(out.advanced, { md380: '127.0.0.1:2470', agcMaxDb: 20, radioAgc: true });
   assert.deepEqual(out.id, { extra: 1, voiceFile: '/a/id.wav' });
-  assert.equal(audioBody(b, { ...b.advanced, courtesyTone: false }, b.id).advanced.courtesyTone, false);
   assert.equal(audioBody(b, { agcTargetDb: '-30' as unknown as number }, {}).advanced.agcTargetDb, -30);
 });
 

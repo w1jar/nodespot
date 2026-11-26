@@ -30,7 +30,6 @@
   // The switches show the default when unset.
   const modeAgc = $derived(adv.modeAgc ?? AGC_DEFAULTS.modeAgc);
   const radioAgc = $derived(adv.radioAgc ?? AGC_DEFAULTS.radioAgc);
-  const courtesy = $derived(adv.courtesyTone ?? AGC_DEFAULTS.courtesyTone);
   const idOn = $derived(id.enabled !== false);
   const flagOn = (k: (typeof SA818_FILTER_KEYS)[number]) => filt[k] !== false;
   const FLAG_LABELS = { emphasis: 'Emphasis', highPass: 'High-pass', lowPass: 'Low-pass' } as const;
@@ -102,7 +101,6 @@
       <fieldset class="space-y-3">
         <legend class="text-sm font-medium">Timers</legend>
         <div class="grid gap-3 sm:grid-cols-2">{#each [...TIMER_FIELDS, ...DELAY_FIELDS] as f (f.key)}{@render num(f, adv, 'at')}{/each}</div>
-        <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class={chk} checked={courtesy} onchange={(e) => (adv.courtesyTone = e.currentTarget.checked)} /><span>Courtesy tone<span class="block text-xs text-muted">A short beep after a local transmission. On by default.</span></span></label>
       </fieldset>
 
       <fieldset class="space-y-3">

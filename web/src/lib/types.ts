@@ -108,7 +108,7 @@ export interface StationId {
 }
 /** station.advanced: timers and AGC. Unset or 0 is the node's default. Unknown keys (md380 and others) survive a save. */
 export interface StationAdvanced {
-  hangMs?: number; txTimeoutS?: number; courtesyTone?: boolean;
+  hangMs?: number; txTimeoutS?: number;
   modeAgc?: boolean; radioAgc?: boolean; agcTargetDb?: number; agcMaxDb?: number;
   /** Static gain, -20 to 20 dB: radio to network and network to radio. 0 or unset is none. */
   rxGainDb?: number; txGainDb?: number;
