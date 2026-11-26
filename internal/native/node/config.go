@@ -212,7 +212,7 @@ type Advanced struct {
 const (
 	DefaultHang        = 500 * time.Millisecond
 	DefaultTxTimeout   = 180 * time.Second
-	DefaultTxOnDelay   = 200 * time.Millisecond
+	DefaultTxOnDelay   = 500 * time.Millisecond
 	DefaultIDInterval  = 600 * time.Second
 	DefaultIDTail      = 60 * time.Second
 	DefaultIDEndQuiet  = 60 * time.Second

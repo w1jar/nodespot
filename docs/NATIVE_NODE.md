@@ -350,7 +350,7 @@ The tabs edit `station.advanced`, `station.id` and `station.radio.sa818Filter`. 
 | SA818 filters | `radio.sa818Filter.{emphasis,highPass,lowPass}` | on/off each | emphasis off, high-pass and low-pass on |
 | Receive boost | `radio.rxBoost` | on/off, only if the chip has the control | chip default |
 | Receive-on delay | `advanced.rxOnDelayMs` | 0 to 1000 ms | 0 |
-| Key-up delay | `advanced.txOnDelayMs` | 0 to 1000 ms; 0 is off | 200 |
+| Key-up delay | `advanced.txOnDelayMs` | 0 to 1000 ms; 0 is off | 500 |
 | Transmit-off delay | `advanced.txOffDelayMs` | 0 to 2000 ms | 0 |
 | AGC, network to radio | `advanced.modeAgc` | on/off | on |
 | AGC, radio to network | `advanced.radioAgc` | on/off | on |

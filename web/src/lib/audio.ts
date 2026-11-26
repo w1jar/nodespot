@@ -24,7 +24,7 @@ export const GAIN_FIELDS: NumField[] = [
  * audio plays, and extra time the transmitter stays keyed. */
 export const DELAY_FIELDS: NumField[] = [
   { key: 'rxOnDelayMs', label: 'Receive-on delay', unit: 'ms', min: 0, max: 1000, step: 10, def: 0, help: 'A carrier must last this long before the node treats it as a receive. The first part of the audio is dropped. 0 to 1000.' },
-  { key: 'txOnDelayMs', label: 'Key-up delay', unit: 'ms', min: 0, max: 1000, step: 10, def: 200, keepZero: true, help: 'Network audio waits this long after the transmitter keys, so the radio is up before the first word. Empty is 200; 0 turns it off. 0 to 1000.' },
+  { key: 'txOnDelayMs', label: 'Key-up delay', unit: 'ms', min: 0, max: 1000, step: 10, def: 500, keepZero: true, help: 'Network audio waits this long after the transmitter keys, so the radio is up before the first word. Empty is 500; 0 turns it off. 0 to 1000.' },
   { key: 'txOffDelayMs', label: 'Transmit-off delay', unit: 'ms', min: 0, max: 2000, step: 10, def: 0, help: 'Extra time the transmitter stays keyed after the hang time, 0 to 2000.' },
 ];
 

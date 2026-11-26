@@ -861,7 +861,7 @@ func TestRadioWiringChangeAsksForRestart(t *testing.T) {
 // the order is kept.
 func TestKeyUpDelay(t *testing.T) {
 	cfg := quietConfig()
-	cfg.Station.Advanced.TxOnDelayMS = nil // the default, 200 ms
+	cfg.Station.Advanced.TxOnDelayMS = nil // the default, 500 ms
 	g := newRig(t, cfg)
 	g.sel(mode.BM, &mode.Target{ID: "91"})
 	bm := g.fake(mode.BM)

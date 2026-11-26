@@ -45,7 +45,7 @@ test('flat audio and PL in the body', () => {
 
 test('key-up delay: empty is the default, 0 is off and kept', () => {
   const f = DELAY_FIELDS.find((x) => x.key === 'txOnDelayMs')!;
-  assert.deepEqual([f.min, f.max, f.def], [0, 1000, 200]);
+  assert.deepEqual([f.min, f.max, f.def], [0, 1000, 500]);
   assert.equal(audioError({ txOnDelayMs: 1000 }, {}), '');
   assert.notEqual(audioError({ txOnDelayMs: 1001 }, {}), '');
   assert.notEqual(audioError({ txOnDelayMs: -10 }, {}), '');

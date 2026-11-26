@@ -131,7 +131,7 @@ export interface StationAdvanced {
   flatAudio?: boolean; plFilter?: boolean;
   /** Carrier debounce before a receive counts (0 to 1000 ms) and extra hang time (0 to 2000 ms). */
   rxOnDelayMs?: number; txOffDelayMs?: number;
-  /** Key-up delay: network audio waits this long after PTT (0 to 1000 ms); unset is 200, 0 is off. */
+  /** Key-up delay: network audio waits this long after PTT (0 to 1000 ms); unset is 500, 0 is off. */
   txOnDelayMs?: number;
   [key: string]: unknown;
 }
