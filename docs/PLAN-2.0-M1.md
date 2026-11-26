@@ -1,12 +1,12 @@
-# ASLCP 2.0 - Milestone 1 plan: native `aslcp-dv` engine skeleton, removal of the previous stack
+# aslcp 2.0 - Milestone 1 plan: native `nodespot-dv` engine skeleton, removal of the previous stack
 
 Worktree: /home/user/wt-200 (branch try/2.0, from main 3832711). Everything below is one commit.
 
 M1 does five things:
-- It ships the `aslcp-dv` binary and unit, with a working USRP <-> md380 AMBE path and a loopback (parrot) network.
-- It moves host-list downloading into the aslcp server.
+- It ships the `nodespot-dv` binary and unit, with a working USRP <-> md380 AMBE path and a loopback (parrot) network.
+- It moves host-list downloading into the nodespot server.
 - It deletes every line that drives the previous stack.
-- It turns "Enable digital modes" into "install md380-emu, start aslcp-dv".
+- It turns "Enable digital modes" into "install md380-emu, start nodespot-dv".
 - It reserves the IMBE interface.
 
 The DMR, YSF, P25 and NXDN protocols are out of scope. Their cards show "not yet available in this build".
@@ -23,11 +23,11 @@ Naming rule (minimal churn):
 ### A.1 Process model
 
 ```
-browser ──HTTP/SSE──> aslcp (User=aslcp)
-                        │  unix /run/aslcp/helper.sock (root helper: install, config render, systemctl)
-                        │  unix /run/aslcp-dv/ctl.sock (NDJSON: status/tune/mode/unlink/reload/subscribe)
+browser ──HTTP/SSE──> nodespot (User=nodespot)
+                        │  unix /run/nodespot/helper.sock (root helper: install, config render, systemctl)
+                        │  unix /run/nodespot-dv/ctl.sock (NDJSON: status/tune/mode/unlink/reload/subscribe)
                         ▼
-                     aslcp-dv (User=aslcp-dv, loopback only)
+                     nodespot-dv (User=nodespot-dv, loopback only)
                         │ UDP 127.0.0.1:34001 (rx from Asterisk) / → 127.0.0.1:32001 (tx to Asterisk)
                         │ UDP → 127.0.0.1:2470 md380-emu (AMBE+2)
                         ▼
@@ -35,11 +35,11 @@ browser ──HTTP/SSE──> aslcp (User=aslcp)
 ```
 
 Responsibilities:
-- **aslcp-helper (root)** owns secrets and files outside /var/lib/aslcp. It renders `/var/lib/aslcp-dv/config.json` from the helper state dir `/var/lib/aslcp-dvstate/` (privatenode.json, networks.json). It runs the enable/disable jobs and restarts the units.
-- **aslcp (server)** never reads the engine config. It sends runtime commands over ctl, subscribes to events, downloads the host lists and resolves list targets to host:port before a tune.
-- **aslcp-dv** reads only its config file and talks only to loopback. It never reads host lists or files of the aslcp user.
+- **nodespot-helper (root)** owns secrets and files outside /var/lib/nodespot. It renders `/var/lib/nodespot-dv/config.json` from the helper state dir `/var/lib/nodespot-dvstate/` (privatenode.json, networks.json). It runs the enable/disable jobs and restarts the units.
+- **nodespot (server)** never reads the engine config. It sends runtime commands over ctl, subscribes to events, downloads the host lists and resolves list targets to host:port before a tune.
+- **nodespot-dv** reads only its config file and talks only to loopback. It never reads host lists or files of the nodespot user.
 
-### A.2 Goroutines inside aslcp-dv
+### A.2 Goroutines inside nodespot-dv
 
 | goroutine | owner | role |
 |---|---|---|
@@ -68,45 +68,45 @@ Router data flow:
 
 ### A.4 Control socket
 
-- **Path and lifetime.** `/run/aslcp-dv/ctl.sock`, created by aslcp-dv after it reads its config (RuntimeDirectory=aslcp-dv, RuntimeDirectoryMode=0750). There is no .socket unit, so a connect never starts a disabled engine.
-- **Permissions.** Socket mode 0660, owner aslcp-dv:aslcp-dv. postinst creates the system user and group `aslcp-dv` and runs `adduser aslcp aslcp-dv`. aslcp-dv also checks SO_PEERCRED: the peer uid must be root or the uid of user `aslcp` (looked up at start; config `ctl.allow_uids` overrides it in tests). Anything else gets `{"ok":false,"code":"forbidden"}` and is closed.
-- **Why not add aslcp-dv to group aslcp:** that would expose /var/lib/aslcp.
+- **Path and lifetime.** `/run/nodespot-dv/ctl.sock`, created by nodespot-dv after it reads its config (RuntimeDirectory=nodespot-dv, RuntimeDirectoryMode=0750). There is no .socket unit, so a connect never starts a disabled engine.
+- **Permissions.** Socket mode 0660, owner nodespot-dv:nodespot-dv. postinst creates the system user and group `nodespot-dv` and runs `adduser nodespot nodespot-dv`. nodespot-dv also checks SO_PEERCRED: the peer uid must be root or the uid of user `nodespot` (looked up at start; config `ctl.allow_uids` overrides it in tests). Anything else gets `{"ok":false,"code":"forbidden"}` and is closed.
+- **Why not add nodespot-dv to group nodespot:** that would expose /var/lib/nodespot.
 - **Framing.** UTF-8 NDJSON, one object per line, at most 64 KiB per line.
   - The client sends a `Request`; the server replies with a `Response` carrying the same `id`. Multiple requests per connection are allowed and processed in order.
   - `subscribe` turns the connection into an event stream: first a `Response` with the current `Status`, then `Event` lines. Further requests on that connection are rejected.
   - The idle timeout is 5 minutes for request connections and none for subscribers. The server sends `{"type":"ping"}` events every 15 s.
-- **Server reaching it.** `ctl.Client` in aslcp is a dial-per-request client (2 s timeout) plus one long-lived subscriber goroutine. The subscriber reconnects with backoff 0.5 s doubling to 10 s and marks the snapshot `running:false` while disconnected. Behind `ProtectSystem=strict`, connecting to a socket in /run works (the helper socket is proof). aslcp.service needs no change; AF_UNIX is already allowed.
+- **Server reaching it.** `ctl.Client` in nodespot is a dial-per-request client (2 s timeout) plus one long-lived subscriber goroutine. The subscriber reconnects with backoff 0.5 s doubling to 10 s and marks the snapshot `running:false` while disconnected. Behind `ProtectSystem=strict`, connecting to a socket in /run works (the helper socket is proof). nodespot.service needs no change; AF_UNIX is already allowed.
 
 ### A.5 Config model
 
-`/var/lib/aslcp-dv/config.json` is owner aslcp-dv:aslcp-dv, mode 0600 (StateDirectoryMode=0700). Only the helper writes it: atomic temp file plus rename, then chown to the aslcp-dv uid/gid. The schema is `ctl.Config` (D.4).
+`/var/lib/nodespot-dv/config.json` is owner nodespot-dv:nodespot-dv, mode 0600 (StateDirectoryMode=0700). Only the helper writes it: atomic temp file plus rename, then chown to the nodespot-dv uid/gid. The schema is `ctl.Config` (D.4).
 - The USRP ports come from the private-node stanza the helper already reads (`rxchannel=USRP/127.0.0.1:34001:32001`, so listen 34001 and send to 32001).
 - Identity and networks are copied from networks.json and privatenode.json. In M1 only `loopback` is enabled; the other networks are carried but marked `available:false`.
-- aslcp-dv validates the file strictly (DisallowUnknownFields, version 1).
+- nodespot-dv validates the file strictly (DisallowUnknownFields, version 1).
   - A bad file at start: exit 78 (EX_CONFIG), so systemd's RestartPreventExitStatus=78 stops the loop.
   - A bad file on `reload`: the old config is kept and `{"ok":false,"code":"bad_config"}` is returned.
 - Without a file, the engine starts with the default USRP 34001/32001, md380 127.0.0.1:2470 and the loopback network, so a fresh enable works before the private node exists.
 
-### A.6 systemd unit `packaging/systemd/aslcp-dv.service`
+### A.6 systemd unit `packaging/systemd/nodespot-dv.service`
 
 ```ini
 [Unit]
-Description=ASLCP digital voice engine
-Documentation=file:///usr/share/doc/aslcp/README
+Description=nodespot digital voice engine
+Documentation=file:///usr/share/doc/nodespot/README
 Wants=md380-emu.service
 After=network.target md380-emu.service asterisk.service
 
 [Service]
 Type=simple
-User=aslcp-dv
-Group=aslcp-dv
-ExecStart=/usr/libexec/aslcp/aslcp-dv run
+User=nodespot-dv
+Group=nodespot-dv
+ExecStart=/usr/libexec/nodespot/nodespot-dv run
 Restart=on-failure
 RestartSec=2
 RestartPreventExitStatus=78
-StateDirectory=aslcp-dv
+StateDirectory=nodespot-dv
 StateDirectoryMode=0700
-RuntimeDirectory=aslcp-dv
+RuntimeDirectory=nodespot-dv
 RuntimeDirectoryMode=0750
 UMask=0007
 Nice=-5
@@ -140,21 +140,21 @@ WantedBy=multi-user.target
 ```
 
 - A Nice of -5 needs no capability, because systemd applies it before dropping privileges.
-- On enable, the helper also writes a drop-in `/etc/systemd/system/md380-emu.service.d/aslcp.conf` with `IPAddressDeny=any` and `IPAddressAllow=localhost`, because md380-emu binds 0.0.0.0:2470.
-- The drop-in is removed by disable only if the helper's marker says ASLCP installed md380-emu. Otherwise it stays; it is harmless.
+- On enable, the helper also writes a drop-in `/etc/systemd/system/md380-emu.service.d/nodespot.conf` with `IPAddressDeny=any` and `IPAddressAllow=localhost`, because md380-emu binds 0.0.0.0:2470.
+- The drop-in is removed by disable only if the helper's marker says nodespot installed md380-emu. Otherwise it stays; it is harmless.
 
-### A.7 Binary `cmd/aslcp-dv`
+### A.7 Binary `cmd/nodespot-dv`
 
 Subcommands:
-- `run`: the service. Flags: `-config` (default /var/lib/aslcp-dv/config.json) and `-ctl` (default /run/aslcp-dv/ctl.sock).
+- `run`: the service. Flags: `-config` (default /var/lib/nodespot-dv/config.json) and `-ctl` (default /run/nodespot-dv/ctl.sock).
 - `bench`: see A.8.
 - `version`.
 
 Logs go to stderr in plain text; the journal adds timestamps. Callsigns are logged only at debug level.
 
-### A.8 `aslcp-dv bench`
+### A.8 `nodespot-dv bench`
 
-`aslcp-dv bench [-md380 127.0.0.1:2470] [-frames 1500] [-mode encode|decode|roundtrip] [-concurrency 1]`
+`nodespot-dv bench [-md380 127.0.0.1:2470] [-frames 1500] [-mode encode|decode|roundtrip] [-concurrency 1]`
 
 - It drives the real `vocoder.MD380` client with a synthetic 1 kHz sine (no real audio).
 - It prints frames/s, the real-time factor (frames/s ÷ 50), p50/p90/p99/max latency, and timeouts.
@@ -176,9 +176,9 @@ Paths are relative to /home/user/wt-200. Tags: [T1]/[T2]/[T3] = track owner.
 
 | file | reason |
 |---|---|
-| cmd/aslcp-dv/main.go [T1] | Subcommand dispatch (run, bench, version). |
-| cmd/aslcp-dv/run.go [T1] | Wires config, usrp, vocoder, bridge and ctl; signals; exit 78 on bad config. |
-| cmd/aslcp-dv/bench.go, bench_test.go [T1] | The bench (A.8); the test runs `-fake -frames 200`. |
+| cmd/nodespot-dv/main.go [T1] | Subcommand dispatch (run, bench, version). |
+| cmd/nodespot-dv/run.go [T1] | Wires config, usrp, vocoder, bridge and ctl; signals; exit 78 on bad config. |
+| cmd/nodespot-dv/bench.go, bench_test.go [T1] | The bench (A.8); the test runs `-fake -frames 200`. |
 | internal/dv/usrp/packet.go, packet_test.go [T1] | 32-byte header codec, types VOICE/DTMF/TEXT, TLV 0x08; table tests plus a fuzz test (FuzzParse). |
 | internal/dv/usrp/endpoint.go, endpoint_test.go [T1] | UDP rx loop and 20 ms tx pacer, peer filter. |
 | internal/dv/vocoder/vocoder.go [T1] | AMBE and IMBE interfaces, silence frames, Stats. |
@@ -190,11 +190,11 @@ Paths are relative to /home/user/wt-200. Tags: [T1]/[T2]/[T3] = track owner.
 | internal/dv/bridge/loopback_audio_test.go [T1] | The end-to-end audio test (E.2). |
 | internal/dv/ctl/types.go [T1, frozen first] | The shared contract (D.4). |
 | internal/dv/ctl/server.go, server_test.go [T1] | NDJSON server, SO_PEERCRED check, subscriber fan-out. |
-| internal/dv/ctl/client.go, client_test.go [T1] | Client used by aslcp (Do, Subscribe). |
+| internal/dv/ctl/client.go, client_test.go [T1] | Client used by nodespot (Do, Subscribe). |
 | internal/dv/ctl/ctltest/fake.go [T1] | Fake engine on a temp socket, for track 3 tests. |
 | internal/dv/config/config.go, config_test.go [T1] | Load/validate `ctl.Config` strictly; defaults. |
 | internal/dv/imbe/* [T2] | IMBE port (separate agent); must satisfy `vocoder.IMBE`. |
-| packaging/systemd/aslcp-dv.service [T1] | The unit in A.6. |
+| packaging/systemd/nodespot-dv.service [T1] | The unit in A.6. |
 | internal/hostlists/hostlists.go, hostlists_test.go [T3] | Downloader and index (C.4), modelled on internal/radioid. |
 | internal/hostlists/parse.go, parse_test.go [T3] | Parsers moved from helper/dv_lists.go (ParseDMRHosts, ParseYSFHosts, ParseTGHosts) plus the Pi-Star formats. |
 | internal/hostlists/testdata/*.txt [T3] | Synthetic fixtures only (names like "Test Room", hosts 192.0.2.x / node2001.example.net). |
@@ -210,26 +210,26 @@ Paths are relative to /home/user/wt-200. Tags: [T1]/[T2]/[T3] = track owner.
 ### B.2 DELETE (and what each caller becomes)
 
 **internal/helper (all [T3]):**
-- **Delete outright:** dv_bootmode.go, dv_cfg.go, dv_dmr.go, dv_idlookup.go, dv_tune.go, dv_stfu.go, dv_callers.go, dv_talks.go, dv_run.go, dv_networks.go (after moving the parse/encode functions into dv_common.go), dv_lists.go (parsers move to internal/hostlists), dv_step.go (replaced by a smaller `RunDVStep` in dv.go), dv_demo.go / NewDemothe previous stack (replaced by a demo `ctltest` fake in cmd/aslcp), and every `*_test.go` for those, plus stfu_test.go.
+- **Delete outright:** dv_bootmode.go, dv_cfg.go, dv_dmr.go, dv_idlookup.go, dv_tune.go, dv_stfu.go, dv_callers.go, dv_talks.go, dv_run.go, dv_networks.go (after moving the parse/encode functions into dv_common.go), dv_lists.go (parsers move to internal/hostlists), dv_step.go (replaced by a smaller `RunDVStep` in dv.go), dv_demo.go / NewDemothe previous stack (replaced by a demo `ctltest` fake in cmd/nodespot), and every `*_test.go` for those, plus stfu_test.go.
 - **dv.go:** delete the file after moving the keyring, source, marker and platform code into dv.go and dv_common.go. dvInstallScript and dvUninstallScript are replaced by dvEnableScript.
 - **dv_private.go:** delete DVUSRP, DVPrivate and the revert step. Keep the record type, `ReadDVPrivate`/`parseDVPrivate` (in dv_common.go) and `PlanPrivateRevert`, renamed `PlanPrivateRemove`, in dv.go. The private-node set/clear moves to a new op, `dv-private` (C.1).
 - **Callers that break:**
-  - **ops.go:** remove the DV fields (DVKeyring…dvIDs) except DVStateDir, SelfPath, HTTPGet and Now. Add `DVEngineDir` (default /var/lib/aslcp-dv) and `DVEngineUser` (default aslcp-dv). Replace the OpOldStack* switch cases with the five dv ops. Replace `isDVConfigOp` with `isDVOp` for the `req.DV` field check.
+  - **ops.go:** remove the DV fields (DVKeyring…dvIDs) except DVStateDir, SelfPath, HTTPGet and Now. Add `DVEngineDir` (default /var/lib/nodespot-dv) and `DVEngineUser` (default nodespot-dv). Replace the OpOldStack* switch cases with the five dv ops. Replace `isDVConfigOp` with `isDVOp` for the `req.DV` field check.
   - **proto.go:** remove the OpOldStack* constants and `the previous stack *DVRequest`. Add `DV *DVRequest \`json:"dv,omitempty"\`` (C.1).
   - **server.go:** update `knownOp` to the new list.
   - **client.go:** remove the OldStack* methods, `dvCall` and the dvErrors entries. Add `DVStatus`, `DVEnable`, `DVDisable`, `DVJob`, `DVConfig` and `DVPrivate`, with error codes not_supported, busy, not_enabled and bad_request.
-  - **sys_logs.go:** the `dvUnits` list becomes `[]string{"aslcp-dv","md380-emu"}`, plus the enable job unit.
-  - **sys_diag.go:** the config/dv/ collection collects /var/lib/aslcp-dv/config.json with secrets masked (passwords blanked through the same mask helper), and the /opt ini files only if present (read-only, for M6 diagnosis).
-  - **osupdate.go `aptJobRunning` and parse.go `dvJobUnit`:** the unit names become `aslcp-dv-enable`.
+  - **sys_logs.go:** the `dvUnits` list becomes `[]string{"nodespot-dv","md380-emu"}`, plus the enable job unit.
+  - **sys_diag.go:** the config/dv/ collection collects /var/lib/nodespot-dv/config.json with secrets masked (passwords blanked through the same mask helper), and the /opt ini files only if present (read-only, for M6 diagnosis).
+  - **osupdate.go `aptJobRunning` and parse.go `dvJobUnit`:** the unit names become `nodespot-dv-enable`.
   - **backup_local.go:** remove `writeDemoDVLists` and the DVOptDir/DVHostDir/DVLogDir/DVHistoryDir seeding. Keep the demo privatenode.json/networks.json seeding.
   - **backup_dv_pending.go:** it called DVStatus/DVRestoreDiscard. It becomes a pending-status read from the state dir; restore-discard stays as part of the `dv-status` reply (`restorePending`), and the discard op is kept as `dv-restore-discard`.
-  - **cmd/aslcp-helper/main.go:** the old step argv becomes `dv-step`; no alias is kept.
+  - **cmd/nodespot-helper/main.go:** the old step argv becomes `dv-step`; no alias is kept.
 
 **internal/api [T3]:**
 - **handlers_dv.go:** rewrite (MODIFY below). Delete the handlers for job, install, uninstall, dmr-status, setup, identity, credentials, modes, brandmeister, brandmeister/enabled, networks/{id}, networks/{id}/enabled, stfu/install, restart and rollback, and their tests.
 - **dv_snapshot.go:** rewrite as dv_engine.go. The old file and its test are deleted.
 
-**cmd/aslcp [T3]:** the old command files become cmd/aslcp/dv.go and dv_test.go: `aslcp dv enable|disable|status`; the old install command is not kept as an alias.
+**cmd/nodespot [T3]:** the old command files become cmd/nodespot/dv.go and dv_test.go: `nodespot dv enable|disable|status`; the old install command is not kept as an alias.
 
 **web [T3]:**
 - **Delete:** DvBM.svelte, lib/dvbm(.test).ts, lib/dmrlogin(.test).ts, lib/dvjob(.test).ts and the Identity, Credentials, TGIF, DMR-Other, Services-restart and Rollback sections of DvSetup.svelte.
@@ -254,20 +254,20 @@ Paths are relative to /home/user/wt-200. Tags: [T1]/[T2]/[T3] = track owner.
 | internal/api/handlers_dv.go, tests [T3] | The previous interface becomes `DVEngine` (C.2 shows the routes kept). |
 | internal/api/handlers_dv_ctl.go, tests [T3] | mode, unlink and tune go through ctl. The `dvCmdReply` drops BMLoginPending, STFUStopFailed, NetRestarted and NetLoginPending. Favorites are unchanged. |
 | internal/api/handlers_dv_private.go, tests [T3] | Steps: "ini" becomes "engine_config" (helper dv-config) and "bridge_restart" becomes "engine_reload" (ctl reload; falls back to helper `dv-restart` when ctl is unreachable). The record set/clear goes through helper op dv-private. |
-| internal/api/nowcalling.go [T3] | `ncDV(info the old helper info type, ...)` becomes `ncDV(talks []nowcalling.Talk, sn DVSnapshot)`, fed from TalkEvents. Via becomes "aslcp-dv". `ncTGName` uses `dv.DMRFamily`. `ncKick` becomes a no-op, because events arrive in real time; remove it and its call. |
+| internal/api/nowcalling.go [T3] | `ncDV(info the old helper info type, ...)` becomes `ncDV(talks []nowcalling.Talk, sn DVSnapshot)`, fed from TalkEvents. Via becomes "nodespot-dv". `ncTGName` uses `dv.DMRFamily`. `ncKick` becomes a no-op, because events arrive in real time; remove it and its call. |
 | internal/api/server.go [T3] | The previous dependency becomes `DVEngine DVEngine` (the helper part), plus `DVCtl *ctl.Client` and `HostLists *hostlists.Manager`. `DVInstalled` becomes `DVEnabled func() bool`. Keep DVResume, DVBridgeNode, RadioID and DVLink. `initthe previous stack` becomes `initDVEngine`. |
-| cmd/aslcp/main.go [T3] | Wire ctl.Client (/run/aslcp-dv/ctl.sock), hostlists.New(dataDir+"/hostlists", ...), and the resume tracker with an adapter over the ctl client. `dvInstalled` (stat of /opt/Analog_Bridge) becomes a helper `dv-status` cached `enabled`. Demo mode runs `ctltest.Fake` in-process. |
-| internal/nowcalling/nowcalling.go [T3] | Add the `ViaEngine = "aslcp-dv"` constant; keep the old Via values for snapshot compatibility. |
+| cmd/nodespot/main.go [T3] | Wire ctl.Client (/run/nodespot-dv/ctl.sock), hostlists.New(dataDir+"/hostlists", ...), and the resume tracker with an adapter over the ctl client. `dvInstalled` (stat of /opt/Analog_Bridge) becomes a helper `dv-status` cached `enabled`. Demo mode runs `ctltest.Fake` in-process. |
+| internal/nowcalling/nowcalling.go [T3] | Add the `ViaEngine = "nodespot-dv"` constant; keep the old Via values for snapshot compatibility. |
 | internal/helper/backup_dv*.go [T3] | Use the relocated symbols. Remove restore-apply from any job. The pending set stays for M6. |
-| packaging/nfpm.yaml [T1] | Add `/usr/libexec/aslcp/aslcp-dv` (mode 0755) and `/usr/lib/systemd/system/aslcp-dv.service`; add `qemu-user-static` nowhere (it is installed at enable time). |
-| Makefile [T1] | deb-pkg loop `for c in aslcp aslcp-helper aslcp-dv`; build/build-arm64/build-armhf also build aslcp-dv (CGO_ENABLED=0, GOARM=7). |
-| packaging/scripts/postinst.sh [T1] | `adduser --system --group --no-create-home --home /var/lib/aslcp-dv aslcp-dv`, then `adduser aslcp aslcp-dv`. If aslcp-dv.service is enabled, restart it after daemon-reload. Do not enable it. |
-| packaging/scripts/prerm.sh [T1] | On remove, stop and disable aslcp-dv.service. |
-| packaging/scripts/postrm.sh [T1] | On purge, remove /var/lib/aslcp-dv and `deluser --system aslcp-dv`. Keep the existing /var/lib/aslcp-dvstate purge. |
-| packaging/install.sh [T3] | `ASLCP_DV=1` runs `aslcp dv enable`; the old variable is dropped. |
-| packaging/README.package [T1] | Mention aslcp-dv and its state dir. |
-| .github/workflows/ci.yml [T1] | Package-contents check for aslcp-dv; add `npm test` in web; add `go run ./cmd/aslcp-dv bench -fake -frames 200`. |
-| web/src/components/DigitalModes.svelte [T3] | Becomes "Digital modes": an Enable/Disable button, job log (via dv-job), status of aslcp-dv/md380-emu, restore-pending notice. No uninstall. |
+| packaging/nfpm.yaml [T1] | Add `/usr/libexec/nodespot/nodespot-dv` (mode 0755) and `/usr/lib/systemd/system/nodespot-dv.service`; add `qemu-user-static` nowhere (it is installed at enable time). |
+| Makefile [T1] | deb-pkg loop `for c in nodespot nodespot-helper nodespot-dv`; build/build-arm64/build-armhf also build nodespot-dv (CGO_ENABLED=0, GOARM=7). |
+| packaging/scripts/postinst.sh [T1] | `adduser --system --group --no-create-home --home /var/lib/nodespot-dv nodespot-dv`, then `adduser nodespot nodespot-dv`. If nodespot-dv.service is enabled, restart it after daemon-reload. Do not enable it. |
+| packaging/scripts/prerm.sh [T1] | On remove, stop and disable nodespot-dv.service. |
+| packaging/scripts/postrm.sh [T1] | On purge, remove /var/lib/nodespot-dv and `deluser --system nodespot-dv`. Keep the existing /var/lib/nodespot-dvstate purge. |
+| packaging/install.sh [T3] | `NODESPOT_DV=1` runs `nodespot dv enable`; the old variable is dropped. |
+| packaging/README.package [T1] | Mention nodespot-dv and its state dir. |
+| .github/workflows/ci.yml [T1] | Package-contents check for nodespot-dv; add `npm test` in web; add `go run ./cmd/nodespot-dv bench -fake -frames 200`. |
+| web/src/components/DigitalModes.svelte [T3] | Becomes "Digital modes": an Enable/Disable button, job log (via dv-job), status of nodespot-dv/md380-emu, restore-pending notice. No uninstall. |
 | web/src/components/DvSetup.svelte [T3] | Keep Resume, the per-mode cards, DvBridge (private node) and favorites. A card whose mode has `available:false` shows "Not yet available in this build" and disabled controls; loopback shows as "Parrot (test)". |
 | web/src/components/DvCard.svelte, lib/dvpanel, dvmodes, dvlist, dvmsg, dvnetworks, dvbridge (+tests) [T3] | Adapt to the snapshot changes (C.3); dvnetworks stays read-only. |
 | web/src/lib/store.svelte.ts [T3] | The `dv` SSE stays; the type gains the new fields. |
@@ -283,12 +283,12 @@ Paths are relative to /home/user/wt-200. Tags: [T1]/[T2]/[T3] = track owner.
 ```go
 const (
 	OpDVStatus         = "dv-status"          // -> DVStatus
-	OpDVEnable         = "dv-enable"          // starts job unit aslcp-dv-enable
-	OpDVDisable        = "dv-disable"         // systemctl disable --now aslcp-dv
+	OpDVEnable         = "dv-enable"          // starts job unit nodespot-dv-enable
+	OpDVDisable        = "dv-disable"         // systemctl disable --now nodespot-dv
 	OpDVJob            = "dv-job"             // -> DVJob (state + last 200 journal lines of the job unit)
-	OpDVConfig         = "dv-config"          // render /var/lib/aslcp-dv/config.json
+	OpDVConfig         = "dv-config"          // render /var/lib/nodespot-dv/config.json
 	OpDVPrivate        = "dv-private"         // set/clear privatenode.json record (was part of dv-private)
-	OpDVRestart        = "dv-restart"         // systemctl restart aslcp-dv (fallback when ctl is unreachable)
+	OpDVRestart        = "dv-restart"         // systemctl restart nodespot-dv (fallback when ctl is unreachable)
 	OpDVRestoreDiscard = "dv-restore-discard" // kept from dv-restore-discard
 )
 
@@ -301,7 +301,7 @@ type DVStatus struct {
 	Supported      bool   `json:"supported"`      // DVPlatform ok (bookworm/trixie; amd64/arm64/armhf)
 	Reason         string `json:"reason,omitempty"`
 	MD380Installed bool   `json:"md380Installed"`
-	Enabled        bool   `json:"enabled"` // aslcp-dv.service is-enabled
+	Enabled        bool   `json:"enabled"` // nodespot-dv.service is-enabled
 	Active         bool   `json:"active"`
 	MD380Active    bool   `json:"md380Active"`
 	Job            string `json:"job,omitempty"` // "", running, failed, done
@@ -313,17 +313,17 @@ type DVStatus struct {
 The enable job is a transient unit. The script `dvEnableScript`, as root, runs these steps:
 1. Write the pinned keyring and the apt source, using the existing code and fingerprint.
 2. `apt-get update -o Dir::Etc::sourcelist=<dv list>`.
-3. Simulate `apt-get install md380-emu [qemu-user-static if arch != armhf]`, then `aslcp-helper dv-step install-plan`. The plan step keeps the existing unexpected_deps guard and the marker.
+3. Simulate `apt-get install md380-emu [qemu-user-static if arch != armhf]`, then `nodespot-helper dv-step install-plan`. The plan step keeps the existing unexpected_deps guard and the marker.
 4. Install.
 5. For each legacy unit of analog_bridge, mmdvm_bridge, netcheck, ysfgateway, p25gateway, nxdngateway and stfu that is loaded: `systemctl disable --now`. This frees port 34001; nothing is purged.
 6. Write the md380-emu drop-in.
-7. `aslcp-helper dv-step config`.
-8. `systemctl daemon-reload` and `systemctl enable --now md380-emu aslcp-dv`.
-9. `aslcp-helper dv-step check`. It waits up to 10 s for /run/aslcp-dv/ctl.sock and a `status` with `vocoder.ok`, and prints a warning otherwise.
+7. `nodespot-helper dv-step config`.
+8. `systemctl daemon-reload` and `systemctl enable --now md380-emu nodespot-dv`.
+9. `nodespot-helper dv-step check`. It waits up to 10 s for /run/nodespot-dv/ctl.sock and a `status` with `vocoder.ok`, and prints a warning otherwise.
 
 Steps of `RunDVStep`: install-plan, config, check. ARMv6 (detected through /proc/cpuinfo or `dpkg --print-architecture` = armhf plus no `v7l`/`v8`) returns `Supported:false, Reason:"armv6_unsupported"`.
 
-`dv-disable` runs `systemctl disable --now aslcp-dv` and keeps md380-emu and the marker.
+`dv-disable` runs `systemctl disable --now nodespot-dv` and keeps md380-emu and the marker.
 
 ### C.2 API endpoints (all under /api/dv, roles unchanged)
 
@@ -360,16 +360,16 @@ GET /job is kept as the job log for the enable unit, so the UI's job poller logi
 
 - `Installed` means md380-emu is installed. `Running` means ctl is connected. `Configured` means config.json exists.
 - `Modes[i]` gains `Available bool`: M1 marks only `LOOP` true; BM, TGIF, DMR, YSF, P25 and NXDN are false.
-- `Services` becomes `[{aslcp-dv},{md380-emu}]`.
-- `Bridge.Source` becomes "aslcp-dv".
+- `Services` becomes `[{nodespot-dv},{md380-emu}]`.
+- `Bridge.Source` becomes "nodespot-dv".
 - `Caller` and `Heard` come from TalkEvents (a ring of 10) and use the local `dv.Caller`. Its JSON is identical to helper.DVCaller, so the web is unaffected.
 - New fields: `Vocoder {ok bool, timeouts uint64}` and `Engine {version string, uptime int}`.
 
 ### C.4 Host lists (internal/hostlists, server-side)
 
-- **Files.** `/var/lib/aslcp/hostlists/{DMR_Hosts.txt,YSF_Hosts.txt,P25_Hosts.txt,NXDN_Hosts.txt}` plus `meta.json` (ETag, Last-Modified, fetched time, rows). The aslcp user owns them; this is inside ReadWritePaths.
+- **Files.** `/var/lib/nodespot/hostlists/{DMR_Hosts.txt,YSF_Hosts.txt,P25_Hosts.txt,NXDN_Hosts.txt}` plus `meta.json` (ETag, Last-Modified, fetched time, rows). The nodespot user owns them; this is inside ReadWritePaths.
 - **Source.** `https://www.pistar.uk/downloads/<name>`; the base URL can be overridden by the setting `hostlists.base_url` (tests and mirrors).
-- **Who downloads.** The aslcp server: `hostlists.Manager.Run(ctx)`, started from main like radioid.
+- **Who downloads.** The nodespot server: `hostlists.Manager.Run(ctx)`, started from main like radioid.
 - **When.**
   - First check 60 s after start, then every 24 h with ±1 h jitter.
   - Conditional GET with If-None-Match/If-Modified-Since.
@@ -379,7 +379,7 @@ GET /job is kept as the job log for the enable unit, so the UI's job poller logi
   - At most 4 MiB per file and 30 s timeout.
   - The file is written to a temp file, parsed, and must give more than 0 rows before it is renamed into place; the last good copy is kept.
   - 5000 items per list, as today.
-- **User-Agent:** `ASLCP/<version>`, generic, with no callsign, node or ID.
+- **User-Agent:** `nodespot/<version>`, generic, with no callsign, node or ID.
 - **API:** `Get(mode) (DVList, error)` (same JSON shape as today, so dvlist.ts is unchanged), `Resolve(mode, value) (Target, bool)` and `Status()`.
 - **DMRIds.dat is not downloaded.** internal/radioid's user.csv already supplies ID→callsign plus name and location (a superset), checked daily, with ETag. A second list would duplicate data and bandwidth. If the engine ever needs IDs offline, add DMRIds.dat as one more entry in the same manager. Flag this to the owner as a decision.
 - **Format check.** The Pi-Star file names differ from the previous stack's (YSF_Hosts vs YSFHosts). Before writing the parsers, verify the column layouts against a downloaded copy. Commit only synthetic fixtures.
@@ -397,9 +397,9 @@ GET /job is kept as the job log for the enable unit, so the UI's job poller logi
 ## D. Parallel tracks
 
 **Ownership** (disjoint):
-- **T1 (engine + packaging):** cmd/aslcp-dv/**, internal/dv/** except internal/dv/imbe, packaging/systemd/aslcp-dv.service, packaging/nfpm.yaml, packaging/scripts/{postinst,prerm,postrm}.sh, packaging/README.package, Makefile, .github/workflows/ci.yml.
+- **T1 (engine + packaging):** cmd/nodespot-dv/**, internal/dv/** except internal/dv/imbe, packaging/systemd/nodespot-dv.service, packaging/nfpm.yaml, packaging/scripts/{postinst,prerm,postrm}.sh, packaging/README.package, Makefile, .github/workflows/ci.yml.
 - **T2 (IMBE):** internal/dv/imbe/** only.
-- **T3 (rewiring):** everything else listed in B: internal/helper/**, internal/api/**, internal/dvpanel/** (except ini, untouched), internal/hostlists/**, internal/nowcalling, cmd/aslcp/**, cmd/aslcp-helper/main.go, packaging/install.sh, web/**, docs/**, CHANGELOG.md.
+- **T3 (rewiring):** everything else listed in B: internal/helper/**, internal/api/**, internal/dvpanel/** (except ini, untouched), internal/hostlists/**, internal/nowcalling, cmd/nodespot/**, cmd/nodespot-helper/main.go, packaging/install.sh, web/**, docs/**, CHANGELOG.md.
 
 **Sequencing:**
 1. T1 commits `internal/dv/ctl/types.go` and `ctltest` first, as hour-zero work. T3 builds against them.
@@ -410,8 +410,8 @@ GET /job is kept as the job log for the enable unit, so the UI's job poller logi
 ### D.4 Shared contract (internal/dv/ctl/types.go, frozen)
 
 ```go
-// Package ctl is the control contract between the aslcp server and aslcp-dv:
-// newline-delimited JSON over the unix socket /run/aslcp-dv/ctl.sock.
+// Package ctl is the control contract between the nodespot server and nodespot-dv:
+// newline-delimited JSON over the unix socket /run/nodespot-dv/ctl.sock.
 package ctl
 
 import (
@@ -420,8 +420,8 @@ import (
 )
 
 const (
-	SocketPath    = "/run/aslcp-dv/ctl.sock"
-	ConfigPath    = "/var/lib/aslcp-dv/config.json"
+	SocketPath    = "/run/nodespot-dv/ctl.sock"
+	ConfigPath    = "/var/lib/nodespot-dv/config.json"
 	ConfigVersion = 1
 	MaxLine       = 64 << 10
 )
@@ -587,7 +587,7 @@ type LoginEvent struct {
 	Detail string     `json:"detail,omitempty"`
 }
 
-// Config is ConfigPath, rendered by aslcp-helper (dv-config), mode 0600 aslcp-dv.
+// Config is ConfigPath, rendered by nodespot-helper (dv-config), mode 0600 nodespot-dv.
 type Config struct {
 	Version  int            `json:"version"`
 	USRP     USRPConfig     `json:"usrp"`
@@ -628,7 +628,7 @@ type NetConfig struct {
 
 type CtlConfig struct {
 	Socket    string   `json:"socket,omitempty"`
-	AllowUIDs []int    `json:"allowUids,omitempty"` // tests only; default root + user aslcp
+	AllowUIDs []int    `json:"allowUids,omitempty"` // tests only; default root + user nodespot
 }
 ```
 
@@ -758,12 +758,12 @@ func MetaTLV(s string) []byte // tag 0x08, len, ASCII (<= 64)
 
 ### E.1 Risks and mitigations
 
-1. **Port 34001 is held by Analog_Bridge** on upgraded nodes. The enable job stops the legacy units. aslcp-dv retries the bind every 2 s and reports `usrp.listen` errors in status. The UI shows the legacy-units notice.
+1. **Port 34001 is held by Analog_Bridge** on upgraded nodes. The enable job stops the legacy units. nodespot-dv retries the bind every 2 s and reports `usrp.listen` errors in status. The UI shows the legacy-units notice.
 2. **The headerless md380 protocol mismatches replies after a timeout.** Mitigated by the per-direction socket and re-dial on timeout (A.3); covered by a test with fake delay > timeout.
 3. **qemu-user-static speed on arm64/amd64.** The bench gate (2x real-time, p99 at most 15 ms) is run on real hardware before release; results go in DV.md. The fallback (out of M1) is native IMBE only for P25.
 4. **md380-emu binds 0.0.0.0.** The drop-in IP restriction is written by enable.
-5. **Secrets leakage.** Config 0600 aslcp-dv, `Status` never carries NetConfig, diagnostics mask passwords, and the server never reads the file.
-6. **Socket permissions after upgrade.** The aslcp process gains group aslcp-dv only after restart; postinst restarts aslcp.service after `adduser`. SO_PEERCRED is the real gate anyway.
+5. **Secrets leakage.** Config 0600 nodespot-dv, `Status` never carries NetConfig, diagnostics mask passwords, and the server never reads the file.
+6. **Socket permissions after upgrade.** The nodespot process gains group nodespot-dv only after restart; postinst restarts nodespot.service after `adduser`. SO_PEERCRED is the real gate anyway.
 7. **Hard cut-over loses features** (BM/TGIF/DMR/YSF/P25/NXDN until later milestones). This is clearly stated in the CHANGELOG and the UI; settings (networks.json, favorites, resume) are kept so later milestones pick them up.
 8. **Breakage breadth in T3** (helper symbols used by kept files). Do the B.2 relocation list before deleting files; `go build ./...` after each file group.
 9. **Pi-Star list formats/names** differ from what the old parsers expected. Verify them against a live download before finalising the parsers; there are fixture tests per format.
@@ -793,27 +793,27 @@ func MetaTLV(s string) []byte // tag 0x08, len, ASCII (<= 64)
 - [ ] `gofmt -l .` empty; `go vet ./...`
 - [ ] `go test -race ./...` (including the internal/dv/** tests, ctl server/client tests with SO_PEERCRED, hostlists tests with httptest, helper dv tests with the fake runner, api tests with ctltest.Fake)
 - [ ] `CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build ./cmd/...`, also with arm64 and amd64
-- [ ] `make debs`; `dpkg -c` shows /usr/libexec/aslcp/aslcp-dv and aslcp-dv.service for all three architectures
-- [ ] `go run ./cmd/aslcp-dv bench -fake -frames 200` exits 0
+- [ ] `make debs`; `dpkg -c` shows /usr/libexec/nodespot/nodespot-dv and nodespot-dv.service for all three architectures
+- [ ] `go run ./cmd/nodespot-dv bench -fake -frames 200` exits 0
 - [ ] `cd web && npm ci && npm run check && npm test && npm run build`
 - [ ] `grep -rn "Analog_Bridge\|STFU\|dv-" internal cmd web/src` shows only ini/, backup, migration stubs and comments
 - [ ] Placeholder scan: no real callsigns, IDs or IPs in new tests (only N0CALL, 1234567, 1997/1998/1999, 192.0.2.x, node2001)
 - [ ] On a Pi (bookworm, armhf), manual:
-  - enable from the UI; md380-emu and aslcp-dv are active and the legacy units are stopped;
+  - enable from the UI; md380-emu and nodespot-dv are active and the legacy units are stopped;
   - `ss -ulpn` shows 34001 on 127.0.0.1 only;
   - the parrot echo is heard via the private node;
   - Now Calling shows PARROT;
-  - disable stops aslcp-dv and md380-emu stays installed;
+  - disable stops nodespot-dv and md380-emu stays installed;
   - the real bench passes on armhf and on one arm64 board.
 - [ ] Upgrade from 1.4.x with the previous stack configured: favorites, resume, networks.json and the private node survive; the cards show "Not yet available in this build".
 
 ### E.4 CHANGELOG (operator-visible only)
 
-- Digital modes now run on the built-in ASLCP engine; the previous stack is no longer used, and its services are stopped when you enable digital modes.
+- Digital modes now run on the built-in nodespot engine; the previous stack is no longer used, and its services are stopped when you enable digital modes.
 - "Enable digital modes" installs only the md380-emu vocoder (plus qemu-user-static on 64-bit and x86 systems). ARMv6 boards are not supported.
 - BrandMeister, TGIF, DMR, YSF, P25 and NXDN show "Not yet available in this build". Your settings and favorites are kept.
 - New Parrot test mode echoes your transmission back through the bridge node.
-- ASLCP downloads the YSF, P25, NXDN and DMR host lists itself, once a day, while digital modes are enabled.
+- nodespot downloads the YSF, P25, NXDN and DMR host lists itself, once a day, while digital modes are enabled.
 - Removed: the the previous stack uninstall, BrandMeister/STFU and network credential pages, and the the previous stack service restart and rollback buttons.
 
 ### Decisions for the owner
@@ -826,6 +826,6 @@ func MetaTLV(s string) []byte // tag 0x08, len, ASCII (<= 64)
 - /home/user/wt-200/internal/dv/ctl/types.go (new; frozen contract shared by T1 and T3)
 - /home/user/wt-200/internal/helper/dv.go (source of the keyring, marker and platform code to relocate into dv.go/dv_common.go before deletion)
 - /home/user/wt-200/internal/api/handlers_dv.go (route set to rewrite onto ctl and helper dv-* ops)
-- /home/user/wt-200/cmd/aslcp/main.go (wiring of ctl client, hostlists, resume tracker and demo fake)
-- /home/user/wt-200/packaging/nfpm.yaml (adds the aslcp-dv binary and unit to all three architecture packages)
+- /home/user/wt-200/cmd/nodespot/main.go (wiring of ctl client, hostlists, resume tracker and demo fake)
+- /home/user/wt-200/packaging/nfpm.yaml (adds the nodespot-dv binary and unit to all three architecture packages)
 

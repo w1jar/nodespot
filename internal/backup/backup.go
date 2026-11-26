@@ -27,7 +27,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/artw1/aslcp/internal/debver"
+	"github.com/w1jar/nodespot/internal/debver"
 )
 
 // Format limits.
@@ -53,14 +53,14 @@ const TypeFile = "file"
 
 // Archive locations of the parts.
 const (
-	PathAslcpDB    = "aslcp/aslcp.db"
-	PathAslcpConf  = "aslcp/aslcp.conf"
-	PathNodeConfig = "node/node.json"
-	PathSA818      = "node/sa818.json"
+	PathNodespotDB   = "nodespot/nodespot.db"
+	PathNodespotConf = "nodespot/nodespot.conf"
+	PathNodeConfig   = "node/node.json"
+	PathSA818        = "node/sa818.json"
 )
 
 // Paths lists every valid archive path.
-var Paths = []string{PathAslcpDB, PathAslcpConf, PathNodeConfig, PathSA818}
+var Paths = []string{PathNodespotDB, PathNodespotConf, PathNodeConfig, PathSA818}
 
 // Entry is one file of the archive.
 type Entry struct {
@@ -86,13 +86,13 @@ type Parts struct {
 
 // Manifest is manifest.json.
 type Manifest struct {
-	Format       int       `json:"format"`
-	Created      time.Time `json:"created"`
-	CreatedBy    string    `json:"createdBy"`
-	ASLCPVersion string    `json:"aslcpVersion"`
-	Hostname     string    `json:"hostname"`
-	Timezone     string    `json:"timezone"`
-	Arch         string    `json:"arch"`
+	Format          int       `json:"format"`
+	Created         time.Time `json:"created"`
+	CreatedBy       string    `json:"createdBy"`
+	NodespotVersion string    `json:"nodespotVersion"`
+	Hostname        string    `json:"hostname"`
+	Timezone        string    `json:"timezone"`
+	Arch            string    `json:"arch"`
 	// The Debian release of the backed-up node (os-release ID,
 	// VERSION_CODENAME and PRETTY_NAME).
 	OSID              string   `json:"osId,omitempty"`
@@ -117,11 +117,11 @@ func bad(format string, a ...any) error { return &Error{Msg: fmt.Sprintf(format,
 type NewerFormatError struct{ Version int }
 
 func (e *NewerFormatError) Error() string {
-	return fmt.Sprintf("the backup uses format %d, which this version of ASLCP does not know; update ASLCP first", e.Version)
+	return fmt.Sprintf("the backup uses format %d, which this version of nodespot does not know; update nodespot first", e.Version)
 }
 
 // ErrAsteriskBackup is the error for a format 1 archive.
-var ErrAsteriskBackup = &Error{Msg: "this backup was made by ASLCP 2.x for an Asterisk node; ASLCP 3 runs its own node and cannot restore it (set the node up again, it takes one screen)"}
+var ErrAsteriskBackup = &Error{Msg: "this backup was made by aslcp 2.x for an Asterisk node; nodespot runs its own node and cannot restore it (set the node up again, it takes one screen)"}
 
 var (
 	reName = regexp.MustCompile(`^[a-z_][a-z0-9_.-]{0,31}\$?$`)
@@ -200,7 +200,7 @@ func (m *Manifest) Validate() error {
 	if len(m.Files) > MaxEntries || len(m.Skipped) > 32 {
 		return bad("too many entries")
 	}
-	for _, s := range append([]string{m.Hostname, m.Timezone, m.Arch, m.ASLCPVersion, m.CreatedBy, m.OSID,
+	for _, s := range append([]string{m.Hostname, m.Timezone, m.Arch, m.NodespotVersion, m.CreatedBy, m.OSID,
 		m.OSVersionCodename, m.OSPrettyName, m.Callsign}, m.Skipped...) {
 		if !textOK(s) {
 			return bad("invalid text field in the manifest")
@@ -225,8 +225,8 @@ func (m *Manifest) Validate() error {
 			return bad("the backup is larger than %d MiB when unpacked", MaxExpanded>>20)
 		}
 	}
-	if !seen[PathAslcpDB] {
-		return bad("the backup has no ASLCP database")
+	if !seen[PathNodespotDB] {
+		return bad("the backup has no nodespot database")
 	}
 	if m.Parts.Node != seen[PathNodeConfig] || m.Parts.SA818 != seen[PathSA818] {
 		return bad("the manifest's parts do not match its files")

@@ -38,7 +38,7 @@ type Handler interface {
 // ServerOptions configures a Server.
 type ServerOptions struct {
 	// AllowUIDs are the peer uids that may connect. Empty means root and
-	// the user "aslcp" (looked up when Serve starts).
+	// the user "nodespot" (looked up when Serve starts).
 	AllowUIDs []int
 	Ping      time.Duration // default DefaultPing
 	Idle      time.Duration // default DefaultIdle
@@ -125,7 +125,7 @@ func (s *Server) buildAllow() {
 		}
 	} else {
 		m[0] = true
-		if u, err := user.Lookup("aslcp"); err == nil {
+		if u, err := user.Lookup("nodespot"); err == nil {
 			if n, err := strconv.Atoi(u.Uid); err == nil {
 				m[n] = true
 			}

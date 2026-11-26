@@ -1,4 +1,4 @@
-// Command aslcp is the ASLCP server: the web control panel of the aslcp-node
+// Command nodespot is the nodespot server: the web control panel of the nodespot-node
 // radio node (AllStar, EchoLink and the digital modes on one radio).
 package main
 
@@ -19,25 +19,25 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/artw1/aslcp/internal/api"
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/backupsvc"
-	"github.com/artw1/aslcp/internal/config"
-	"github.com/artw1/aslcp/internal/demo"
-	"github.com/artw1/aslcp/internal/diag"
-	"github.com/artw1/aslcp/internal/favstats"
-	"github.com/artw1/aslcp/internal/hamdb"
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/hostlists"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/nodelist"
-	"github.com/artw1/aslcp/internal/radioid"
-	"github.com/artw1/aslcp/internal/schedules"
-	"github.com/artw1/aslcp/internal/store"
-	"github.com/artw1/aslcp/internal/system"
-	"github.com/artw1/aslcp/internal/updates"
-	"github.com/artw1/aslcp/internal/webui"
+	"github.com/w1jar/nodespot/internal/api"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/backupsvc"
+	"github.com/w1jar/nodespot/internal/config"
+	"github.com/w1jar/nodespot/internal/demo"
+	"github.com/w1jar/nodespot/internal/diag"
+	"github.com/w1jar/nodespot/internal/favstats"
+	"github.com/w1jar/nodespot/internal/hamdb"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/hostlists"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/nodelist"
+	"github.com/w1jar/nodespot/internal/radioid"
+	"github.com/w1jar/nodespot/internal/schedules"
+	"github.com/w1jar/nodespot/internal/store"
+	"github.com/w1jar/nodespot/internal/system"
+	"github.com/w1jar/nodespot/internal/updates"
+	"github.com/w1jar/nodespot/internal/webui"
 )
 
 var version = "dev"
@@ -49,16 +49,16 @@ func main() {
 		os.Exit(adminMain(os.Args[2:]))
 	}
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage:\n  aslcp [options]            run the web server\n  aslcp admin <command>      manage accounts (create, reset-password, list); see: aslcp admin --help\n\nOptions:\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage:\n  nodespot [options]            run the web server\n  nodespot admin <command>      manage accounts (create, reset-password, list); see: nodespot admin --help\n\nOptions:\n")
 		flag.PrintDefaults()
 	}
-	cfgPath := flag.String("config", config.DefaultConfigPath, "path to aslcp.conf")
+	cfgPath := flag.String("config", config.DefaultConfigPath, "path to nodespot.conf")
 	dev := flag.Bool("dev", false, "development mode: print setup code, allow Vite origin, no Secure cookie")
 	demoMode := flag.Bool("demo", false, "run against a simulated node (no radio or network needed)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 	if *showVersion {
-		fmt.Println("aslcp", version)
+		fmt.Println("nodespot", version)
 		return
 	}
 	if err := run(*cfgPath, *dev, *demoMode); err != nil {
@@ -67,12 +67,12 @@ func main() {
 			// status (SuccessExitStatus/RestartForceExitStatus in the unit).
 			os.Exit(restartExitCode)
 		}
-		log.Fatalf("aslcp: %v", err)
+		log.Fatalf("nodespot: %v", err)
 	}
 }
 
 // restartExitCode is the exit status that asks systemd for a restart after a
-// restore (see packaging/systemd/aslcp.service).
+// restore (see packaging/systemd/nodespot.service).
 const restartExitCode = 75
 
 var errRestart = errors.New("restart requested")
@@ -90,7 +90,7 @@ func run(cfgPath string, dev, demoMode bool) error {
 	defaults := config.Defaults()
 	if demoMode {
 		if cfg.DataDir == defaults.DataDir {
-			d, err := os.MkdirTemp("", "aslcp-demo-")
+			d, err := os.MkdirTemp("", "nodespot-demo-")
 			if err != nil {
 				return err
 			}
@@ -110,10 +110,10 @@ func run(cfgPath string, dev, demoMode bool) error {
 	if swapped, err := backupsvc.ApplyStaged(cfg.DataDir); err != nil {
 		logger.Printf("restore: %v", err)
 	} else if swapped {
-		logger.Printf("restore: the restored database is in place (the previous one is aslcp.db.pre-restore)")
+		logger.Printf("restore: the restored database is in place (the previous one is nodespot.db.pre-restore)")
 	}
 
-	st, err := store.Open(filepath.Join(cfg.DataDir, "aslcp.db"))
+	st, err := store.Open(filepath.Join(cfg.DataDir, "nodespot.db"))
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
 	}
@@ -141,11 +141,11 @@ func run(cfgPath string, dev, demoMode bool) error {
 	hdb := hamdb.New(hamdb.Options{Dir: cfg.DataDir, Version: version, Settings: st, Logger: logger})
 	nl := nodelist.New(nodelist.Options{URL: cfg.NodelistURL, DataDir: cfg.DataDir, Interval: cfg.NodelistRefresh, Logger: logger})
 
-	// The node daemon (aslcp-node) owns the radio and the networks; the
+	// The node daemon (nodespot-node) owns the radio and the networks; the
 	// panel only talks to its control socket.
 	nodeSocket := cfg.NodeSocket
 	if demoMode {
-		dir, err := os.MkdirTemp("", "aslcp-dn")
+		dir, err := os.MkdirTemp("", "nodespot-dn")
 		if err != nil {
 			return err
 		}
@@ -180,7 +180,7 @@ func run(cfgPath string, dev, demoMode bool) error {
 		if dev {
 			fmt.Printf("SETUP CODE: %s\n", code)
 		}
-		logger.Printf("first-run setup required: open %s (or run: aslcp admin create); code also in %s",
+		logger.Printf("first-run setup required: open %s (or run: nodespot admin create); code also in %s",
 			setupLink(cfg.Listen, code, interfaceAddrs()), filepath.Join(cfg.DataDir, "setup-code"))
 	}
 
@@ -196,7 +196,7 @@ func run(cfgPath string, dev, demoMode bool) error {
 			return helper.Firewall{Present: true, Running: true, ServiceEnabled: true}, nil
 		}
 		// Backup and restore run for real on temporary directories.
-		demoDir, err := os.MkdirTemp("", "aslcp-demo-node-")
+		demoDir, err := os.MkdirTemp("", "nodespot-demo-node-")
 		if err != nil {
 			return err
 		}
@@ -240,7 +240,7 @@ func run(cfgPath string, dev, demoMode bool) error {
 	bk := backupsvc.New(backupsvc.Options{Helper: bkHelper, Store: st, DataDir: cfg.DataDir, ConfPath: confPath,
 		Version: version, Logger: logger, Demo: demoMode})
 	bg(func() { backupMaintenance(ctx, bk, nodeClient) })
-	fsOpts := favstats.Options{BaseURL: cfg.FavStatsURL, UserAgent: "aslcp/" + version, Logger: logger, LogRequests: cfg.FavStatsLog}
+	fsOpts := favstats.Options{BaseURL: cfg.FavStatsURL, UserAgent: "nodespot/" + version, Logger: logger, LogRequests: cfg.FavStatsLog}
 	if demoMode {
 		// No real service to protect: a request every 2 s, each taking 0.8 s.
 		fsOpts.Fetch = favstats.WithLatency(favstats.DemoFetcher(time.Now), 800*time.Millisecond)
@@ -282,7 +282,7 @@ func run(cfgPath string, dev, demoMode bool) error {
 		ErrorLog:          logger,
 		// No WriteTimeout: SSE streams are long-lived (handlers set their own deadlines).
 	}
-	logger.Printf("aslcp %s listening on http://%s (node: %s)", version, ln.Addr(), nodeSocket)
+	logger.Printf("nodespot %s listening on http://%s (node: %s)", version, ln.Addr(), nodeSocket)
 	errc := make(chan error, 1)
 	go func() { errc <- httpSrv.Serve(ln) }()
 
@@ -311,7 +311,7 @@ func run(cfgPath string, dev, demoMode bool) error {
 // the health check once the node has had time to come back.
 func backupMaintenance(ctx context.Context, bk *backupsvc.Service, n *node.Client) {
 	bk.RunHealth(ctx, func(ctx context.Context) []backupsvc.Check {
-		checks := []backupsvc.Check{{Name: "ASLCP", OK: true, Detail: "restarted with the restored database"}}
+		checks := []backupsvc.Check{{Name: "nodespot", OK: true, Detail: "restarted with the restored database"}}
 		sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		st, err := n.Status(sctx)
 		cancel()

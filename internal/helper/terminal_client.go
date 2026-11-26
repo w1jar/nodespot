@@ -20,7 +20,7 @@ type terminalConn struct {
 
 func (c *terminalConn) Read(b []byte) (int, error) { return c.r.Read(b) }
 
-// OpenTerminal calls terminal.open for owner (the ASLCP user id) and returns
+// OpenTerminal calls terminal.open for owner (the nodespot user id) and returns
 // the session id and the framed stream (see terminal_frame.go). Closing the
 // stream only detaches the session; send a FrameEnd first to end it. rows and
 // cols of zero mean the default size.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/artw1/aslcp/internal/native/radio/usbsys"
+	"github.com/w1jar/nodespot/internal/native/radio/usbsys"
 )
 
 // chip is one row of the table of sound chips that work as a radio

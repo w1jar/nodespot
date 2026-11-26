@@ -1,5 +1,5 @@
 // Package fake is an in-process md380-emu stand-in: a UDP server with a
-// deterministic codec, used by tests and `aslcp-dv bench -fake`.
+// deterministic codec, used by tests and `nodespot-dv bench -fake`.
 //
 // Codec: encode (320 bytes in) answers {0xA5, s0>>8, s0, 0, 0, 0, n} where s0
 // is the first sample and n counts encode requests (first one is 0); decode

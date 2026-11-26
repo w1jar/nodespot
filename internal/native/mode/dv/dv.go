@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/imbe"
-	"github.com/artw1/aslcp/internal/dv/network"
-	"github.com/artw1/aslcp/internal/dv/vocoder"
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/imbe"
+	"github.com/w1jar/nodespot/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // DefaultMD380 is the md380-emu address used when the node gives none.

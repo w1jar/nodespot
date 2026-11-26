@@ -506,7 +506,7 @@ func RedactBundleText(s string, kind Kind, o BundleOptions) (string, Counts) {
 }
 
 // ExcludedPath reports whether a file must never go into a bundle, whatever
-// the caller asks for: password and key material, the ASLCP database and
+// the caller asks for: password and key material, the nodespot database and
 // session data, setup codes, NetworkManager connection files (they hold
 // WiFi passwords) and the Allmon3 user list.
 func ExcludedPath(path string) bool {

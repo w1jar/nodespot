@@ -12,7 +12,7 @@ const pending = new Map<string, true>();
 let lastResult: unknown = null;
 
 const preview = () => ({
-  backup: { hostname: 'node-demo', created: new Date(Date.now() - 3 * 86400e3).toISOString(), createdBy: 'admin', aslcpVersion: '3.0.0', arch: 'arm64', osId: 'debian', osCodename: 'trixie', osName: 'Debian GNU/Linux 13 (trixie)', callsign: 'N0CALL', channel: 'stable' },
+  backup: { hostname: 'node-demo', created: new Date(Date.now() - 3 * 86400e3).toISOString(), createdBy: 'admin', nodespotVersion: '0.0.1', arch: 'arm64', osId: 'debian', osCodename: 'trixie', osName: 'Debian GNU/Linux 13 (trixie)', callsign: 'N0CALL', channel: 'stable' },
   node: { arch: 'arm64', osId: 'debian', osCodename: 'trixie', osName: 'Debian GNU/Linux 13 (trixie)', callsign: 'N0CALL' },
   warnings: [{ code: 'secrets_missing', message: 'The backup has no mode passwords. Set them up again after the restore.' }],
   users: [{ username: 'admin', role: 'admin' }, { username: 'op', role: 'operator' }, { username: 'guest', role: 'viewer' }],
@@ -41,7 +41,7 @@ export function handleBackup({ m, p, raw, res, user, setupNeeded, setupDone, bod
     if (user.role !== 'admin') return err(403, 'forbidden', 'forbidden'), true;
     const d = new Date(), z = (n: number) => String(n).padStart(2, '0');
     res.statusCode = 200; res.setHeader('Content-Type', 'application/gzip');
-    res.setHeader('Content-Disposition', `attachment; filename="aslcp-backup-node-demo-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.tar.gz"`);
+    res.setHeader('Content-Disposition', `attachment; filename="nodespot-backup-node-demo-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.tar.gz"`);
     res.end(`mock backup (not a real archive) ${JSON.stringify(body)}\n`);
     return true;
   }
@@ -53,7 +53,7 @@ export function handleBackup({ m, p, raw, res, user, setupNeeded, setupDone, bod
     else if (pw !== MOCK_PASSWORD) return err(403, 'wrong password (mock: pass)', 'bad_password'), true;
     const name = /filename="([^"]*)"/.exec(raw)?.[1] ?? '';
     if (/bad/i.test(name)) return err(400, 'not a valid backup', 'bad_backup'), true;
-    if (/new/i.test(name)) return err(409, 'backup is from a newer ASLCP; update ASLCP first', 'backup_too_new'), true;
+    if (/new/i.test(name)) return err(409, 'backup is from a newer nodespot; update nodespot first', 'backup_too_new'), true;
     const id = Math.random().toString(36).slice(2, 12); pending.set(id, true);
     setTimeout(() => json(200, { id, preview: preview() }), 600);
     return true;
@@ -65,7 +65,7 @@ export function handleBackup({ m, p, raw, res, user, setupNeeded, setupDone, bod
     pending.delete(mm[1]);
     const steps = [
       { name: 'Stop the node', ok: true, detail: '' }, { name: 'Restore the node configuration', ok: true, detail: 'station and 3 modes' },
-      { name: 'Stage ASLCP database', ok: true, detail: 'restart pending' }, { name: 'Start the node', ok: true, detail: '' },
+      { name: 'Stage nodespot database', ok: true, detail: 'restart pending' }, { name: 'Start the node', ok: true, detail: '' },
     ];
     lastResult = {
       at: new Date().toISOString(), backupCreated: preview().backup.created, steps,

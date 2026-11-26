@@ -3,8 +3,8 @@ package radio
 import (
 	"errors"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 // Frame is one 20 ms frame of 8 kHz mono PCM, the shared audio contract.

@@ -25,7 +25,7 @@
 //
 // Network options (ctl.NetConfig.Options), all optional:
 //
-//	client_version   software description text (default "aslcp-dv").
+//	client_version   software description text (default "nodespot-dv").
 //	keepalive_ms     keep-alive period (default 5000).
 //	timeout_ms       session considered lost after this silence (default 15000).
 //	login_timeout_ms one login attempt (default 5000).
@@ -61,9 +61,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/dmr"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/dmr"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 // logf writes the engine's log lines (stderr, so the journal); a variable so
@@ -152,7 +152,7 @@ func New(cfg ctl.NetConfig, id ctl.Identity) (*Net, error) {
 	n := &Net{
 		enabled: cfg.Enabled, password: cfg.Password, id: id,
 		addr:      net.JoinHostPort(cfg.Address, strconv.Itoa(port)),
-		version:   "aslcp-dv",
+		version:   "nodespot-dv",
 		keepAlive: DefaultKeepAlive, timeout: DefaultTimeout, loginTO: DefaultLoginTimeout,
 		bMin: DefaultBackoffMin, bMax: DefaultBackoffMax, rxTO: DefaultRXTimeout,
 		login: ctl.LoginOff, nextCall: 1 << 33,

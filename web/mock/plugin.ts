@@ -117,7 +117,7 @@ const nodeJSON = () => ({
   active: active || undefined, since: active ? since : undefined,
   mode: active ? modeStatus(active) : undefined,
   id: { enabled: station.id.enabled, owed: false, last: iso(now() - 240e3) },
-  configured: stationSet, running: nodeRunning, ...(nodeRunning ? {} : { error: 'dial unix /run/aslcp-node/control.sock: connect: no such file or directory' }),
+  configured: stationSet, running: nodeRunning, ...(nodeRunning ? {} : { error: 'dial unix /run/nodespot-node/control.sock: connect: no such file or directory' }),
   setupNeeded: !stationSet,
 });
 function modeStatus(name: string) {
@@ -192,7 +192,7 @@ const upgradable = () => updChecked !== null && mockVersion !== candidate();
 const updInfo = () => ({
   os: osInfo(),
   available: true, reason: null, applyReason: null, channel: mockChannel, installed: mockVersion, candidate: updChecked ? candidate() : '', upgradable: upgradable(), job: updJob,
-  jobLog: updJob === 'running' ? 'Reading package lists...\nUnpacking aslcp (0.2.0) over (0.1.0) ...' : updJob === 'succeeded' ? 'Setting up aslcp (0.2.0) ...' : '',
+  jobLog: updJob === 'running' ? 'Reading package lists...\nUnpacking nodespot (0.2.0) over (0.1.0) ...' : updJob === 'succeeded' ? 'Setting up nodespot (0.2.0) ...' : '',
   notes: upgradable() ? '- New **Updates** section in Settings\n- Faster dashboard\n\nThanks for testing <script>alert(1)</script>' : null, checked: updChecked,
 });
 // Simulated OS (apt) updates: a security package, an ordinary package, a reboot-required toggle.
@@ -209,7 +209,7 @@ const osInfo = () => ({
   rebootRequired: osReboot, rebootPkgs: osReboot ? ['linux-image-rpi-v8'] : [], job: osJob,
   jobLog: osJob === 'running' ? 'Reading package lists...\nUnpacking libssl3 (3.0.13-1~deb12u2) over (3.0.11-1~deb12u1) ...' : osJob === 'succeeded' ? 'Setting up libssl3 (3.0.13-1~deb12u2) ...\nSetting up ffmpeg (7:5.1.6-1) ...' : '',
 });
-const osBadge = () => ({ aslcp: upgradable(), aslcpVersion: upgradable() ? candidate() : '', os: osPkgs().length, security: osPkgs().filter((p) => p.security).length, reboot: osReboot });
+const osBadge = () => ({ nodespot: upgradable(), nodespotVersion: upgradable() ? candidate() : '', os: osPkgs().length, security: osPkgs().filter((p) => p.security).length, reboot: osReboot });
 const system = () => ({ updateAvailable: upgradable(), updateVersion: upgradable() ? candidate() : '', hostname: 'node-demo', cpuTemp: 44 + Math.random() * 6, load: [0.12, 0.1, 0.05].map((x) => x + Math.random() * 0.1), memTotal: 1024e6, memAvailable: 512e6, uptime: 120660 + Math.floor(process.uptime()), node: { running: nodeRunning, mode: active, uptime: nodeRunning ? 18000 : null, error: nodeRunning ? null : 'control socket unreachable' }, version: mockVersion });
 
 export function mockApi(): Plugin {
@@ -247,7 +247,7 @@ export function mockApi(): Plugin {
   });
 
   return {
-    name: 'aslcp-mock',
+    name: 'nodespot-mock',
     configureServer(server) {
       let tick = 0;
       setInterval(() => {
@@ -276,13 +276,13 @@ export function mockApi(): Plugin {
         const url = new URL(req.url ?? '/', 'http://x');
         if (!url.pathname.startsWith('/api/')) return next();
         if (Date.now() < downUntil) { req.socket.destroy(); return; } // simulated restart after a restore
-        res.setHeader('X-ASLCP-Instance', mockInstance);
+        res.setHeader('X-nodespot-Instance', mockInstance);
         const p = url.pathname.slice(4), m = req.method ?? 'GET';
-        const cookie = /aslcp_session=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
+        const cookie = /nodespot_session=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
         const user = cookie ? sessions.get(cookie) : undefined;
-        if (m !== 'GET' && req.headers['x-aslcp'] !== '1') return err(res, 403, 'missing X-ASLCP header', 'csrf');
+        if (m !== 'GET' && req.headers['x-nodespot'] !== '1') return err(res, 403, 'missing X-nodespot header', 'csrf');
         const body = m === 'GET' ? {} : await readBody(req);
-        const login = (u: { id: number; username: string; role: string }) => { const tok = Math.random().toString(36).slice(2); sessions.set(tok, u); res.setHeader('Set-Cookie', `aslcp_session=${tok}; Path=/; HttpOnly; SameSite=Strict`); };
+        const login = (u: { id: number; username: string; role: string }) => { const tok = Math.random().toString(36).slice(2); sessions.set(tok, u); res.setHeader('Set-Cookie', `nodespot_session=${tok}; Path=/; HttpOnly; SameSite=Strict`); };
 
         if (p === '/setup') {
           if (m === 'GET') return json(res, 200, { needed: setupNeeded, hotspot: process.env.MOCK_HOTSPOT === '1', station: !stationSet });
@@ -410,7 +410,7 @@ export function mockApi(): Plugin {
         if (p === '/hostlists/refresh' && m === 'POST') { if (!isAdmin) return forbid(); return json(res, 202); }
         if (p === '/system/node-service' && m === 'GET') {
           if (!isAdmin) return forbid();
-          return json(res, 200, { available: true, service: { unit: 'aslcp-node.service', description: 'ASLCP node', active: nodeRunning ? 'active' : 'failed', sub: nodeRunning ? 'running' : 'failed', enabled: 'enabled', since: 'Mon 2026-11-16 08:00:01 UTC' } });
+          return json(res, 200, { available: true, service: { unit: 'nodespot-node.service', description: 'nodespot node', active: nodeRunning ? 'active' : 'failed', sub: nodeRunning ? 'running' : 'failed', enabled: 'enabled', since: 'Mon 2026-11-16 08:00:01 UTC' } });
         }
         if (p === '/system/node-service/restart' && m === 'POST') {
           if (!isAdmin) return forbid();
@@ -482,7 +482,7 @@ export function mockApi(): Plugin {
           setTimeout(() => restartClients(), 500);
           return json(res, 202, { ok: true });
         }
-        if (p === '/system/restart-aslcp' && m === 'POST') { if (!isAdmin) return forbid(); setTimeout(() => { mockInstance = Math.random().toString(16).slice(2, 10); restartClients(); }, 500); return json(res, 202, { ok: true }); }
+        if (p === '/system/restart-nodespot' && m === 'POST') { if (!isAdmin) return forbid(); setTimeout(() => { mockInstance = Math.random().toString(16).slice(2, 10); restartClients(); }, 500); return json(res, 202, { ok: true }); }
         if (p === '/users' || p.startsWith('/users/')) {
           if (!isAdmin) return forbid();
           if (p === '/users' && m === 'GET') return json(res, 200, users);
@@ -501,8 +501,8 @@ export function mockApi(): Plugin {
         if (p === '/diagnostics' && m === 'GET') {
           if (!isAdmin) return forbid();
           res.statusCode = 200; res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-          res.setHeader('Content-Disposition', `attachment; filename="aslcp-diagnostics-${new Date().toISOString().slice(0, 10)}.txt"`);
-          return res.end(`ASLCP diagnostics (mock)\nASLCP: ${mockVersion}\nPassword = <redacted>\n`);
+          res.setHeader('Content-Disposition', `attachment; filename="nodespot-diagnostics-${new Date().toISOString().slice(0, 10)}.txt"`);
+          return res.end(`nodespot diagnostics (mock)\nnodespot: ${mockVersion}\nPassword = <redacted>\n`);
         }
         if (sched.handle(m, p, body, canOp, (c, b) => json(res, c, b), (c, msg, code) => err(res, c, msg, code), forbid)) return;
 

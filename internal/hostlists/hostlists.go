@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	proto "github.com/artw1/aslcp/internal/dv/m17"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	proto "github.com/w1jar/nodespot/internal/dv/m17"
 )
 
 const (
@@ -83,7 +83,7 @@ type Settings interface {
 type Options struct {
 	// Dir is the directory the files are kept in (required).
 	Dir      string
-	Version  string // for the User-Agent "ASLCP/<version>"
+	Version  string // for the User-Agent "nodespot/<version>"
 	Client   *http.Client
 	Settings Settings // nil: the default base URL
 	Logger   *log.Logger
@@ -452,7 +452,7 @@ func (m *Manager) fetch(ctx context.Context, mode string, force bool) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "ASLCP/"+m.o.Version)
+	req.Header.Set("User-Agent", "nodespot/"+m.o.Version)
 	if !force && have {
 		if mt.ETag != "" {
 			req.Header.Set("If-None-Match", mt.ETag)

@@ -17,13 +17,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // Cookie and header names.
 const (
-	CookieName   = "aslcp_session"
-	CSRFHeader   = "X-ASLCP"
+	CookieName   = "nodespot_session"
+	CSRFHeader   = "X-nodespot"
 	SessionTTL   = 30 * 24 * time.Hour
 	setupCodeLen = 10
 )
@@ -59,7 +59,7 @@ type Service struct {
 
 // NewService creates a Service.
 func NewService(st *store.Store, dataDir string) (*Service, error) {
-	d, err := HashPassword("aslcp-dummy-password")
+	d, err := HashPassword("nodespot-dummy-password")
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (s *Service) readSetupCode() string {
 // EnsureSetupCode makes sure the setup code file exists while no users exist,
 // and removes it otherwise. It returns the code ("" when not needed). A valid
 // code already in the file is kept, so the code printed by the installer
-// stays right when ASLCP restarts; a missing, empty or invalid file gets a new
+// stays right when nodespot restarts; a missing, empty or invalid file gets a new
 // code.
 func (s *Service) EnsureSetupCode() (string, error) {
 	n, err := s.Store.CountUsers()
@@ -225,7 +225,7 @@ func (s *Service) EnsureSetupCode() (string, error) {
 }
 
 // setupCodeOK compares code with the current setup code. The file wins over
-// the copy in memory, so a code recreated by "aslcp admin setup-code" works
+// the copy in memory, so a code recreated by "nodespot admin setup-code" works
 // without a restart. Call with s.mu held.
 func (s *Service) setupCodeOK(code string) bool {
 	if b, err := os.ReadFile(s.setupPath()); err == nil {

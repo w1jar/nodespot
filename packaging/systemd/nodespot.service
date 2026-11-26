@@ -1,31 +1,31 @@
 [Unit]
-Description=ASLCP web control panel
-Documentation=file:///usr/share/doc/aslcp/README
-After=network.target aslcp-helper.socket
-Wants=aslcp-helper.socket
+Description=nodespot web control panel
+Documentation=file:///usr/share/doc/nodespot/README
+After=network.target nodespot-helper.socket
+Wants=nodespot-helper.socket
 
 [Service]
 Type=simple
-User=aslcp
-Group=aslcp
-# Access to the node's control socket comes from the aslcp user's membership
-# in group "aslcp-node" (added by the package's postinst); systemd applies the
+User=nodespot
+Group=nodespot
+# Access to the node's control socket comes from the nodespot user's membership
+# in group "nodespot-node" (added by the package's postinst); systemd applies the
 # user's supplementary groups at start.
-ExecStart=/usr/bin/aslcp --config /etc/aslcp/aslcp.conf
+ExecStart=/usr/bin/nodespot --config /etc/nodespot/nodespot.conf
 Restart=on-failure
 RestartSec=3
-# Exit status 75 is ASLCP asking for a restart after a restore (the restored
+# Exit status 75 is nodespot asking for a restart after a restore (the restored
 # database is swapped in at start): not a failure, but restart anyway.
 SuccessExitStatus=75
 RestartForceExitStatus=75
 TimeoutStopSec=15
 UMask=0027
 
-# Hardening. The service can read /etc/aslcp, /sys/class/thermal and /proc
+# Hardening. The service can read /etc/nodespot, /sys/class/thermal and /proc
 # (read-only views are kept) and write only to its data directory.
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=/var/lib/aslcp
+ReadWritePaths=/var/lib/nodespot
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
@@ -47,11 +47,11 @@ SystemCallFilter=@system-service
 SystemCallFilter=~@privileged
 # Fail a filtered call with EPERM instead of killing the service.
 SystemCallErrorNumber=EPERM
-# No capabilities. For a listen port below 1024 ASLCP needs the drop-in
-# aslcp.service.d/port80.conf (AmbientCapabilities and CapabilityBoundingSet
+# No capabilities. For a listen port below 1024 nodespot needs the drop-in
+# nodespot.service.d/port80.conf (AmbientCapabilities and CapabilityBoundingSet
 # = CAP_NET_BIND_SERVICE). The System tab, Web port section, writes it when
-# you move ASLCP to port 80 (install.sh writes the same file for ASLCP_PORT=80
-# and ASLCP_TAKEOVER=1) and "apt purge aslcp" removes it.
+# you move nodespot to port 80 (install.sh writes the same file for NODESPOT_PORT=80
+# and NODESPOT_TAKEOVER=1) and "apt purge nodespot" removes it.
 CapabilityBoundingSet=
 
 [Install]

@@ -22,14 +22,14 @@ func TestDefaultsWhenMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Listen != ":8080" || c.DataDir != "/var/lib/aslcp" || c.NodeSocket != DefaultNodeSocket || c.NodeConfig != DefaultNodeConfig || c.NodelistRefresh != 24*time.Hour {
+	if c.Listen != ":8080" || c.DataDir != "/var/lib/nodespot" || c.NodeSocket != DefaultNodeSocket || c.NodeConfig != DefaultNodeConfig || c.NodelistRefresh != 24*time.Hour {
 		t.Fatalf("defaults: %+v", c)
 	}
 }
 
 func TestParse(t *testing.T) {
 	dir := t.TempDir()
-	conf := write(t, dir, "aslcp.conf", "; comment\n[server]\nlisten = 127.0.0.1:9999 ; inline\ndatadir = /x\n"+
+	conf := write(t, dir, "nodespot.conf", "; comment\n[server]\nlisten = 127.0.0.1:9999 ; inline\ndatadir = /x\n"+
 		"[ami]\nhost = 192.0.2.1\n# old section, ignored\n[Node]\nSocket = /tmp/n.sock\nconfig = /tmp/node.json\n"+
 		"[nodelist]\nurl = http://nodes.example.net/#a\nrefresh = 2h\n")
 	c, err := Load(conf)
@@ -71,10 +71,10 @@ func TestHelperAndUpdatesSections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.HelperSocket != "/run/aslcp/helper.sock" || c.UpdatesURL != "https://w1jar.github.io/aslcp" {
+	if c.HelperSocket != "/run/nodespot/helper.sock" || c.UpdatesURL != "https://w1jar.github.io/nodespot" {
 		t.Fatalf("defaults: %+v", c)
 	}
-	conf := write(t, dir, "aslcp.conf", "[helper]\nsocket = /tmp/h.sock\n[updates]\nurl = https://example.org/apt/\n")
+	conf := write(t, dir, "nodespot.conf", "[helper]\nsocket = /tmp/h.sock\n[updates]\nurl = https://example.org/apt/\n")
 	if c, err = Load(conf); err != nil {
 		t.Fatal(err)
 	}

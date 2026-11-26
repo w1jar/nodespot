@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 func ctlRig(t *testing.T) (*rig, *Server, string) {

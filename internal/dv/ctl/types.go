@@ -1,5 +1,5 @@
-// Package ctl is the control contract between the aslcp server and aslcp-dv:
-// newline-delimited JSON over the unix socket /run/aslcp-dv/ctl.sock.
+// Package ctl is the control contract between the nodespot server and nodespot-dv:
+// newline-delimited JSON over the unix socket /run/nodespot-dv/ctl.sock.
 package ctl
 
 import (
@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	SocketPath    = "/run/aslcp-dv/ctl.sock"
-	ConfigPath    = "/var/lib/aslcp-dv/config.json"
+	SocketPath    = "/run/nodespot-dv/ctl.sock"
+	ConfigPath    = "/var/lib/nodespot-dv/config.json"
 	ConfigVersion = 1
 	MaxLine       = 64 << 10
 )
@@ -263,7 +263,7 @@ type LoginEvent struct {
 	Detail string     `json:"detail,omitempty"`
 }
 
-// Config is ConfigPath, rendered by aslcp-helper (dv-config), mode 0600 aslcp-dv.
+// Config is ConfigPath, rendered by nodespot-helper (dv-config), mode 0600 nodespot-dv.
 type Config struct {
 	Version  int           `json:"version"`
 	USRP     USRPConfig    `json:"usrp"`
@@ -340,5 +340,5 @@ func WantsOnDemand(c NetConfig) bool {
 
 type CtlConfig struct {
 	Socket    string `json:"socket,omitempty"`
-	AllowUIDs []int  `json:"allowUids,omitempty"` // tests only; default root + user aslcp
+	AllowUIDs []int  `json:"allowUids,omitempty"` // tests only; default root + user nodespot
 }

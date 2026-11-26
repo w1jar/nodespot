@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/gsm"
+	"github.com/w1jar/nodespot/internal/native/gsm"
 )
 
 // Connection errors.

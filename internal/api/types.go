@@ -1,8 +1,8 @@
 package api
 
 import (
-	"github.com/artw1/aslcp/internal/nodelist"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/nodelist"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // UserJSON is the API User object.

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/schedules"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/schedules"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // initSchedules wires the schedule engine to this server: its commands go

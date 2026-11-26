@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 func testSpec() Spec {

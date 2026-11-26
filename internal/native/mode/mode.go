@@ -15,7 +15,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 // Mode names. They are the keys of the modes section of the node config

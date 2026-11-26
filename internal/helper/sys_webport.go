@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/config"
+	"github.com/w1jar/nodespot/internal/config"
 )
 
-// Move ASLCP to port 80 and back (plan 7, option A): a systemd drop-in gives
-// the service CAP_NET_BIND_SERVICE and "listen" in aslcp.conf points at port
+// Move nodespot to port 80 and back (plan 7, option A): a systemd drop-in gives
+// the service CAP_NET_BIND_SERVICE and "listen" in nodespot.conf points at port
 // 80. The port is never taken from a request: the only target is 80, and
 // "back" restores the value saved before the move.
 const (
@@ -30,15 +30,15 @@ const (
 
 	// DefaultWebPortState is the helper's own root-only state: the listen
 	// value from before the move, the pending marker and the revert note.
-	DefaultWebPortState = "/var/lib/aslcp-webport"
-	// DefaultDropinDir holds port80.conf, ASLCP's own drop-in.
-	DefaultDropinDir = "/etc/systemd/system/aslcp.service.d"
+	DefaultWebPortState = "/var/lib/nodespot-webport"
+	// DefaultDropinDir holds port80.conf, nodespot's own drop-in.
+	DefaultDropinDir = "/etc/systemd/system/nodespot.service.d"
 	dropinFile       = "port80.conf"
 	// DefaultGuardDelay: how long the new address has to answer before the
 	// helper moves back (plan 7.4).
 	DefaultGuardDelay = 60 * time.Second
 
-	guardUnit       = "aslcp-webport-guard"
+	guardUnit       = "nodespot-webport-guard"
 	fileWebPrevious = "previous-listen"
 	fileWebPending  = "pending"
 	fileWebReverted = "reverted"
@@ -47,8 +47,8 @@ const (
 // port80Dropin is the content of port80.conf. The rest of the unit's
 // hardening stays; NoNewPrivileges does not block ambient capabilities that
 // systemd itself sets.
-const port80Dropin = `# Written by ASLCP (System tab, Web port). Removed again by "move back" and
-# by "apt purge aslcp".
+const port80Dropin = `# Written by nodespot (System tab, Web port). Removed again by "move back" and
+# by "apt purge nodespot".
 [Service]
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -57,8 +57,8 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 var (
 	ErrPort80Busy      = errors.New("port 80 is in use by another program")
 	ErrPort80Unchecked = errors.New("cannot check port 80 (ss is not available)")
-	ErrAlreadyPort80   = errors.New("ASLCP already uses port 80")
-	ErrNotOnPort80     = errors.New("ASLCP is not on port 80")
+	ErrAlreadyPort80   = errors.New("nodespot already uses port 80")
+	ErrNotOnPort80     = errors.New("nodespot is not on port 80")
 )
 
 func init() {
@@ -87,12 +87,12 @@ type WebPortPending struct {
 
 // WebPortStatus is the response of web-port-status and web-port-set.
 type WebPortStatus struct {
-	Available bool   `json:"available"` // aslcp.conf could be read
+	Available bool   `json:"available"` // nodespot.conf could be read
 	Listen    string `json:"listen"`
 	Port      int    `json:"port"`
 	On80      bool   `json:"on80"`
-	// CanMove: ASLCP is not on 80 and port 80 is free. Reason says why not:
-	// "already" (ASLCP is on 80), "busy" (another program listens on 80) or
+	// CanMove: nodespot is not on 80 and port 80 is free. Reason says why not:
+	// "already" (nodespot is on 80), "busy" (another program listens on 80) or
 	// "unchecked" (ss is missing); "" when it can.
 	CanMove      bool   `json:"canMove"`
 	Reason       string `json:"reason"`
@@ -169,10 +169,10 @@ func (o *Ops) apacheActive(ctx context.Context) bool {
 	return err == nil && code == 0 && strings.TrimSpace(out) == "active"
 }
 
-// WebPortStatus reads where ASLCP listens and whether it can move to port 80.
+// WebPortStatus reads where nodespot listens and whether it can move to port 80.
 func (o *Ops) WebPortStatus(ctx context.Context) WebPortStatus {
 	res := WebPortStatus{}
-	if c, err := config.Load(o.aslcpConf()); err == nil {
+	if c, err := config.Load(o.nodespotConf()); err == nil {
 		if p, err := config.ListenPort(c.Listen); err == nil {
 			res.Available, res.Listen, res.Port, res.On80 = true, c.Listen, p, p == 80
 		}
@@ -226,10 +226,10 @@ func (o *Ops) WebPortSet(ctx context.Context, action string) (WebPortStatus, err
 	return WebPortStatus{}, errors.New("invalid action")
 }
 
-// setListen writes listen into the [server] section of aslcp.conf, keeping
+// setListen writes listen into the [server] section of nodespot.conf, keeping
 // everything else in the file, its owner and its mode.
 func (o *Ops) setListen(listen string) error {
-	path := o.aslcpConf()
+	path := o.nodespotConf()
 	data, err := os.ReadFile(path)
 	mode, uid, gid := fs.FileMode(0o644), 0, 0
 	switch {
@@ -277,13 +277,13 @@ func (o *Ops) removeDropin() error {
 	return nil
 }
 
-// restartASLCP reloads systemd and restarts the web service without waiting,
+// restartNodespot reloads systemd and restarts the web service without waiting,
 // so the request is answered before systemd stops the process that asked.
-func (o *Ops) restartASLCP(ctx context.Context) error {
+func (o *Ops) restartNodespot(ctx context.Context) error {
 	if err := o.systemctl(ctx, "daemon-reload"); err != nil {
 		return err
 	}
-	return o.systemctl(ctx, "--no-block", "restart", "aslcp.service")
+	return o.systemctl(ctx, "--no-block", "restart", "nodespot.service")
 }
 
 // stopGuard cancels the revert timer; errors are ignored (it may not exist).
@@ -293,7 +293,7 @@ func (o *Ops) stopGuard(ctx context.Context) {
 
 // startGuard arms the revert: a transient timer that runs the helper's
 // web-port-guard step after the delay, in its own unit so it survives the
-// restart of aslcp and of the helper itself.
+// restart of nodespot and of the helper itself.
 func (o *Ops) startGuard(ctx context.Context) error {
 	o.stopGuard(ctx)
 	argv := []string{"systemd-run", "--unit=" + guardUnit, fmt.Sprintf("--on-active=%ds", int(o.guardDelay().Seconds())),
@@ -308,11 +308,11 @@ func (o *Ops) startGuard(ctx context.Context) error {
 	return nil
 }
 
-// revertFiles undoes the move on disk: the drop-in goes and, when aslcp.conf
+// revertFiles undoes the move on disk: the drop-in goes and, when nodespot.conf
 // still says port 80, listen returns to the saved value (or 8080).
 func (o *Ops) revertFiles() error {
 	var firstErr error
-	if c, err := config.Load(o.aslcpConf()); err == nil {
+	if c, err := config.Load(o.nodespotConf()); err == nil {
 		if p, err := config.ListenPort(c.Listen); err == nil && p == 80 {
 			target := o.savedListen()
 			if target == "" {
@@ -332,7 +332,7 @@ func (o *Ops) revertFiles() error {
 func (o *Ops) webPortMove(ctx context.Context) (WebPortStatus, error) {
 	o.Svc.mu.Lock()
 	defer o.Svc.mu.Unlock()
-	c, err := config.Load(o.aslcpConf())
+	c, err := config.Load(o.nodespotConf())
 	if err != nil {
 		return WebPortStatus{}, err
 	}
@@ -365,7 +365,7 @@ func (o *Ops) webPortMove(ctx context.Context) (WebPortStatus, error) {
 	}
 	if err := o.setListen(listenWithPort(c.Listen, 80)); err != nil {
 		rollback()
-		return WebPortStatus{}, fmt.Errorf("cannot change aslcp.conf: %w", err)
+		return WebPortStatus{}, fmt.Errorf("cannot change nodespot.conf: %w", err)
 	}
 	// The marker first, then the timer that acts on it.
 	deadline := o.now().Add(o.guardDelay())
@@ -382,7 +382,7 @@ func (o *Ops) webPortMove(ctx context.Context) (WebPortStatus, error) {
 		return WebPortStatus{}, fmt.Errorf("cannot arm the revert timer: %w", err)
 	}
 	fw := o.openPort80(ctx)
-	if err := o.systemctl(ctx, "--no-block", "restart", "aslcp.service"); err != nil {
+	if err := o.systemctl(ctx, "--no-block", "restart", "nodespot.service"); err != nil {
 		rollback()
 		return WebPortStatus{}, err
 	}
@@ -410,7 +410,7 @@ func (o *Ops) openPort80(ctx context.Context) string {
 func (o *Ops) webPortBack(ctx context.Context) (WebPortStatus, error) {
 	o.Svc.mu.Lock()
 	defer o.Svc.mu.Unlock()
-	c, err := config.Load(o.aslcpConf())
+	c, err := config.Load(o.nodespotConf())
 	if err != nil {
 		return WebPortStatus{}, err
 	}
@@ -428,7 +428,7 @@ func (o *Ops) webPortBack(ctx context.Context) (WebPortStatus, error) {
 	if err := o.revertFiles(); err != nil {
 		return WebPortStatus{}, err
 	}
-	if err := o.restartASLCP(ctx); err != nil {
+	if err := o.restartNodespot(ctx); err != nil {
 		return WebPortStatus{}, err
 	}
 	return o.WebPortStatus(ctx), nil
@@ -445,7 +445,7 @@ func (o *Ops) webPortConfirm(ctx context.Context) (WebPortStatus, error) {
 	return o.WebPortStatus(ctx), nil
 }
 
-// WebPortGuard is the step of the revert timer (aslcp-helper web-port-guard):
+// WebPortGuard is the step of the revert timer (nodespot-helper web-port-guard):
 // when the marker is still there nobody confirmed the new address, so the
 // move is undone. Without a marker it does nothing.
 func (o *Ops) WebPortGuard(ctx context.Context) error {
@@ -456,7 +456,7 @@ func (o *Ops) WebPortGuard(ctx context.Context) error {
 	}
 	o.removeState(fileWebPending)
 	err := o.revertFiles()
-	if rerr := o.restartASLCP(ctx); err == nil {
+	if rerr := o.restartNodespot(ctx); err == nil {
 		err = rerr
 	}
 	note := "the move to port 80 was not confirmed in time and was undone"

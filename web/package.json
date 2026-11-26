@@ -1,7 +1,7 @@
 {
-  "name": "aslcp-web",
-  "version": "1.0.0",
-  "description": "ASLCP web UI",
+  "name": "nodespot-web",
+  "version": "0.0.1",
+  "description": "nodespot web UI",
   "scripts": {
     "dev": "vite",
     "dev:mock": "VITE_MOCK=1 vite",

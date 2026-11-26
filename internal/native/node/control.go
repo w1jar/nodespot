@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // DefaultSocket is the control socket. There is no TCP listener: the web
 // app talks to the node through this socket only.
-const DefaultSocket = "/run/aslcp-node/control.sock"
+const DefaultSocket = "/run/nodespot-node/control.sock"
 
 // MaxRequest bounds one request line.
 const MaxRequest = 1 << 20

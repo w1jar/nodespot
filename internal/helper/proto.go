@@ -1,6 +1,6 @@
 // Package helper implements the wire protocol, the server logic and the
-// client of aslcp-helper, the small root-owned process that performs the only
-// privileged operations ASLCP needs (package and OS updates, firewalld,
+// client of nodespot-helper, the small root-owned process that performs the only
+// privileged operations nodespot needs (package and OS updates, firewalld,
 // services, backup and restore, the System tab).
 //
 // Protocol: one JSON request per connection, one JSON response. Operations
@@ -16,7 +16,7 @@ const (
 	OpUpdateApply    = "update-apply"
 	OpFirewallStatus = "firewall-status"
 	OpFirewallOpen   = "firewall-open"
-	// OpChannelStable and OpChannelBeta switch the apt suite of the aslcp
+	// OpChannelStable and OpChannelBeta switch the apt suite of the nodespot
 	// source between "stable" and "beta" (the update channel).
 	OpChannelStable = "update-channel-stable"
 	OpChannelBeta   = "update-channel-beta"
@@ -27,11 +27,11 @@ const (
 	OpOSStatus = "os-status" // job state and log, reboot-required (cheap)
 	OpOSApply  = "os-apply"  // start the upgrade in a transient unit
 	OpReboot   = "reboot"    // systemctl reboot
-	// OpAslcpRestart restarts the aslcp service (systemctl --no-block).
-	OpAslcpRestart = "aslcp-restart"
+	// OpNodespotRestart restarts the nodespot service (systemctl --no-block).
+	OpNodespotRestart = "nodespot-restart"
 )
 
-// Update channels (the suite of the aslcp apt source).
+// Update channels (the suite of the nodespot apt source).
 const (
 	ChannelStable = "stable"
 	ChannelBeta   = "beta"
@@ -72,7 +72,7 @@ type Status struct {
 	Upgradable bool   `json:"upgradable"`
 	Job        string `json:"job"`
 	JobLog     string `json:"jobLog"`
-	// Channel is the suite of the aslcp apt source: "stable", "beta", or ""
+	// Channel is the suite of the nodespot apt source: "stable", "beta", or ""
 	// when it cannot be determined.
 	Channel string `json:"channel"`
 }
@@ -106,11 +106,11 @@ type Firewall struct {
 	Present bool `json:"present"`
 	// Running: firewalld is running.
 	Running bool `json:"running"`
-	// ServiceEnabled: the packaged "aslcp" firewalld service (TCP 8080) is
+	// ServiceEnabled: the packaged "nodespot" firewalld service (TCP 8080) is
 	// enabled in the runtime or permanent configuration. Only meaningful
 	// when Port is 8080.
 	ServiceEnabled bool `json:"serviceEnabled"`
-	// Port is the TCP port from the [server] listen setting of aslcp.conf
+	// Port is the TCP port from the [server] listen setting of nodespot.conf
 	// (read by the helper, never sent by the caller); 0 when unknown.
 	Port int `json:"port"`
 	// PortOpen: Port/tcp is open in the runtime or permanent configuration.
@@ -124,7 +124,7 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// OKResult is the result of reboot and aslcp-restart.
+// OKResult is the result of reboot and nodespot-restart.
 type OKResult struct {
 	OK bool `json:"ok"`
 }

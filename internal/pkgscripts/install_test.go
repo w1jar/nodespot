@@ -46,7 +46,7 @@ func newTkEnv(t *testing.T, units map[string]string, listen string) *tkEnv {
 		t.Skip("no sh")
 	}
 	dir := t.TempDir()
-	e := &tkEnv{dir: dir, bin: filepath.Join(dir, "bin"), conf: filepath.Join(dir, "aslcp.conf")}
+	e := &tkEnv{dir: dir, bin: filepath.Join(dir, "bin"), conf: filepath.Join(dir, "nodespot.conf")}
 	for _, d := range []string{e.bin, filepath.Join(dir, "sd"), filepath.Join(dir, "state"), filepath.Join(dir, "tmp")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -61,7 +61,7 @@ func newTkEnv(t *testing.T, units map[string]string, listen string) *tkEnv {
 		e.write("fake/ac-"+u, p[1])
 	}
 	e.write("fake/units", list.String())
-	e.write("aslcp.conf", "[server]\nlisten = "+listen+"\n")
+	e.write("nodespot.conf", "[server]\nlisten = "+listen+"\n")
 	fake := `#!/bin/sh
 d=` + dir + `/fake
 echo "$*" >>$d/calls
@@ -103,21 +103,21 @@ func (e *tkEnv) read(rel string) string {
 
 func (e *tkEnv) run(t *testing.T, call string) (string, error) {
 	t.Helper()
-	script := `say() { printf '%s\n' "aslcp-install: $*"; }
-die() { printf '%s\n' "aslcp-install: error: $*" >&2; exit 1; }
-tmp="$ASLCP_T"
+	script := `say() { printf '%s\n' "nodespot-install: $*"; }
+die() { printf '%s\n' "nodespot-install: error: $*" >&2; exit 1; }
+tmp="$NODESPOT_T"
 PORT_WANT="${PORT_WANT:-}"
 ` + installBlocks(t) + "\n" + call + "\n"
 	cmd := exec.Command("sh", "-c", script)
 	cmd.Env = []string{
 		"PATH=" + e.bin + ":" + os.Getenv("PATH"),
-		"ASLCP_T=" + filepath.Join(e.dir, "tmp"),
-		"ASLCP_CONF=" + e.conf,
-		"ASLCP_SYSTEMD_DIR=" + filepath.Join(e.dir, "sd"),
-		"ASLCP_DROPIN_DIR=" + filepath.Join(e.dir, "dropin"),
-		"ASLCP_WEBPORT_STATE=" + filepath.Join(e.dir, "state"),
-		"ASLCP_TAKEOVER_LIST=" + filepath.Join(e.dir, "lib", "takeover.list"),
-		"ASLCP_DISABLED_UNITS=" + filepath.Join(e.dir, "lib", "disabled-units"),
+		"NODESPOT_T=" + filepath.Join(e.dir, "tmp"),
+		"NODESPOT_CONF=" + e.conf,
+		"NODESPOT_SYSTEMD_DIR=" + filepath.Join(e.dir, "sd"),
+		"NODESPOT_DROPIN_DIR=" + filepath.Join(e.dir, "dropin"),
+		"NODESPOT_WEBPORT_STATE=" + filepath.Join(e.dir, "state"),
+		"NODESPOT_TAKEOVER_LIST=" + filepath.Join(e.dir, "lib", "takeover.list"),
+		"NODESPOT_DISABLED_UNITS=" + filepath.Join(e.dir, "lib", "disabled-units"),
 		"PORT_WANT=" + os.Getenv("PORT_WANT_TEST"),
 	}
 	out, err := cmd.CombinedOutput()
@@ -150,7 +150,7 @@ func TestTakeoverDisableSelectsUnits(t *testing.T) {
 		t.Errorf("disabled-units = %q", rec)
 	}
 	calls := e.read("fake/calls")
-	for _, bad := range []string{"asterisk", "cockpit", "nginx.service", "aslcp"} {
+	for _, bad := range []string{"asterisk", "cockpit", "nginx.service", "nodespot"} {
 		for _, l := range strings.Split(calls, "\n") {
 			if (strings.HasPrefix(l, "disable") || strings.HasPrefix(l, "stop") || strings.HasPrefix(l, "enable") || strings.HasPrefix(l, "start")) && strings.Contains(l, bad) {
 				t.Errorf("touched %s: %q", bad, l)
@@ -182,7 +182,7 @@ func TestSetPort80WritesDropinAndUndoRestores(t *testing.T) {
 	if out, err := e.run(t, "takeover_disable; set_port 80"); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	if got := e.read("aslcp.conf"); !strings.Contains(got, "listen = 192.0.2.10:80\n") {
+	if got := e.read("nodespot.conf"); !strings.Contains(got, "listen = 192.0.2.10:80\n") {
 		t.Errorf("conf = %q", got)
 	}
 	d := e.read("dropin/port80.conf")
@@ -195,10 +195,10 @@ func TestSetPort80WritesDropinAndUndoRestores(t *testing.T) {
 		t.Errorf("previous-listen = %q", p)
 	}
 	calls := e.read("fake/calls")
-	if !strings.Contains(calls, "daemon-reload") || !strings.Contains(calls, "restart aslcp") {
+	if !strings.Contains(calls, "daemon-reload") || !strings.Contains(calls, "restart nodespot") {
 		t.Errorf("calls: %s", calls)
 	}
-	if strings.Index(calls, "daemon-reload") > strings.Index(calls, "restart aslcp") {
+	if strings.Index(calls, "daemon-reload") > strings.Index(calls, "restart nodespot") {
 		t.Errorf("restart before daemon-reload: %s", calls)
 	}
 	// Undo.
@@ -206,7 +206,7 @@ func TestSetPort80WritesDropinAndUndoRestores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("undo: %v: %s", err, out)
 	}
-	if got := e.read("aslcp.conf"); !strings.Contains(got, "listen = 192.0.2.10:8080\n") {
+	if got := e.read("nodespot.conf"); !strings.Contains(got, "listen = 192.0.2.10:8080\n") {
 		t.Errorf("conf after undo = %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(e.dir, "dropin", "port80.conf")); err == nil {
@@ -237,7 +237,7 @@ func TestSetPort80RefusedWhenBusy(t *testing.T) {
 	if !strings.Contains(out, `"lighttpd"`) || !strings.Contains(out, "NOT moved") || !strings.Contains(out, "pid=612") {
 		t.Errorf("message: %s", out)
 	}
-	if got := e.read("aslcp.conf"); !strings.Contains(got, "listen = :8080\n") {
+	if got := e.read("nodespot.conf"); !strings.Contains(got, "listen = :8080\n") {
 		t.Errorf("conf changed: %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(e.dir, "dropin", "port80.conf")); err == nil {
@@ -253,7 +253,7 @@ func TestSetPortHighKeepsNoDropin(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(e.dir, "dropin")); err == nil {
 		t.Error("drop-in directory created for a high port")
 	}
-	if got := e.read("aslcp.conf"); !strings.Contains(got, "listen = :8181\n") {
+	if got := e.read("nodespot.conf"); !strings.Contains(got, "listen = :8181\n") {
 		t.Errorf("conf = %q", got)
 	}
 }
@@ -295,7 +295,7 @@ func installHead(t *testing.T, env ...string) (string, error) {
 		t.Skip("no sh")
 	}
 	s := installScript(t)
-	i := strings.Index(s, "# --- takeover (ASLCP_TAKEOVER)")
+	i := strings.Index(s, "# --- takeover (NODESPOT_TAKEOVER)")
 	j := strings.Index(s, "# --- architecture")
 	if i < 0 || j < i {
 		t.Fatal("option parsing not found")
@@ -315,15 +315,15 @@ func TestInstallOptionParsing(t *testing.T) {
 		want string
 	}{
 		{nil, "port= takeover=0 undo=0 dv=0"},
-		{[]string{"ASLCP_TAKEOVER=1"}, "port=80 takeover=1 undo=0 dv=0"},
-		{[]string{"ASLCP_TAKEOVER=yes"}, "port=80 takeover=1 undo=0 dv=0"},
-		{[]string{"ASLCP_TAKEOVER=TRUE"}, "port=80 takeover=1 undo=0 dv=0"},
-		{[]string{"ASLCP_TAKEOVER=1", "ASLCP_PORT=8181"}, "port=8181 takeover=1 undo=0 dv=0"},
-		{[]string{"ASLCP_TAKEOVER=1", "ASLCP_DV=1"}, "port=80 takeover=1 undo=0 dv=1"},
-		{[]string{"ASLCP_TAKEOVER=undo"}, "port= takeover=0 undo=1 dv=0"},
-		{[]string{"ASLCP_TAKEOVER=undo", "ASLCP_PORT=8181"}, "port=8181 takeover=0 undo=1 dv=0"},
-		{[]string{"ASLCP_PORT=80"}, "port=80 takeover=0 undo=0 dv=0"},
-		{[]string{"ASLCP_PORT=1024"}, "port=1024 takeover=0 undo=0 dv=0"},
+		{[]string{"NODESPOT_TAKEOVER=1"}, "port=80 takeover=1 undo=0 dv=0"},
+		{[]string{"NODESPOT_TAKEOVER=yes"}, "port=80 takeover=1 undo=0 dv=0"},
+		{[]string{"NODESPOT_TAKEOVER=TRUE"}, "port=80 takeover=1 undo=0 dv=0"},
+		{[]string{"NODESPOT_TAKEOVER=1", "NODESPOT_PORT=8181"}, "port=8181 takeover=1 undo=0 dv=0"},
+		{[]string{"NODESPOT_TAKEOVER=1", "NODESPOT_DV=1"}, "port=80 takeover=1 undo=0 dv=1"},
+		{[]string{"NODESPOT_TAKEOVER=undo"}, "port= takeover=0 undo=1 dv=0"},
+		{[]string{"NODESPOT_TAKEOVER=undo", "NODESPOT_PORT=8181"}, "port=8181 takeover=0 undo=1 dv=0"},
+		{[]string{"NODESPOT_PORT=80"}, "port=80 takeover=0 undo=0 dv=0"},
+		{[]string{"NODESPOT_PORT=1024"}, "port=1024 takeover=0 undo=0 dv=0"},
 	}
 	for _, c := range ok {
 		got, err := installHead(t, c.env...)
@@ -332,16 +332,16 @@ func TestInstallOptionParsing(t *testing.T) {
 		}
 	}
 	bad := [][]string{
-		{"ASLCP_TAKEOVER=0"},
-		{"ASLCP_TAKEOVER=maybe"},
-		{"ASLCP_TAKEOVER=undo", "ASLCP_PORT=80"},
-		{"ASLCP_TAKEOVER=undo", "ASLCP_DV=1"},
-		{"ASLCP_PORT=443"},
-		{"ASLCP_PORT=81"},
-		{"ASLCP_PORT=080"},
-		{"ASLCP_PORT=0"},
-		{"ASLCP_PORT=70000"},
-		{"ASLCP_PORT=abc"},
+		{"NODESPOT_TAKEOVER=0"},
+		{"NODESPOT_TAKEOVER=maybe"},
+		{"NODESPOT_TAKEOVER=undo", "NODESPOT_PORT=80"},
+		{"NODESPOT_TAKEOVER=undo", "NODESPOT_DV=1"},
+		{"NODESPOT_PORT=443"},
+		{"NODESPOT_PORT=81"},
+		{"NODESPOT_PORT=080"},
+		{"NODESPOT_PORT=0"},
+		{"NODESPOT_PORT=70000"},
+		{"NODESPOT_PORT=abc"},
 	}
 	for _, env := range bad {
 		if got, err := installHead(t, env...); err == nil {

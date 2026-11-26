@@ -68,12 +68,12 @@ func (f *fakeRunner) called(prefix string) int {
 	return n
 }
 
-const loadedUnit = "aslcp-upgrade.service loaded inactive dead ASLCP upgrade\n"
+const loadedUnit = "nodespot-upgrade.service loaded inactive dead nodespot upgrade\n"
 
 func idleJob(r map[string]resp) {
 	r["systemctl list-units"] = resp{out: loadedUnit}
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
-	r["journalctl -u aslcp-upgrade"] = resp{}
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
+	r["journalctl -u nodespot-upgrade"] = resp{}
 }
 
 func TestJobStateFrom(t *testing.T) {
@@ -88,9 +88,9 @@ func TestJobStateFrom(t *testing.T) {
 		{"activating", show("activating", "success"), "x", JobRunning},
 		{"failed state", show("failed", "exit-code"), "", JobFailed},
 		{"idle", show("inactive", "success"), "", JobIdle},
-		{"succeeded", show("inactive", "success"), "Setting up aslcp\naslcp-upgrade.service: Deactivated successfully.\n", JobSucceeded},
-		{"collected failure", show("inactive", "success"), "E: boom\naslcp-upgrade.service: Failed with result 'exit-code'.\n", JobFailed},
-		{"old failure then success", show("inactive", "success"), "aslcp-upgrade.service: Failed with result 'exit-code'.\naslcp-upgrade.service: Deactivated successfully.\n", JobSucceeded},
+		{"succeeded", show("inactive", "success"), "Setting up nodespot\nnodespot-upgrade.service: Deactivated successfully.\n", JobSucceeded},
+		{"collected failure", show("inactive", "success"), "E: boom\nnodespot-upgrade.service: Failed with result 'exit-code'.\n", JobFailed},
+		{"old failure then success", show("inactive", "success"), "nodespot-upgrade.service: Failed with result 'exit-code'.\nnodespot-upgrade.service: Deactivated successfully.\n", JobSucceeded},
 	}
 	for _, c := range cases {
 		if got := JobStateFrom(c.show, c.log); got != c.want {
@@ -101,7 +101,7 @@ func TestJobStateFrom(t *testing.T) {
 
 func upgradableRules() map[string]resp {
 	r := map[string]resp{
-		"dpkg-query -W -f=${Version} aslcp": {out: "0.2.0"},
+		"dpkg-query -W -f=${Version} nodespot": {out: "0.2.0"},
 	}
 	idleJob(r)
 	return r
@@ -128,7 +128,7 @@ func TestUpdateStatusWithoutApt(t *testing.T) {
 	noApt(t, f)
 	// not installed (dpkg-query exits 1)
 	r := upgradableRules()
-	r["dpkg-query -W -f=${Version} aslcp"] = resp{code: 1, out: "dpkg-query: no packages found matching aslcp"}
+	r["dpkg-query -W -f=${Version} nodespot"] = resp{code: 1, out: "dpkg-query: no packages found matching nodespot"}
 	st, _ = (&Ops{Run: &fakeRunner{rules: r}}).UpdateStatus(context.Background())
 	if st.Installed != "" {
 		t.Fatalf("%+v", st)
@@ -154,8 +154,8 @@ func TestJobJournalOnlyWhenNeeded(t *testing.T) {
 		t.Fatalf("journalctl called %d times for a finished job", n)
 	}
 	// running: journal on every poll, never cached
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=active\nResult=success\nInvocationID=abc\n"}
-	r["journalctl -u aslcp-upgrade"] = resp{out: "Starting aslcp-upgrade.service - x\nReading package lists...\n"}
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=active\nResult=success\nInvocationID=abc\n"}
+	r["journalctl -u nodespot-upgrade"] = resp{out: "Starting nodespot-upgrade.service - x\nReading package lists...\n"}
 	for i := 0; i < 2; i++ {
 		st, _ := o.UpdateStatus(ctx)
 		if st.Job != JobRunning || !strings.Contains(st.JobLog, "Reading package lists") {
@@ -166,8 +166,8 @@ func TestJobJournalOnlyWhenNeeded(t *testing.T) {
 		t.Fatalf("journalctl called %d times", n)
 	}
 	// finished (collected): classified once, then cached
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
-	r["journalctl -u aslcp-upgrade"] = resp{out: fixture(t, "journal-succeeded-noisy.txt")}
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
+	r["journalctl -u nodespot-upgrade"] = resp{out: fixture(t, "journal-succeeded-noisy.txt")}
 	for i := 0; i < 4; i++ {
 		st, _ := o.UpdateStatus(ctx)
 		if st.Job != JobSucceeded {
@@ -179,8 +179,8 @@ func TestJobJournalOnlyWhenNeeded(t *testing.T) {
 	}
 	noApt(t, f)
 	// a different invocation is classified again
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\nInvocationID=zzz\n"}
-	r["journalctl -u aslcp-upgrade"] = resp{out: fixture(t, "journal-noop.txt")}
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\nInvocationID=zzz\n"}
+	r["journalctl -u nodespot-upgrade"] = resp{out: fixture(t, "journal-noop.txt")}
 	st, _ := o.UpdateStatus(ctx)
 	if st.Job != JobNoop || f.called("journalctl") != 5 {
 		t.Fatalf("%+v %d", st, f.called("journalctl"))
@@ -211,20 +211,20 @@ func TestJournalClassification(t *testing.T) {
 		t.Fatalf("prev noop: %s", got)
 	}
 	// noise only
-	if got := JobStateFrom(inactive, "aslcp-upgrade.service: Failed to open /run/systemd/transient/aslcp-upgrade.service: No such file or directory\n"); got != JobIdle {
+	if got := JobStateFrom(inactive, "nodespot-upgrade.service: Failed to open /run/systemd/transient/nodespot-upgrade.service: No such file or directory\n"); got != JobIdle {
 		t.Fatalf("noise only: %s", got)
 	}
 }
 
 func TestCleanLog(t *testing.T) {
 	got := CleanLog(fixture(t, "journal-succeeded-noisy.txt"))
-	if !strings.HasPrefix(got, "Starting aslcp-upgrade.service") {
+	if !strings.HasPrefix(got, "Starting nodespot-upgrade.service") {
 		t.Fatalf("not trimmed to the latest run:\n%s", got)
 	}
 	if strings.Contains(got, "Failed to open") || strings.Contains(got, "\r") || strings.Contains(got, "5%") {
 		t.Fatalf("noise left:\n%q", got)
 	}
-	for _, want := range []string{"(Reading database ... 132342 files and directories currently installed.)", "Setting up aslcp (0.2.1)", "Deactivated successfully"} {
+	for _, want := range []string{"(Reading database ... 132342 files and directories currently installed.)", "Setting up nodespot (0.2.1)", "Deactivated successfully"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
@@ -250,7 +250,7 @@ func TestUpdateApplyAndConcurrentRefusal(t *testing.T) {
 		if strings.HasPrefix(cmd, "systemd-run") {
 			started = true
 			f.mu.Lock()
-			r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+			r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 			f.mu.Unlock()
 		}
 	}
@@ -262,9 +262,9 @@ func TestUpdateApplyAndConcurrentRefusal(t *testing.T) {
 	if !started {
 		t.Fatal("systemd-run not called")
 	}
-	want := "systemd-run --no-block --unit=aslcp-upgrade --collect --property=Type=oneshot --setenv=DEBIAN_FRONTEND=noninteractive --setenv=APT_LISTCHANGES_FRONTEND=none /bin/sh -c " +
-		"apt-get update -o DPkg::Lock::Timeout=600 -o Dir::Etc::sourcelist=sources.list.d/aslcp.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 -q && " +
-		"apt-get install -y -q -o DPkg::Lock::Timeout=600 --only-upgrade --no-install-recommends -o Dpkg::Options::=--force-confold -o Dpkg::Use-Pty=0 aslcp"
+	want := "systemd-run --no-block --unit=nodespot-upgrade --collect --property=Type=oneshot --setenv=DEBIAN_FRONTEND=noninteractive --setenv=APT_LISTCHANGES_FRONTEND=none /bin/sh -c " +
+		"apt-get update -o DPkg::Lock::Timeout=600 -o Dir::Etc::sourcelist=sources.list.d/nodespot.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 -q && " +
+		"apt-get install -y -q -o DPkg::Lock::Timeout=600 --only-upgrade --no-install-recommends -o Dpkg::Options::=--force-confold -o Dpkg::Use-Pty=0 nodespot"
 	if f.called(want) != 1 || f.called("systemd-run") != 1 {
 		t.Fatalf("calls: %v", f.calls)
 	}
@@ -337,7 +337,7 @@ func TestJustStartedGrace(t *testing.T) {
 
 func fwConf(t *testing.T, content string) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "aslcp.conf")
+	p := filepath.Join(t.TempDir(), "nodespot.conf")
 	if content != "" {
 		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -348,16 +348,16 @@ func fwConf(t *testing.T, content string) string {
 
 func TestFirewall(t *testing.T) {
 	r := map[string]resp{
-		"firewall-cmd --state":                         {out: "running\n"},
-		"firewall-cmd --query-service=aslcp":           {code: 1},
-		"firewall-cmd --permanent --query-service":     {code: 1},
-		"firewall-cmd --query-port":                    {code: 1},
-		"firewall-cmd --permanent --query-port":        {code: 1},
-		"firewall-cmd --permanent --add-service=aslcp": {out: "success"},
-		"firewall-cmd --reload":                        {out: "success"},
+		"firewall-cmd --state":                            {out: "running\n"},
+		"firewall-cmd --query-service=nodespot":           {code: 1},
+		"firewall-cmd --permanent --query-service":        {code: 1},
+		"firewall-cmd --query-port":                       {code: 1},
+		"firewall-cmd --permanent --query-port":           {code: 1},
+		"firewall-cmd --permanent --add-service=nodespot": {out: "success"},
+		"firewall-cmd --reload":                           {out: "success"},
 	}
 	f := &fakeRunner{rules: r}
-	o := &Ops{Run: f, AslcpConf: fwConf(t, "")} // missing file: default 8080
+	o := &Ops{Run: f, NodespotConf: fwConf(t, "")} // missing file: default 8080
 	fw, _ := o.FirewallStatus(context.Background())
 	if !fw.Present || !fw.Running || fw.ServiceEnabled || fw.Open || fw.Port != 8080 {
 		t.Fatalf("%+v", fw)
@@ -365,7 +365,7 @@ func TestFirewall(t *testing.T) {
 	f.hook = func(cmd string) {
 		if cmd == "firewall-cmd --reload" {
 			f.mu.Lock()
-			r["firewall-cmd --query-service=aslcp"] = resp{code: 0}
+			r["firewall-cmd --query-service=nodespot"] = resp{code: 0}
 			f.mu.Unlock()
 		}
 	}
@@ -375,7 +375,7 @@ func TestFirewall(t *testing.T) {
 	}
 	// not running
 	f2 := &fakeRunner{rules: map[string]resp{"firewall-cmd --state": {out: "not running\n", code: 252}}}
-	if _, err := (&Ops{Run: f2, AslcpConf: fwConf(t, "")}).FirewallOpen(context.Background()); err == nil {
+	if _, err := (&Ops{Run: f2, NodespotConf: fwConf(t, "")}).FirewallOpen(context.Background()); err == nil {
 		t.Fatal("expected error when firewalld is not running")
 	}
 	if f2.called("firewall-cmd --permanent") != 0 {
@@ -383,7 +383,7 @@ func TestFirewall(t *testing.T) {
 	}
 	// not installed
 	f3 := &fakeRunner{rules: map[string]resp{"firewall-cmd": {err: errors.New("not found")}}}
-	fw, _ = (&Ops{Run: f3, AslcpConf: fwConf(t, "")}).FirewallStatus(context.Background())
+	fw, _ = (&Ops{Run: f3, NodespotConf: fwConf(t, "")}).FirewallStatus(context.Background())
 	if fw.Present {
 		t.Fatalf("%+v", fw)
 	}
@@ -398,13 +398,13 @@ func TestFirewallCustomPort(t *testing.T) {
 		"firewall-cmd --reload":                        {out: "success"},
 	}
 	f := &fakeRunner{rules: r}
-	o := &Ops{Run: f, AslcpConf: fwConf(t, "[server]\nlisten = 192.0.2.10:9090 ; LAN only\n")}
+	o := &Ops{Run: f, NodespotConf: fwConf(t, "[server]\nlisten = 192.0.2.10:9090 ; LAN only\n")}
 	fw, err := o.FirewallStatus(context.Background())
 	if err != nil || fw.Port != 9090 || fw.Open || fw.ServiceEnabled {
 		t.Fatalf("%+v %v", fw, err)
 	}
 	if f.called("firewall-cmd --query-service") != 0 || f.called("firewall-cmd --permanent --query-service") != 0 {
-		t.Fatal("the aslcp service covers 8080 only; must not be queried for another port")
+		t.Fatal("the nodespot service covers 8080 only; must not be queried for another port")
 	}
 	f.hook = func(cmd string) {
 		if cmd == "firewall-cmd --permanent --add-port=9090/tcp" {
@@ -426,7 +426,7 @@ func TestFirewallCustomPort(t *testing.T) {
 		"firewall-cmd --query-port":                      {code: 1},
 		"firewall-cmd --permanent --query-port=9090/tcp": {code: 0},
 	}}
-	fw, _ = (&Ops{Run: f4, AslcpConf: o.AslcpConf}).FirewallStatus(context.Background())
+	fw, _ = (&Ops{Run: f4, NodespotConf: o.NodespotConf}).FirewallStatus(context.Background())
 	if !fw.Open || !fw.PortOpen {
 		t.Fatalf("%+v", fw)
 	}
@@ -435,7 +435,7 @@ func TestFirewallCustomPort(t *testing.T) {
 func TestFirewallBadPort(t *testing.T) {
 	for _, conf := range []string{"[server]\nlisten = :0\n", "[server]\nlisten = :70000\n", "[server]\nlisten = :http\n", "[server]\nlisten = nonsense\n"} {
 		f := &fakeRunner{rules: map[string]resp{"firewall-cmd --state": {out: "running\n"}}}
-		o := &Ops{Run: f, AslcpConf: fwConf(t, conf)}
+		o := &Ops{Run: f, NodespotConf: fwConf(t, conf)}
 		if _, err := o.FirewallOpen(context.Background()); err == nil {
 			t.Fatalf("%q: expected an error", conf)
 		}
@@ -665,11 +665,11 @@ func TestShutdownFinishesRequestsInFlight(t *testing.T) {
 	ln.Close()
 }
 
-const listStable = "deb [signed-by=/usr/share/keyrings/aslcp-archive-keyring.gpg] https://example.invalid/aslcp stable main\n"
+const listStable = "deb [signed-by=/usr/share/keyrings/nodespot-archive-keyring.gpg] https://example.invalid/nodespot stable main\n"
 
 func writeList(t *testing.T, content string) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "aslcp.list")
+	p := filepath.Join(t.TempDir(), "nodespot.list")
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -678,7 +678,7 @@ func writeList(t *testing.T, content string) string {
 
 func TestSetChannel(t *testing.T) {
 	ctx := context.Background()
-	p := writeList(t, "# ASLCP\n"+listStable+"deb http://other.invalid/x stable main\n")
+	p := writeList(t, "# nodespot\n"+listStable+"deb http://other.invalid/x stable main\n")
 	o := &Ops{Run: &fakeRunner{rules: upgradableRules()}, SourceList: p}
 	st, err := o.UpdateStatus(ctx)
 	if err != nil || st.Channel != ChannelStable {
@@ -689,8 +689,8 @@ func TestSetChannel(t *testing.T) {
 		t.Fatalf("%+v %v", st, err)
 	}
 	got, _ := os.ReadFile(p)
-	// both deb lines are aslcp-shaped (suite word), only the suite changed
-	want := "# ASLCP\ndeb [signed-by=/usr/share/keyrings/aslcp-archive-keyring.gpg] https://example.invalid/aslcp beta main\ndeb http://other.invalid/x beta main\n"
+	// both deb lines are nodespot-shaped (suite word), only the suite changed
+	want := "# nodespot\ndeb [signed-by=/usr/share/keyrings/nodespot-archive-keyring.gpg] https://example.invalid/nodespot beta main\ndeb http://other.invalid/x beta main\n"
 	if string(got) != want {
 		t.Fatalf("got %q", got)
 	}
@@ -707,7 +707,7 @@ func TestSetChannel(t *testing.T) {
 	if st, err = o.SetChannel(ctx, ChannelStable); err != nil || st.Channel != ChannelStable {
 		t.Fatalf("%+v %v", st, err)
 	}
-	if got, _ = os.ReadFile(p); !strings.Contains(string(got), "aslcp stable main\n") {
+	if got, _ = os.ReadFile(p); !strings.Contains(string(got), "nodespot stable main\n") {
 		t.Fatalf("got %q", got)
 	}
 	// invalid channel
@@ -727,7 +727,7 @@ func TestSetChannelRefusals(t *testing.T) {
 		t.Fatal("missing file: expected error")
 	}
 	// no recognizable line: file untouched
-	const other = "# nothing here\ndeb-src https://example.invalid/aslcp stable main\ndeb https://example.invalid/aslcp bookworm main\n"
+	const other = "# nothing here\ndeb-src https://example.invalid/nodespot stable main\ndeb https://example.invalid/nodespot bookworm main\n"
 	p := writeList(t, other)
 	o = &Ops{Run: &fakeRunner{rules: upgradableRules()}, SourceList: p}
 	if st, _ := o.UpdateStatus(ctx); st.Channel != "" {
@@ -742,7 +742,7 @@ func TestSetChannelRefusals(t *testing.T) {
 	// refused while an upgrade runs
 	p = writeList(t, listStable)
 	r := upgradableRules()
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 	o = &Ops{Run: &fakeRunner{rules: r}, SourceList: p}
 	if _, err := o.SetChannel(ctx, ChannelBeta); !errors.Is(err, ErrBusy) {
 		t.Fatalf("got %v", err)

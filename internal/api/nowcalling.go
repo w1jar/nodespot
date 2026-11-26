@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/radioid"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/radioid"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // "Now calling" (docs/API.md, "Now calling"): who is talking right now on

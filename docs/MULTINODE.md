@@ -1,6 +1,6 @@
 # Multi-node view (parked)
 
-> Removed in 3.0: this describes a 2.x feature that needed Asterisk. ASLCP 3 runs its own node; see [NATIVE_NODE.md](NATIVE_NODE.md). Kept for reference.
+> Removed: this describes a feature of the archived aslcp 2.x that needed Asterisk. nodespot runs its own node; see [NATIVE_NODE.md](NATIVE_NODE.md). Kept for reference.
 
 Status: **parked**. Not scheduled. The owner decided to skip it for 1.3.x and revisit later. Nothing here is built.
 
@@ -8,7 +8,7 @@ Node numbers below are placeholders: nodes 2001, 2002 and 2003, host `node2001`,
 
 ## 1. Why
 
-Large networks (ECR is one) and hub operators publish one public page that shows several of their nodes. Usually this is Supermon's `link.php?nodes=2001,2002,2003`. ASLCP shows only the local node.
+Large networks (ECR is one) and hub operators publish one public page that shows several of their nodes. Usually this is Supermon's `link.php?nodes=2001,2002,2003`. nodespot shows only the local node.
 
 ## 2. What the existing tools do
 
@@ -49,9 +49,9 @@ Remote control needs each node's AMI on TCP 5038. AMI logins and commands are pl
 
 ## 4. Proposed design if revived
 
-A read-only multi-node public page, built on ASLCP's existing Public view. That view is `GET /api/public/status` and `GET /api/public/events` (SSE), with `GET /api/public/info`. They need no login and return 404 unless an admin enables them. Admin settings are `GET/PUT /api/public` (`internal/api/handlers_public.go`, `web/src/components/PublicSettings.svelte`).
+A read-only multi-node public page, built on nodespot's existing Public view. That view is `GET /api/public/status` and `GET /api/public/events` (SSE), with `GET /api/public/info`. They need no login and return 404 unless an admin enables them. Admin settings are `GET/PUT /api/public` (`internal/api/handlers_public.go`, `web/src/components/PublicSettings.svelte`).
 
-- The admin lists peer nodes that run ASLCP, one URL per peer, for example `https://node2001.example/`.
+- The admin lists peer nodes that run nodespot, one URL per peer, for example `https://node2001.example/`.
 - The page gets each peer's own public status over HTTP(S).
 - Local nodes on the same host come from the local Asterisk, as today.
 - No AMI over the network. No remote control.
@@ -60,7 +60,7 @@ A read-only multi-node public page, built on ASLCP's existing Public view. That 
 
 ### Fetch options
 
-| | Browser fetches peers (CORS) | Local ASLCP fetches (server-side) |
+| | Browser fetches peers (CORS) | Local nodespot fetches (server-side) |
 |---|---|---|
 | CORS | Each peer must send CORS headers. | Not needed. |
 | Viewer IP | Seen by every peer. | Hidden from peers. |
@@ -73,6 +73,6 @@ The leaning is server-side, because of CORS and viewer privacy. It is not decide
 ## 5. Open questions
 
 - Server-side or browser fetch?
-- Peers that do not run ASLCP: use stats.allstarlink.org as a fallback source?
+- Peers that do not run nodespot: use stats.allstarlink.org as a fallback source?
 - Refresh rate and caching. SSE per peer, or polling?
 - Does the page live at the existing public URL, or at a new one?

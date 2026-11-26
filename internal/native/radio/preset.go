@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/artw1/aslcp/internal/native/radio/cm108"
+	"github.com/w1jar/nodespot/internal/native/radio/cm108"
 )
 
 // Preset names a ready-made set of interface settings.

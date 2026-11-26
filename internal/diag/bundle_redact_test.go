@@ -87,7 +87,7 @@ func TestRedactSecretsText(t *testing.T) {
 		{"manager action", "Action: Login\r\nUsername: admin\r\nSecret: example-pass\r\n", "Action: Login\r\nUsername: admin\r\nSecret: <redacted>\r\n"},
 		{"psk", "802-11-wireless-security.psk: example-pass", "802-11-wireless-security.psk: <redacted>"},
 		{"wpa_passphrase", `wpa_passphrase="example-pass"`, `wpa_passphrase=<redacted>`},
-		{"cookie", "Cookie: aslcp_session=abcdef", "Cookie: <redacted>"},
+		{"cookie", "Cookie: nodespot_session=abcdef", "Cookie: <redacted>"},
 		{"session kv", "session=abcdef", "session=<redacted>"},
 		{"bearer", "Authorization: Bearer abcdefghijkl", "Authorization: <redacted>"},
 		{"url creds", "GET https://user:example-pass@host.example.net/x", "GET https://<redacted>@host.example.net/x"},
@@ -255,17 +255,17 @@ func TestExcludedPath(t *testing.T) {
 	excluded := []string{
 		"/etc/shadow", "/etc/gshadow", "/etc/shadow-", "/etc/ssh/ssh_host_ed25519_key", "/root/.ssh/id_ed25519", "/home/x/id_rsa",
 		"/etc/asterisk/keys/node.key", "/etc/ssl/private/x.pem", "/etc/asterisk/cert.pem", "/etc/asterisk/x.key",
-		"/var/lib/aslcp/aslcp.db", "/var/lib/aslcp/aslcp.db-wal", "/var/lib/aslcp/data.sqlite3", "/var/lib/aslcp/setup-code",
-		"/var/lib/aslcp/sessions/abc", "/etc/NetworkManager/system-connections/ExampleNet.nmconnection",
+		"/var/lib/nodespot/nodespot.db", "/var/lib/nodespot/nodespot.db-wal", "/var/lib/nodespot/data.sqlite3", "/var/lib/nodespot/setup-code",
+		"/var/lib/nodespot/sessions/abc", "/etc/NetworkManager/system-connections/ExampleNet.nmconnection",
 		"/etc/wpa_supplicant/wpa_supplicant.conf", "/etc/allmon3/users", "/etc/asterisk/iax.conf.bak", "/etc/asterisk/iax.conf~",
-		"/etc/asterisk/private-notes.txt", "/var/lib/aslcp/session-token", "/etc/apache2/.htpasswd",
+		"/etc/asterisk/private-notes.txt", "/var/lib/nodespot/session-token", "/etc/apache2/.htpasswd",
 	}
 	for _, p := range excluded {
 		if !ExcludedPath(p) {
 			t.Errorf("%s not excluded", p)
 		}
 	}
-	kept := []string{"/etc/asterisk/rpt.conf", "/etc/asterisk/iax.conf", "/etc/asterisk/manager.conf", "/etc/aslcp/aslcp.conf",
+	kept := []string{"/etc/asterisk/rpt.conf", "/etc/asterisk/iax.conf", "/etc/asterisk/manager.conf", "/etc/nodespot/nodespot.conf",
 		"/etc/allmon3/allmon3.ini", "/opt/MMDVM_Bridge/MMDVM_Bridge.ini", "/opt/Analog_Bridge/Analog_Bridge.ini", "/etc/asterisk/users.conf"}
 	for _, p := range kept {
 		if ExcludedPath(p) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// OpNodeRestart restarts aslcp-node.service (Settings, System, the node
+// OpNodeRestart restarts nodespot-node.service (Settings, System, the node
 // service). Its state is part of services-status.
 const OpNodeRestart = "node-restart"
 
@@ -15,7 +15,7 @@ func init() {
 	})
 }
 
-// NodeRestart runs "systemctl restart aslcp-node.service" and waits for it,
+// NodeRestart runs "systemctl restart nodespot-node.service" and waits for it,
 // so a node that fails to start is reported.
 func (o *Ops) NodeRestart(ctx context.Context) (OKResult, error) {
 	out, code, err := o.Run.Run(ctx, "systemctl", "restart", nodeService+".service")

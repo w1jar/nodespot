@@ -15,8 +15,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // fakeTerm is one session of the fake helper.
@@ -354,7 +354,7 @@ func TestTerminalNoHelperSupport(t *testing.T) {
 func TestTerminalTicketNeedsCSRFHeader(t *testing.T) {
 	e := newEnv(t, opts{sysHost: newTermSys()})
 	e.termOn()
-	c, _, _ := e.raw("POST", "/api/system/terminal/ticket", nil, e.ck["admin"], map[string]string{"X-ASLCP": ""})
+	c, _, _ := e.raw("POST", "/api/system/terminal/ticket", nil, e.ck["admin"], map[string]string{"X-nodespot": ""})
 	if c != 403 {
 		t.Fatalf("POST without the CSRF header = %d", c)
 	}

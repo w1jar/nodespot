@@ -52,7 +52,7 @@ export function parseNotes(src: string): NoteBlock[] {
   return blocks.filter((b) => (b.kind === 'ul' ? b.items.length : b.lines.length));
 }
 
-export const REPO_URL = 'https://github.com/w1jar/aslcp';
+export const REPO_URL = 'https://github.com/w1jar/nodespot';
 /** Issue form with fields prefilled; the keys are the field ids of .github/ISSUE_TEMPLATE/bug_report.yml. */
 export function bugReportUrl(f: { version?: string; asl?: string; hardware?: string; os?: string } = {}): string {
   const p = new URLSearchParams({ template: 'bug_report.yml' });

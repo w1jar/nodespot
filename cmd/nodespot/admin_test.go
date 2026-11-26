@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 type adminRig struct {
@@ -20,14 +20,14 @@ type adminRig struct {
 
 func newRig(t *testing.T) *adminRig {
 	dir := t.TempDir()
-	conf := filepath.Join(t.TempDir(), "aslcp.conf")
+	conf := filepath.Join(t.TempDir(), "nodespot.conf")
 	if err := os.WriteFile(conf, []byte("[server]\ndatadir = "+dir+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return &adminRig{t: t, dir: dir, conf: conf}
 }
 
-// run executes "aslcp admin args... --config conf" with stdin as a non-tty.
+// run executes "nodespot admin args... --config conf" with stdin as a non-tty.
 func (r *adminRig) run(stdin string, args ...string) (int, string, string) {
 	var out, errb bytes.Buffer
 	code := runAdmin(append(args, "--config", r.conf), adminEnv{
@@ -37,7 +37,7 @@ func (r *adminRig) run(stdin string, args ...string) (int, string, string) {
 }
 
 func (r *adminRig) store() *store.Store {
-	st, err := store.Open(filepath.Join(r.dir, "aslcp.db"))
+	st, err := store.Open(filepath.Join(r.dir, "nodespot.db"))
 	if err != nil {
 		r.t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestAdminUsageAndErrors(t *testing.T) {
 	}
 	// Missing data directory is a clear error.
 	missing := filepath.Join(t.TempDir(), "conf")
-	os.WriteFile(missing, []byte("[server]\ndatadir = /nonexistent/aslcp\n"), 0o600)
+	os.WriteFile(missing, []byte("[server]\ndatadir = /nonexistent/nodespot\n"), 0o600)
 	code := runAdmin([]string{"list", "--config", missing}, adminEnv{in: strings.NewReader(""), out: &out, errw: &errb})
 	if code != 1 || !strings.Contains(errb.String(), "data directory") {
 		t.Fatal(code, errb.String())

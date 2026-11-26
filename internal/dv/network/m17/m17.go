@@ -84,9 +84,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	proto "github.com/artw1/aslcp/internal/dv/m17"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	proto "github.com/w1jar/nodespot/internal/dv/m17"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 const (

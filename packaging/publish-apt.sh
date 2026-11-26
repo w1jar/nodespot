@@ -3,7 +3,7 @@
 # served by GitHub Pages (packaging/apt-checkout.sh prepares the checkout).
 #
 #   packaging/publish-apt.sh DEBS_DIR REPO_DIR
-#       add the new aslcp_*.deb files to the beta pool (what a vX.Y.Z tag does)
+#       add the new nodespot_*.deb files to the beta pool (what a vX.Y.Z tag does)
 #   packaging/publish-apt.sh --promote VERSION REPO_DIR
 #       move the already published debs of VERSION from the beta pool to the
 #       stable pool (no rebuild: the tested package becomes the release)
@@ -11,14 +11,14 @@
 #       delete beta-pool versions matching GLOB (a bash pattern on the Debian
 #       version, for example '2.0.0~beta*'); a dry run unless --apply is given
 #
-#   DEBS_DIR  directory containing the new aslcp_*.deb files
+#   DEBS_DIR  directory containing the new nodespot_*.deb files
 #   REPO_DIR  checkout of the gh-pages branch (may be empty/new on the very first
 #             release); updated in place, the caller commits and pushes
 #
 # Environment:
 #   GPG_KEY_ID    key to sign with (default: first secret key in the keyring)
 #   GNUPGHOME     keyring directory (default: gpg's default)
-#   APT_URL       public base URL (default https://w1jar.github.io/aslcp)
+#   APT_URL       public base URL (default https://w1jar.github.io/nodespot)
 #   KEEP          versions retained per architecture and pool directory (default 5)
 #   TAG           release tag (vX.Y.Z) for the release notes
 #   CODE_DIR      checkout of the code repo, for the tag annotation and CHANGELOG.md
@@ -69,7 +69,7 @@ if [ "$MODE" = remove ] && [ -z "$REMOVE_GLOB" ]; then echo "publish-apt: --remo
 REPO_DIR=$(cd "$REPO_ARG" && pwd)
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 CODE_DIR=${CODE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}
-APT_URL=${APT_URL:-https://w1jar.github.io/aslcp}
+APT_URL=${APT_URL:-https://w1jar.github.io/nodespot}
 APT_URL=${APT_URL%/}
 KEEP=${KEEP:-5}
 ARCHES="arm64 amd64"
@@ -80,8 +80,8 @@ ARCHES="arm64 amd64"
 LEGACY_ARCHES="armhf"
 INDEX_ARCHES="$ARCHES $LEGACY_ARCHES"
 COMPONENT=main
-POOL_STABLE=pool/main/a/aslcp
-POOL_BETA=pool/beta/a/aslcp
+POOL_STABLE=pool/main/a/nodespot
+POOL_BETA=pool/beta/a/nodespot
 
 for t in apt-ftparchive gpg dpkg-deb python3; do
 	command -v "$t" >/dev/null || { echo "publish-apt: missing required tool: $t" >&2; exit 1; }
@@ -110,7 +110,7 @@ newest_in() {
 # deb of VERSION for ARCH in POOL ("" when there is none)
 deb_of() { # deb_of POOL VERSION ARCH
 	local f
-	for f in "$1"/aslcp_*_"$3".deb; do
+	for f in "$1"/nodespot_*_"$3".deb; do
 		[ -e "$f" ] || continue
 		if [ "$(dpkg-deb -f "$f" Version)" = "$2" ]; then printf '%s' "$f"; return 0; fi
 	done
@@ -122,7 +122,7 @@ case "$MODE" in
 add)
 	# --- 1. add the new packages (always to the beta pool) ----------------------
 	n=0
-	for f in "$DEBS_DIR"/aslcp_*.deb; do
+	for f in "$DEBS_DIR"/nodespot_*.deb; do
 		[ -e "$f" ] || continue
 		v=$(dpkg-deb -f "$f" Version)
 		arch=$(dpkg-deb -f "$f" Architecture)
@@ -140,7 +140,7 @@ add)
 		if [ -z "$released" ] || dpkg --compare-versions "$v" gt "$released"; then released=$v; fi
 		n=$((n + 1))
 	done
-	[ "$n" -gt 0 ] || { echo "publish-apt: no aslcp_*.deb in $DEBS_DIR" >&2; exit 1; }
+	[ "$n" -gt 0 ] || { echo "publish-apt: no nodespot_*.deb in $DEBS_DIR" >&2; exit 1; }
 	echo "publish-apt: added $n package(s) to the beta pool, version $released"
 	;;
 promote)
@@ -179,7 +179,7 @@ promote)
 remove)
 	# --- 1. delete beta-pool versions matching the glob (stable is never touched)
 	matches=()
-	for f in "$POOL_BETA"/aslcp_*.deb; do
+	for f in "$POOL_BETA"/nodespot_*.deb; do
 		[ -e "$f" ] || continue
 		v=$(dpkg-deb -f "$f" Version)
 		# shellcheck disable=SC2053 # the glob is the point
@@ -189,7 +189,7 @@ remove)
 	for f in "${matches[@]}"; do echo "  $f ($(dpkg-deb -f "$f" Version))"; done
 	# what would remain
 	remaining=()
-	for f in "$POOL_STABLE"/aslcp_*.deb "$POOL_BETA"/aslcp_*.deb; do
+	for f in "$POOL_STABLE"/nodespot_*.deb "$POOL_BETA"/nodespot_*.deb; do
 		[ -e "$f" ] || continue
 		skip=0
 		for m in "${matches[@]}"; do [ "$f" != "$m" ] || skip=1; done
@@ -226,7 +226,7 @@ if [ "$MODE" != remove ]; then
 		for arch in $ARCHES; do
 			files=()
 			versions=()
-			for f in "$pool"/aslcp_*_"$arch".deb; do
+			for f in "$pool"/nodespot_*_"$arch".deb; do
 				[ -e "$f" ] || continue
 				files+=("$f")
 				versions+=("$(dpkg-deb -f "$f" Version)")
@@ -252,8 +252,8 @@ if [ "$MODE" != remove ]; then
 	done
 fi
 
-newest_stable=$(newest_in "$POOL_STABLE"/aslcp_*.deb)
-newest_all=$(newest_in "$POOL_STABLE"/aslcp_*.deb "$POOL_BETA"/aslcp_*.deb)
+newest_stable=$(newest_in "$POOL_STABLE"/nodespot_*.deb)
+newest_all=$(newest_in "$POOL_STABLE"/nodespot_*.deb "$POOL_BETA"/nodespot_*.deb)
 [ -n "$newest_stable" ] || echo "publish-apt: note: no stable version in the pool yet"
 
 # --- 3. install.sh is refreshed only for the newest version in the pool -------
@@ -282,13 +282,13 @@ publish_suite() { # publish_suite SUITE POOLROOT
 		gzip -9nkf "$d/Packages"
 	done
 	cat >"$conf" <<EOC
-APT::FTPArchive::Release::Origin "ASLCP";
-APT::FTPArchive::Release::Label "ASLCP";
+APT::FTPArchive::Release::Origin "nodespot";
+APT::FTPArchive::Release::Label "nodespot";
 APT::FTPArchive::Release::Suite "$suite";
 APT::FTPArchive::Release::Codename "$suite";
 APT::FTPArchive::Release::Architectures "$INDEX_ARCHES";
 APT::FTPArchive::Release::Components "$COMPONENT";
-APT::FTPArchive::Release::Description "ASLCP packages for Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS ($suite)";
+APT::FTPArchive::Release::Description "nodespot packages for Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS ($suite)";
 EOC
 	apt-ftparchive -c "$conf" release "dists/$suite" >"dists/$suite/Release.new"
 	mv -f "dists/$suite/Release.new" "dists/$suite/Release"
@@ -300,8 +300,8 @@ publish_suite stable pool/main
 publish_suite beta pool
 
 # --- 5. public key -----------------------------------------------------------
-gpg --batch --yes --export "$key" >aslcp-archive-keyring.gpg
-gpg --batch --yes --armor --export "$key" >aslcp-archive-keyring.asc
+gpg --batch --yes --export "$key" >nodespot-archive-keyring.gpg
+gpg --batch --yes --armor --export "$key" >nodespot-archive-keyring.asc
 fpr=$(gpg --batch --with-colons --fingerprint "$key" | awk -F: '$1=="fpr"{print $10; exit}')
 
 # --- 6. latest.json / latest-beta.json (version, release notes, date) ----------
@@ -355,7 +355,7 @@ write_latest latest-beta.json "$newest_all"
 # --- 7. install script and landing page --------------------------------------
 # The script already defaults to the standard URL; rewrite it if APT_URL differs.
 if [ "$sync_root" -eq 1 ] || [ ! -f install.sh ]; then
-	sed "s|https://w1jar.github.io/aslcp|$APT_URL|g" "$SCRIPT_DIR/install.sh" >install.sh
+	sed "s|https://w1jar.github.io/nodespot|$APT_URL|g" "$SCRIPT_DIR/install.sh" >install.sh
 	chmod 0755 install.sh
 fi
 beta_note=""
@@ -367,8 +367,8 @@ read -r -d '' page <<'EOH' || true
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>ASLCP - native radio node and web control panel</title>
-<meta name="description" content="Install ASLCP, a native radio node (AllStarLink, EchoLink and digital modes, no Asterisk) with a web control panel, from the signed apt repository.">
+<title>nodespot - native radio node and web control panel</title>
+<meta name="description" content="Install nodespot, a native radio node (AllStarLink, EchoLink and digital modes, no Asterisk) with a web control panel, from the signed apt repository.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230ea5e9'/%3E%3Cpath d='M8 22a11 11 0 0 1 16 0M11.5 18.5a6 6 0 0 1 9 0' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='23' r='2' fill='%23fff'/%3E%3C/svg%3E">
 <style>
 :root{--bg:#f3f5f8;--surface:#fff;--surface-2:#e9edf2;--line:#cfd6df;--fg:#0f172a;--muted:#566274;--accent:#0369a1;--accent-fg:#fff;--ok:#15803d;--warn:#a16207;--danger:#b91c1c;
@@ -441,18 +441,18 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 </style>
 </head><body>
 <header class="top"><div class="wrap">
-<a class="brand" href="#top" aria-label="ASLCP"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></svg>ASLCP</a>
-<a class="btn gh" href="https://github.com/w1jar/aslcp">GitHub</a>
+<a class="brand" href="#top" aria-label="nodespot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></svg>nodespot</a>
+<a class="btn gh" href="https://github.com/w1jar/nodespot">GitHub</a>
 </div></header>
 <main class="wrap" id="top">
 <section class="hero">
 <h1>A native radio node with a web control panel</h1>
-<p class="lead">ASLCP lets you connect, monitor and manage favorites with live status from any browser, and it can set up digital modes for you. It runs on Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS (arm64 and amd64; 64-bit only).</p>
+<p class="lead">nodespot lets you connect, monitor and manage favorites with live status from any browser, and it can set up digital modes for you. It runs on Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS (arm64 and amd64; 64-bit only).</p>
 <ul class="badges">
 <li class="badge">Latest release <b>@STABLE@</b></li>
 <li class="badge">Latest beta <b>@BETA@</b>@BETA_NOTE@</li>
 </ul>
-<p class="muted">Docs, screenshots and bug reports are on <a href="https://github.com/w1jar/aslcp">GitHub</a>.</p>
+<p class="muted">Docs, screenshots and bug reports are on <a href="https://github.com/w1jar/nodespot">GitHub</a>.</p>
 </section>
 
 <section class="card" aria-labelledby="h-quick">
@@ -461,9 +461,9 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 <div class="cmd">
 <pre tabindex="0"><code id="cmd-default">curl -fsSL @APT_URL@/install.sh | sudo sh</code></pre><button type="button" class="copy" data-copy="cmd-default" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
 </div>
-<p class="note">Run this on the node (over SSH or in a terminal). It works on plain Debian 12/13 or Raspberry Pi OS Lite 64-bit. ASLCP runs its own node: it does not need AllStarLink 3 or Asterisk.</p>
+<p class="note">Run this on the node (over SSH or in a terminal). It works on plain Debian 12/13 or Raspberry Pi OS Lite 64-bit. nodespot runs its own node: it does not need AllStarLink 3 or Asterisk.</p>
 <p class="note warn">On a freshly flashed card, wait for its first-boot setup to finish before you install. The installer checks this.</p>
-<p class="note">At the end the installer prints a one-time setup link. Open it to create the administrator or to restore a backup from an existing node. <code>sudo aslcp admin setup-code</code> shows the code again.</p>
+<p class="note">At the end the installer prints a one-time setup link. Open it to create the administrator or to restore a backup from an existing node. <code>sudo nodespot admin setup-code</code> shows the code again.</p>
 </section>
 
 <section class="card" aria-labelledby="h-opts">
@@ -473,7 +473,7 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 <form id="opts" onsubmit="return false" novalidate>
 <fieldset>
 <legend>Port 80 and other web services</legend>
-<div class="opt"><input type="checkbox" id="o-take"><label for="o-take">Run ASLCP on port 80 and turn off web services an earlier ASL install left<small>Stops and disables Allmon3, the web server of the ASL web UIs (Apache, lighttpd or nginx), asl-web-ui and Supermon, if they are there. The panel is then at <code>http://your-node/</code>. You can undo it (see below).</small></label></div>
+<div class="opt"><input type="checkbox" id="o-take"><label for="o-take">Run nodespot on port 80 and turn off web services an earlier ASL install left<small>Stops and disables Allmon3, the web server of the ASL web UIs (Apache, lighttpd or nginx), asl-web-ui and Supermon, if they are there. The panel is then at <code>http://your-node/</code>. You can undo it (see below).</small></label></div>
 </fieldset>
 <fieldset>
 <legend>Web port</legend>
@@ -497,53 +497,53 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 <div id="params-static">
 <p>Add these before <code>sh</code>, after <code>sudo</code>, separated by spaces. All are optional:</p>
 <dl class="params">
-<dt><code>ASLCP_PORT=8181</code></dt><dd>Web port, 1024-65535, or 80. The default is 8080. Avoid 9090 (Cockpit).</dd>
-<dt><code>ASLCP_TAKEOVER=1</code></dt><dd>Run ASLCP on port 80 and turn off web services an earlier ASL install left (<code>yes</code> and <code>true</code> work too). See below.</dd>
-<dt><code>ASLCP_CHANNEL=beta</code></dt><dd>Use the beta channel (new builds before they are promoted to stable). The default is <code>stable</code>.</dd>
+<dt><code>NODESPOT_PORT=8181</code></dt><dd>Web port, 1024-65535, or 80. The default is 8080. Avoid 9090 (Cockpit).</dd>
+<dt><code>NODESPOT_TAKEOVER=1</code></dt><dd>Run nodespot on port 80 and turn off web services an earlier ASL install left (<code>yes</code> and <code>true</code> work too). See below.</dd>
+<dt><code>NODESPOT_CHANNEL=beta</code></dt><dd>Use the beta channel (new builds before they are promoted to stable). The default is <code>stable</code>.</dd>
 </dl>
 <p style="margin-top:10px">Example with several options:</p>
-<div class="cmd"><pre tabindex="0"><code id="cmd-example">curl -fsSL @APT_URL@/install.sh | sudo ASLCP_PORT=8181 ASLCP_CHANNEL=beta sh</code></pre><button type="button" class="copy" data-copy="cmd-example" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<div class="cmd"><pre tabindex="0"><code id="cmd-example">curl -fsSL @APT_URL@/install.sh | sudo NODESPOT_PORT=8181 NODESPOT_CHANNEL=beta sh</code></pre><button type="button" class="copy" data-copy="cmd-example" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
 </div>
 </section>
 
 <section class="card" aria-labelledby="h-take">
-<h2 id="h-take">ASLCP on port 80, no other web UI</h2>
-<p>A card that ran ASL3 before may still run Apache, Allmon3 and the ASL web UI. To make ASLCP the only web UI, on port 80:</p>
-<div class="cmd"><pre tabindex="0"><code id="cmd-take">curl -fsSL @APT_URL@/install.sh | sudo ASLCP_TAKEOVER=1 sh</code></pre><button type="button" class="copy" data-copy="cmd-take" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
-<p>The installer stops and disables Allmon3, the web server of the ASL web UIs (Apache, lighttpd or nginx), asl-web-ui and Supermon, but only those that exist and are on, and lists each one. <strong>The node keeps running.</strong> Nothing is uninstalled. Then ASLCP moves to port 80 and the panel is at <code>http://your-node/</code>. If something else still holds port 80, the installer names it and leaves ASLCP on its old port.</p>
-<p>To undo it (ASLCP goes back to its old port and the units it turned off are enabled and started again):</p>
-<div class="cmd"><pre tabindex="0"><code id="cmd-untake">curl -fsSL @APT_URL@/install.sh | sudo ASLCP_TAKEOVER=undo sh</code></pre><button type="button" class="copy" data-copy="cmd-untake" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<h2 id="h-take">nodespot on port 80, no other web UI</h2>
+<p>A card that ran ASL3 before may still run Apache, Allmon3 and the ASL web UI. To make nodespot the only web UI, on port 80:</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-take">curl -fsSL @APT_URL@/install.sh | sudo NODESPOT_TAKEOVER=1 sh</code></pre><button type="button" class="copy" data-copy="cmd-take" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<p>The installer stops and disables Allmon3, the web server of the ASL web UIs (Apache, lighttpd or nginx), asl-web-ui and Supermon, but only those that exist and are on, and lists each one. <strong>The node keeps running.</strong> Nothing is uninstalled. Then nodespot moves to port 80 and the panel is at <code>http://your-node/</code>. If something else still holds port 80, the installer names it and leaves nodespot on its old port.</p>
+<p>To undo it (nodespot goes back to its old port and the units it turned off are enabled and started again):</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-untake">curl -fsSL @APT_URL@/install.sh | sudo NODESPOT_TAKEOVER=undo sh</code></pre><button type="button" class="copy" data-copy="cmd-untake" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
 </section>
 
 <section class="card" aria-labelledby="h-later">
 <h2 id="h-later">Changing things later</h2>
 <h3>Web port</h3>
-<p>The web interface listens on port <strong>8080</strong> by default. To change it, run the installer again with <code>ASLCP_PORT</code> (1024-65535, or 80), or edit <code>listen</code> in <code>/etc/aslcp/aslcp.conf</code> (for example <code>listen = :8181</code>) and run <code>sudo systemctl restart aslcp</code>. The installer warns if another program already uses the port.</p>
+<p>The web interface listens on port <strong>8080</strong> by default. To change it, run the installer again with <code>NODESPOT_PORT</code> (1024-65535, or 80), or edit <code>listen</code> in <code>/etc/nodespot/nodespot.conf</code> (for example <code>listen = :8181</code>) and run <code>sudo systemctl restart nodespot</code>. The installer warns if another program already uses the port.</p>
 <p>If firewalld is running, the installer and the package open the configured port for you. With another firewall (ufw, nftables, a router) open the TCP port yourself. If you edit <code>listen</code> by hand while firewalld is running, open the new port too.</p>
 <h3>Update</h3>
 <p>Use Settings &rarr; Updates in the web UI, or:</p>
 <div class="cmd"><pre tabindex="0"><code id="cmd-update">sudo apt update &amp;&amp; sudo apt upgrade</code></pre><button type="button" class="copy" data-copy="cmd-update" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
 <h3>Uninstall</h3>
-<div class="cmd"><pre tabindex="0"><code id="cmd-remove">sudo apt remove aslcp   # keeps users and favorites
-sudo apt purge aslcp    # also deletes them</code></pre><button type="button" class="copy" data-copy="cmd-remove" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<div class="cmd"><pre tabindex="0"><code id="cmd-remove">sudo apt remove nodespot   # keeps users and favorites
+sudo apt purge nodespot    # also deletes them</code></pre><button type="button" class="copy" data-copy="cmd-remove" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
 <p><code>apt purge</code> also deletes the node config (which holds network passwords).</p>
 </section>
 
 <section class="card" aria-labelledby="h-manual">
 <h2 id="h-manual">Manual apt setup</h2>
 <p>Prefer not to pipe a script? Add the signed repository yourself:</p>
-<div class="cmd"><pre tabindex="0"><code id="cmd-manual">sudo curl -fsSL -o /usr/share/keyrings/aslcp-archive-keyring.gpg @APT_URL@/aslcp-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/aslcp-archive-keyring.gpg] @APT_URL@ stable main" | sudo tee /etc/apt/sources.list.d/aslcp.list
-sudo apt update &amp;&amp; sudo apt install aslcp</code></pre><button type="button" class="copy" data-copy="cmd-manual" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
-<p>Signing key fingerprint: <code>@FPR@</code> (<a href="aslcp-archive-keyring.asc">armored key</a>)</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-manual">sudo curl -fsSL -o /usr/share/keyrings/nodespot-archive-keyring.gpg @APT_URL@/nodespot-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/nodespot-archive-keyring.gpg] @APT_URL@ stable main" | sudo tee /etc/apt/sources.list.d/nodespot.list
+sudo apt update &amp;&amp; sudo apt install nodespot</code></pre><button type="button" class="copy" data-copy="cmd-manual" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<p>Signing key fingerprint: <code>@FPR@</code> (<a href="nodespot-archive-keyring.asc">armored key</a>)</p>
 <h3>Beta channel</h3>
 <p>Every new version goes to the <code>beta</code> suite as soon as it is built. It becomes a release (suite <code>stable</code>) when it is promoted after testing: the same package, not a rebuild. The <code>beta</code> suite also carries every release, so beta users are never behind. Betas may be less stable.</p>
 <p>To use it, put <code>beta</code> instead of <code>stable</code> in the line above:</p>
-<div class="cmd"><pre tabindex="0"><code id="cmd-beta">echo "deb [signed-by=/usr/share/keyrings/aslcp-archive-keyring.gpg] @APT_URL@ beta main" | sudo tee /etc/apt/sources.list.d/aslcp.list</code></pre><button type="button" class="copy" data-copy="cmd-beta" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
-<p>Or install with <code>ASLCP_CHANNEL=beta</code> (see the options above), or switch in Settings &rarr; Updates in the web UI. It is the same setting: it changes the suite in <code>/etc/apt/sources.list.d/aslcp.list</code>. Going back to <code>stable</code> does not downgrade: the node stays on the installed version until a release newer than it is promoted.</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-beta">echo "deb [signed-by=/usr/share/keyrings/nodespot-archive-keyring.gpg] @APT_URL@ beta main" | sudo tee /etc/apt/sources.list.d/nodespot.list</code></pre><button type="button" class="copy" data-copy="cmd-beta" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<p>Or install with <code>NODESPOT_CHANNEL=beta</code> (see the options above), or switch in Settings &rarr; Updates in the web UI. It is the same setting: it changes the suite in <code>/etc/apt/sources.list.d/nodespot.list</code>. Going back to <code>stable</code> does not downgrade: the node stays on the installed version until a release newer than it is promoted.</p>
 </section>
 </main>
-<footer><div class="wrap">ASLCP &middot; <a href="https://github.com/w1jar/aslcp">GitHub</a> &middot; <a href="https://github.com/w1jar/aslcp/issues">Report a bug</a></div></footer>
+<footer><div class="wrap">nodespot &middot; <a href="https://github.com/w1jar/nodespot">GitHub</a> &middot; <a href="https://github.com/w1jar/nodespot/issues">Report a bug</a></div></footer>
 <div class="sr" id="live" aria-live="polite" role="status"></div>
 <script>
 (function () {
@@ -603,9 +603,9 @@ sudo apt update &amp;&amp; sudo apt install aslcp</code></pre><button type="butt
     warn.textContent = w; warn.hidden = !w;
     if (!valid) return;
     var vars = [];
-    if (take.checked) vars.push("ASLCP_TAKEOVER=1");
-    if (raw !== "" && raw !== "8080" && !(take.checked && raw === "80")) vars.push("ASLCP_PORT=" + raw);
-    if (beta.checked) vars.push("ASLCP_CHANNEL=beta");
+    if (take.checked) vars.push("NODESPOT_TAKEOVER=1");
+    if (raw !== "" && raw !== "8080" && !(take.checked && raw === "80")) vars.push("NODESPOT_PORT=" + raw);
+    if (beta.checked) vars.push("NODESPOT_CHANNEL=beta");
     out.textContent = "curl -fsSL " + BASE + "/install.sh | sudo " + (vars.length ? vars.join(" ") + " " : "") + "sh";
   }
   document.getElementById("opts").addEventListener("input", build);

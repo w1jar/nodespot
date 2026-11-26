@@ -1,6 +1,6 @@
 [Unit]
-Description=ASLCP setup hotspot watchdog timer
-Documentation=file:///usr/share/doc/aslcp/README
+Description=nodespot setup hotspot watchdog timer
+Documentation=file:///usr/share/doc/nodespot/README
 
 [Timer]
 # The first pass comes one minute after boot; the 3 minute "no network" clock

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/artw1/aslcp/internal/backup"
+	"github.com/w1jar/nodespot/internal/backup"
 )
 
 // Backup operations. backup-info is a plain request/response operation.

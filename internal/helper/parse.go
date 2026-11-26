@@ -27,7 +27,7 @@ var progressRe = regexp.MustCompile(`^\(Reading database \.\.\.( \d+%)?$`)
 
 // CleanLog prepares journal output for display and classification: noise
 // lines are dropped, only the latest run is kept (from the last "Starting
-// aslcp-upgrade.service" line) and dpkg's "(Reading database ... N%"
+// nodespot-upgrade.service" line) and dpkg's "(Reading database ... N%"
 // progress, which arrives as carriage-return separated fragments, is removed.
 func CleanLog(log string) string { return cleanLogUnit(log, upgradeUnit) }
 
@@ -73,7 +73,7 @@ var noopRe = regexp.MustCompile(`(?m)^0 upgraded,`)
 // IsNoop reports whether a job log shows that apt had nothing to upgrade.
 func IsNoop(log string) bool { return noopRe.MatchString(log) }
 
-// JobStateFrom derives the job state from `systemctl show aslcp-upgrade`
+// JobStateFrom derives the job state from `systemctl show nodespot-upgrade`
 // properties and the tail of its journal. The transient unit is started with
 // --collect, so once it has finished systemd forgets its result; the final
 // systemd message of the latest run in the journal ("Deactivated

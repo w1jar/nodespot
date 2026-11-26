@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/network"
-	"github.com/artw1/aslcp/internal/dv/vocoder"
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // fakeNet is a loopback stand-in for a DV network client.

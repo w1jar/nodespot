@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/backup"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/node"
+	"github.com/w1jar/nodespot/internal/backup"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/node"
 )
 
 // Placeholder node config with two secrets.
@@ -50,8 +50,8 @@ func newBkNode(t *testing.T, nodeJSON string) *bkNode {
 	n := &bkNode{t: t, dir: dir, f: f}
 	n.o = &Ops{Run: f, Now: func() time.Time { return time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC) },
 		NodeConfig: filepath.Join(dir, "node.json"), SA818State: filepath.Join(dir, "sa818.json"),
-		AslcpConf: filepath.Join(dir, "aslcp.conf"), NodeUser: "-",
-		OSRelease: filepath.Join(dir, "os-release"), SourceList: filepath.Join(dir, "aslcp.list")}
+		NodespotConf: filepath.Join(dir, "nodespot.conf"), NodeUser: "-",
+		OSRelease: filepath.Join(dir, "os-release"), SourceList: filepath.Join(dir, "nodespot.list")}
 	n.put("os-release", "ID=debian\nVERSION_CODENAME=bookworm\nPRETTY_NAME=\"Debian GNU/Linux 12 (bookworm)\"\n")
 	if nodeJSON != "" {
 		n.put("node.json", nodeJSON)
@@ -103,18 +103,18 @@ func (n *bkNode) create(req BackupRequest) (BackupHeader, map[string][]byte) {
 }
 
 // archive packs a full format 2 backup (as the server does) from the
-// helper's part plus the database and aslcp.conf.
+// helper's part plus the database and nodespot.conf.
 func archive(t *testing.T, hdr BackupHeader, files map[string][]byte, conf string, format int) []byte {
 	t.Helper()
 	m := &backup.Manifest{Format: backup.FormatVersion, Created: time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC),
-		CreatedBy: "admin", ASLCPVersion: "3.0.0", Hostname: "node.example.net", Timezone: "UTC", Arch: hdr.Arch,
+		CreatedBy: "admin", NodespotVersion: "0.0.1", Hostname: "node.example.net", Timezone: "UTC", Arch: hdr.Arch,
 		OSID: hdr.OSID, OSVersionCodename: hdr.OSCodename, Callsign: hdr.Callsign, Parts: hdr.Parts}
-	all := map[string][]byte{backup.PathAslcpDB: []byte("SQLITE")}
+	all := map[string][]byte{backup.PathNodespotDB: []byte("SQLITE")}
 	for p, b := range files {
 		all[p] = b
 	}
 	if conf != "" {
-		all[backup.PathAslcpConf] = []byte(conf)
+		all[backup.PathNodespotConf] = []byte(conf)
 	}
 	for p, b := range all {
 		e := backup.Entry{Path: p, Type: backup.TypeFile, Owner: "root", Group: "root", Mode: "0640"}
@@ -135,7 +135,7 @@ func archive(t *testing.T, hdr BackupHeader, files map[string][]byte, conf strin
 		t.Fatal(err)
 	}
 	if format != 0 {
-		// Rewrite the manifest's format, as an older or newer ASLCP would.
+		// Rewrite the manifest's format, as an older or newer nodespot would.
 		return rewriteFormat(t, buf.Bytes(), format)
 	}
 	return buf.Bytes()
@@ -302,7 +302,7 @@ func TestBackupRestore(t *testing.T) {
 			[]string{"EchoLink"}, "-", 1},
 		{"dry run changes nothing", archive(t, hdrSec, filesSec, conf, 0), "", true, "", nil, "", 0},
 		{"format 1 refused", archive(t, hdrSec, filesSec, conf, 1), "", false, "Asterisk", nil, "", 0},
-		{"newer format refused", archive(t, hdrSec, filesSec, conf, 3), "", false, "update ASLCP first", nil, "", 0},
+		{"newer format refused", archive(t, hdrSec, filesSec, conf, 3), "", false, "update nodespot first", nil, "", 0},
 		{"not an archive", []byte("not a backup"), "", false, "", nil, "", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -329,7 +329,7 @@ func TestBackupRestore(t *testing.T) {
 			if strings.Join(res.MissingSecrets, ",") != strings.Join(tc.wantMissing, ",") {
 				t.Errorf("missing %v", res.MissingSecrets)
 			}
-			if got := dst.f.called("systemctl restart aslcp-node"); got != tc.wantRestart {
+			if got := dst.f.called("systemctl restart nodespot-node"); got != tc.wantRestart {
 				t.Errorf("restarts %d", got)
 			}
 			if tc.dryRun {
@@ -352,14 +352,14 @@ func TestBackupRestore(t *testing.T) {
 			if pass != tc.wantPass {
 				t.Errorf("echolink password %q, want %q", pass, tc.wantPass)
 			}
-			if dst.get("sa818.json") != bkSA818 || dst.get("aslcp.conf") != conf {
-				t.Error("sa818.json or aslcp.conf not restored")
+			if dst.get("sa818.json") != bkSA818 || dst.get("nodespot.conf") != conf {
+				t.Error("sa818.json or nodespot.conf not restored")
 			}
 			var names []string
 			for _, s := range res.Steps {
 				names = append(names, s.Name)
 			}
-			if strings.Join(names, ",") != "Restore node settings,Restore SA818 settings,Restore aslcp.conf,Restart the node" {
+			if strings.Join(names, ",") != "Restore node settings,Restore SA818 settings,Restore nodespot.conf,Restart the node" {
 				t.Errorf("steps %v", names)
 			}
 		})
@@ -385,14 +385,14 @@ func TestKeepListen(t *testing.T) {
 		changed               bool
 	}{
 		{"port differs, comments kept",
-			"; my node\n[server]\n# web port\nlisten = :8080\ndatadir = /var/lib/aslcp\n\n[node]\nsocket = /run/aslcp-node/control.sock\n",
+			"; my node\n[server]\n# web port\nlisten = :8080\ndatadir = /var/lib/nodespot\n\n[node]\nsocket = /run/nodespot-node/control.sock\n",
 			"[server]\nlisten = :8181\n",
-			"; my node\n[server]\n# web port\nlisten = :8181\ndatadir = /var/lib/aslcp\n\n[node]\nsocket = /run/aslcp-node/control.sock\n",
+			"; my node\n[server]\n# web port\nlisten = :8181\ndatadir = /var/lib/nodespot\n\n[node]\nsocket = /run/nodespot-node/control.sock\n",
 			":8181", ":8080", true},
 		{"backup without listen",
-			"[server]\ndatadir = /var/lib/aslcp\n; end\n",
+			"[server]\ndatadir = /var/lib/nodespot\n; end\n",
 			"[server]\nlisten = :8181\n",
-			"[server]\ndatadir = /var/lib/aslcp\nlisten = :8181\n; end\n",
+			"[server]\ndatadir = /var/lib/nodespot\nlisten = :8181\n; end\n",
 			":8181", "", true},
 		{"backup without server section",
 			"[node]\nsocket = /run/x.sock\n",
@@ -434,17 +434,17 @@ func TestBackupRestoreKeepsListen(t *testing.T) {
 	hdr, files := src.create(BackupRequest{Secrets: true})
 	const backupConf = "# old node\n[server]\nlisten = :8080\n"
 	dst := newBkNode(t, "")
-	dst.put("aslcp.conf", "[server]\nlisten = :8181\n")
+	dst.put("nodespot.conf", "[server]\nlisten = :8181\n")
 	res, err := dst.o.BackupRestore(context.Background(), &RestoreRequest{}, bytes.NewReader(archive(t, hdr, files, backupConf, 0)))
 	if err != nil || !res.OK {
 		t.Fatalf("%+v %v", res, err)
 	}
-	if got := dst.get("aslcp.conf"); got != "# old node\n[server]\nlisten = :8181\n" {
+	if got := dst.get("nodespot.conf"); got != "# old node\n[server]\nlisten = :8181\n" {
 		t.Errorf("conf %q", got)
 	}
 	found := false
 	for _, s := range res.Steps {
-		if s.Name == "Restore aslcp.conf" {
+		if s.Name == "Restore nodespot.conf" {
 			found = true
 			if !s.OK || !strings.Contains(s.Detail, "listen = :8181") || !strings.Contains(s.Detail, ":8080") {
 				t.Errorf("step %+v", s)

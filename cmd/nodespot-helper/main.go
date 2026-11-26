@@ -1,6 +1,6 @@
-// Command aslcp-helper is the privileged helper of ASLCP. It runs as root,
+// Command nodespot-helper is the privileged helper of nodespot. It runs as root,
 // socket-activated by systemd, and performs a fixed set of operations for the
-// unprivileged aslcp server (see internal/helper).
+// unprivileged nodespot server (see internal/helper).
 package main
 
 import (
@@ -13,7 +13,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 var version = "dev"
@@ -43,7 +43,7 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "web-port-guard" {
 		os.Exit(runGuard())
 	}
-	// One pass of the setup-hotspot watchdog, run by aslcp-wifi-watchdog.timer
+	// One pass of the setup-hotspot watchdog, run by nodespot-wifi-watchdog.timer
 	// (docs/DESIGN.md); it needs no running web server.
 	if len(os.Args) == 2 && os.Args[1] == "wifi-watchdog" {
 		if os.Geteuid() != 0 {
@@ -69,10 +69,10 @@ func main() {
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 	if *showVersion {
-		fmt.Println("aslcp-helper", version)
+		fmt.Println("nodespot-helper", version)
 		return
 	}
-	logger := log.New(os.Stderr, "aslcp-helper: ", 0) // journald adds timestamps
+	logger := log.New(os.Stderr, "nodespot-helper: ", 0) // journald adds timestamps
 
 	var ln net.Listener
 	var err error

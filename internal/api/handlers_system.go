@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // SystemHost is the part of the helper behind the System tab (sys.go in the

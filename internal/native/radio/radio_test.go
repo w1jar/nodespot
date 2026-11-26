@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/radio/alsa"
-	"github.com/artw1/aslcp/internal/native/radio/cm108"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/radio/alsa"
+	"github.com/w1jar/nodespot/internal/native/radio/cm108"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 // Compile-time checks that the real devices fit the interfaces.
@@ -382,7 +382,7 @@ func TestSavedSA818(t *testing.T) {
 	if err != nil || st.Settings != s {
 		t.Fatalf("got %+v, %v", st, err)
 	}
-	if (Config{}).statePath() != "/etc/aslcp/sa818.json" {
+	if (Config{}).statePath() != "/etc/nodespot/sa818.json" {
 		t.Error("default state path changed")
 	}
 }

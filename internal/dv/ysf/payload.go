@@ -2,7 +2,7 @@
 
 package ysf
 
-import "github.com/artw1/aslcp/internal/dv/imbe"
+import "github.com/w1jar/nodespot/internal/dv/imbe"
 
 // ---- CSD1/CSD2 (header and terminator) ----
 

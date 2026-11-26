@@ -1,8 +1,8 @@
-Third-party software in the ASLCP packages
+Third-party software in the nodespot packages
 ==========================================
 
-ASLCP itself is licensed under the GNU GPL v3 or later (see
-/usr/share/doc/aslcp/copyright). The binaries and the web UI bundled in them
+nodespot itself is licensed under the GNU GPL v3 or later (see
+/usr/share/doc/nodespot/copyright). The binaries and the web UI bundled in them
 contain the components below; their licence texts or notices follow. Most are
 permissive licences (BSD-3-Clause, MIT, ISC) that are compatible with GPL-3.0.
 The exception is the Codec2 vocoder (LGPL-2.1), which is used under section 3
@@ -460,11 +460,11 @@ version 2.1 (the text is in /usr/share/common-licenses/LGPL-2.1 on Debian
 systems, and at https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt).
 Section 3 of that licence allows a copy of the library to be distributed under
 the terms of the ordinary GNU General Public License instead, naming a newer
-version of the GPL if desired. ASLCP uses the Codec2-mod code in this way: the
+version of the GPL if desired. nodespot uses the Codec2-mod code in this way: the
 Go port is distributed under the GNU General Public License, version 3 or
-later, together with the rest of ASLCP (see /usr/share/doc/aslcp/copyright).
+later, together with the rest of nodespot (see /usr/share/doc/nodespot/copyright).
 Each ported source file states this in its header. The corresponding source is
-the ASLCP source code.
+the nodespot source code.
 
 ----------------------------------------------------------------------
 KISS FFT (bundled in Codec2-mod; ported in internal/dv/codec2/fft.go)

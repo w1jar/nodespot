@@ -1,4 +1,4 @@
-// Package updates reports and drives ASLCP package updates. Checking needs no
+// Package updates reports and drives nodespot package updates. Checking needs no
 // package manager: the manager fetches <updates url>/latest.json (release
 // channel) or latest-beta.json (beta channel) and compares its version with
 // the installed one (the running binary's version, which is
@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/debver"
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/debver"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // Helper is the part of the helper client the manager needs.
@@ -75,7 +75,7 @@ type Info struct {
 }
 
 // ArmhfReason is the ApplyReason of a 32-bit (armhf) install.
-const ArmhfReason = "this is a 32-bit (armhf) system and ASLCP is no longer built for it (ASL3 has no armhf packages); reinstall with Raspberry Pi OS Lite (64-bit) to get updates"
+const ArmhfReason = "this is a 32-bit (armhf) system and nodespot is no longer built for it (ASL3 has no armhf packages); reinstall with Raspberry Pi OS Lite (64-bit) to get updates"
 
 // Errors.
 var (

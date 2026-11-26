@@ -1,6 +1,6 @@
 // Package backupsvc implements backup creation and full restore for the
 // server (docs/BACKUP.md): it assembles the archive from the helper's system
-// part and ASLCP's own database, validates uploads, previews and applies
+// part and nodespot's own database, validates uploads, previews and applies
 // them, and carries the staged database swap across the restart.
 package backupsvc
 
@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/backup"
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/backup"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // Helper is what the service needs from the privileged helper.
@@ -40,7 +40,7 @@ var (
 	ErrBusy     = errors.New("a restore is already running")
 )
 
-// TooNewError means the backup comes from a newer ASLCP.
+// TooNewError means the backup comes from a newer nodespot.
 type TooNewError struct{ Msg string }
 
 func (e *TooNewError) Error() string { return e.Msg }
@@ -50,7 +50,7 @@ type Options struct {
 	Helper  Helper
 	Store   *store.Store
 	DataDir string
-	// ConfPath is the aslcp.conf included in the backup ("" or unreadable:
+	// ConfPath is the nodespot.conf included in the backup ("" or unreadable:
 	// left out).
 	ConfPath string
 	Version  string
@@ -58,7 +58,7 @@ type Options struct {
 	Timezone func() string
 	Now      func() time.Time
 	Logger   *log.Logger
-	// Demo: the ASLCP database is not replaced and no restart follows (the
+	// Demo: the nodespot database is not replaced and no restart follows (the
 	// demo has nothing to restart into); the result is complete at once.
 	Demo bool
 }
@@ -160,7 +160,7 @@ func fileName(host string, now time.Time) string {
 	if len(h) > 60 {
 		h = h[:60]
 	}
-	return "aslcp-backup-" + h + "-" + now.Format("20060102-1504") + ".tar.gz"
+	return "nodespot-backup-" + h + "-" + now.Format("20060102-1504") + ".tar.gz"
 }
 
 func hashFile(path string) (int64, string, error) {
@@ -198,7 +198,7 @@ func (s *Service) Create(ctx context.Context, req helper.BackupRequest, who stri
 		src string
 	}
 	var extras []extra
-	dbPath := filepath.Join(dir, "aslcp.db")
+	dbPath := filepath.Join(dir, "nodespot.db")
 	if err := s.o.Store.Snapshot(dbPath); err != nil {
 		return nil, err
 	}
@@ -206,25 +206,25 @@ func (s *Service) Create(ctx context.Context, req helper.BackupRequest, who stri
 	if err != nil {
 		return nil, err
 	}
-	extras = append(extras, extra{backup.Entry{Path: backup.PathAslcpDB, Type: backup.TypeFile, Size: n, SHA256: sum,
-		Owner: "aslcp", Group: "aslcp", Mode: "0600"}, dbPath})
+	extras = append(extras, extra{backup.Entry{Path: backup.PathNodespotDB, Type: backup.TypeFile, Size: n, SHA256: sum,
+		Owner: "nodespot", Group: "nodespot", Mode: "0600"}, dbPath})
 	skipped := append([]string{}, h.Skipped...)
 	if s.o.ConfPath != "" {
 		if fi, err := os.Stat(s.o.ConfPath); err == nil && fi.Mode().IsRegular() && fi.Size() <= 1<<20 {
 			if n, sum, err := hashFile(s.o.ConfPath); err == nil {
-				extras = append(extras, extra{backup.Entry{Path: backup.PathAslcpConf, Type: backup.TypeFile, Size: n, SHA256: sum,
-					Owner: "root", Group: "aslcp", Mode: backup.FormatMode(uint32(fi.Mode().Perm()) & 0o664)}, s.o.ConfPath})
+				extras = append(extras, extra{backup.Entry{Path: backup.PathNodespotConf, Type: backup.TypeFile, Size: n, SHA256: sum,
+					Owner: "root", Group: "nodespot", Mode: backup.FormatMode(uint32(fi.Mode().Perm()) & 0o664)}, s.o.ConfPath})
 			} else {
-				skipped = append(skipped, "aslcp.conf (unreadable)")
+				skipped = append(skipped, "nodespot.conf (unreadable)")
 			}
 		} else {
-			skipped = append(skipped, "aslcp.conf (unreadable)")
+			skipped = append(skipped, "nodespot.conf (unreadable)")
 		}
 	}
 
 	now := s.o.Now()
 	m := &backup.Manifest{
-		Format: backup.FormatVersion, Created: now.UTC().Truncate(time.Second), CreatedBy: who, ASLCPVersion: s.o.Version,
+		Format: backup.FormatVersion, Created: now.UTC().Truncate(time.Second), CreatedBy: who, NodespotVersion: s.o.Version,
 		Hostname: s.o.Hostname(), Timezone: s.o.Timezone(), Arch: h.Arch, OSID: h.OSID, OSVersionCodename: h.OSCodename,
 		OSPrettyName: h.OSName, Callsign: h.Callsign, Channel: h.Channel, Parts: h.Parts, Skipped: skipped,
 	}

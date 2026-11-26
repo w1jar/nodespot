@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/radio"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 var sprintf = fmt.Sprintf

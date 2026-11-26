@@ -34,7 +34,7 @@ type TermBackend interface {
 }
 
 // selfHelperPath is the helper binary term-host is started from.
-const selfHelperPath = "/usr/libexec/aslcp/aslcp-helper"
+const selfHelperPath = "/usr/libexec/nodespot/nodespot-helper"
 
 type termBackend struct {
 	run  Runner

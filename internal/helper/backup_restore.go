@@ -12,9 +12,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/artw1/aslcp/internal/backup"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/node"
+	"github.com/w1jar/nodespot/internal/backup"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/node"
 )
 
 // maxRestoreFile bounds each node or config file read from an archive.
@@ -31,7 +31,7 @@ func readRestoreSet(in io.Reader) (*restoreSet, error) {
 	rs := &restoreSet{files: map[string][]byte{}}
 	m, err := backup.Read(in, func(e backup.Entry, body io.Reader) error {
 		switch e.Path {
-		case backup.PathNodeConfig, backup.PathSA818, backup.PathAslcpConf:
+		case backup.PathNodeConfig, backup.PathSA818, backup.PathNodespotConf:
 		default:
 			return nil
 		}
@@ -128,7 +128,7 @@ func (o *Ops) planNode(rs *restoreSet, res *RestoreResult) ([]byte, error) {
 }
 
 // BackupRestore validates the archive read from in completely, then (unless
-// req.DryRun) writes the node config, the SA818 settings and aslcp.conf and
+// req.DryRun) writes the node config, the SA818 settings and nodespot.conf and
 // restarts the node. Errors before the first change are returned as errors;
 // failures while applying are reported in the result.
 func (o *Ops) BackupRestore(ctx context.Context, req *RestoreRequest, in io.Reader) (RestoreResult, error) {
@@ -160,9 +160,9 @@ func (o *Ops) BackupRestore(ctx context.Context, req *RestoreRequest, in io.Read
 			return RestoreResult{}, &backup.Error{Msg: err.Error()}
 		}
 	}
-	conf := rs.files[backup.PathAslcpConf]
+	conf := rs.files[backup.PathNodespotConf]
 	if conf != nil && (!utf8.Valid(conf) || bytes.IndexByte(conf, 0) >= 0) {
-		return RestoreResult{}, &backup.Error{Msg: "aslcp.conf in the backup is not a text file"}
+		return RestoreResult{}, &backup.Error{Msg: "nodespot.conf in the backup is not a text file"}
 	}
 	if req.DryRun {
 		res.OK = true
@@ -197,8 +197,8 @@ func (o *Ops) BackupRestore(ctx context.Context, req *RestoreRequest, in io.Read
 		}
 	}
 	if conf != nil {
-		detail, err := o.restoreAslcpConf(conf, rs.m.Find(backup.PathAslcpConf))
-		if !step("Restore aslcp.conf", err, detail) {
+		detail, err := o.restoreNodespotConf(conf, rs.m.Find(backup.PathNodespotConf))
+		if !step("Restore nodespot.conf", err, detail) {
 			return res, nil
 		}
 	}
@@ -215,14 +215,14 @@ func (o *Ops) BackupRestore(ctx context.Context, req *RestoreRequest, in io.Read
 	return res, nil
 }
 
-// restoreAslcpConf writes the backup's aslcp.conf but keeps this node's web
+// restoreNodespotConf writes the backup's nodespot.conf but keeps this node's web
 // port (the [server] listen of the current file), so a backup from a node
-// on another port does not move ASLCP away from the port it was installed
+// on another port does not move nodespot away from the port it was installed
 // on and opened in the firewall. The detail names the kept port when the
 // backup's differed.
-func (o *Ops) restoreAslcpConf(data []byte, e *backup.Entry) (string, error) {
+func (o *Ops) restoreNodespotConf(data []byte, e *backup.Entry) (string, error) {
 	detail := ""
-	if cur, err := os.ReadFile(o.aslcpConf()); err == nil {
+	if cur, err := os.ReadFile(o.nodespotConf()); err == nil {
 		out, kept, was, changed := keepListen(data, cur)
 		if changed {
 			data = out
@@ -234,7 +234,7 @@ func (o *Ops) restoreAslcpConf(data []byte, e *backup.Entry) (string, error) {
 			}
 		}
 	}
-	uid, gid := lookupIDs("root", "aslcp", "root")
+	uid, gid := lookupIDs("root", "nodespot", "root")
 	perm := fs.FileMode(0o640)
 	if e != nil {
 		uid, gid = lookupIDs(e.Owner, e.Group, "root")
@@ -242,8 +242,8 @@ func (o *Ops) restoreAslcpConf(data []byte, e *backup.Entry) (string, error) {
 			perm = fs.FileMode(m & 0o664)
 		}
 	}
-	if err := writeFileAt(o.aslcpConf(), data, uid, gid, perm); err != nil {
-		return "", errors.New("writing aslcp.conf: " + err.Error())
+	if err := writeFileAt(o.nodespotConf(), data, uid, gid, perm); err != nil {
+		return "", errors.New("writing nodespot.conf: " + err.Error())
 	}
 	return detail, nil
 }

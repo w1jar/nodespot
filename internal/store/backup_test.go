@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/schedules"
+	"github.com/w1jar/nodespot/internal/schedules"
 )
 
 func TestSnapshotInspectMigrate(t *testing.T) {

@@ -2,7 +2,7 @@
 // the last few talkers, for the dashboard's "Now calling" strip. The node
 // reports every call of every mode the same way (a talk start and a talk
 // end), so the tracker is the same for AllStar, EchoLink and the digital
-// modes. State is in memory; a restart of ASLCP seeds it from the node's
+// modes. State is in memory; a restart of nodespot seeds it from the node's
 // last heard list.
 package nowcalling
 
@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 const (

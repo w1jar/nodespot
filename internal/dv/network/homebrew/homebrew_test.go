@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/dmr"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/dmr"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 const (
@@ -281,7 +281,7 @@ func TestLoginSuccessAndConfigPacket(t *testing.T) {
 	if string(c[38:55]) != "0.00000000.000000" || c[97] != '4' || string(c[16:25]) != "000000000" || string(c[34:36]) != "01" {
 		t.Fatalf("RPTC position/slots/power %q", c[16:98])
 	}
-	if got := string(c[len(c)-80 : len(c)-75]); got != "ASLCP" {
+	if got := string(c[len(c)-80 : len(c)-72]); got != "nodespot" {
 		t.Fatalf("software %q", got)
 	}
 	if o := m.all("RPTO")[0]; string(o[8:]) != "TS2=1997;" {

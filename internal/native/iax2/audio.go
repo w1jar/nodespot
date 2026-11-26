@@ -1,6 +1,6 @@
 package iax2
 
-import "github.com/artw1/aslcp/internal/native/audio"
+import "github.com/w1jar/nodespot/internal/native/audio"
 
 // Frame is 20 ms of signed 16-bit linear PCM, mono, 8000 Hz, shared with
 // the rest of the native node.

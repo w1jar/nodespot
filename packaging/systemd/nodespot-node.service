@@ -1,27 +1,27 @@
 [Unit]
-Description=ASLCP native node (one radio, one network mode)
-Documentation=file:///usr/share/doc/aslcp/README
+Description=nodespot native node (one radio, one network mode)
+Documentation=file:///usr/share/doc/nodespot/README
 Wants=md380-emu.service
 After=network-online.target md380-emu.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=aslcp-node
-Group=aslcp-node
+User=nodespot-node
+Group=nodespot-node
 # The sound card (audio); the CM108 hidraw and the CH340 serial port get
-# group aslcp-node from 60-aslcp-node.rules.
+# group nodespot-node from 60-nodespot-node.rules.
 SupplementaryGroups=audio
-ExecStart=/usr/libexec/aslcp/aslcp-node -config /etc/aslcp/node.json -socket /run/aslcp-node/control.sock
+ExecStart=/usr/libexec/nodespot/nodespot-node -config /etc/nodespot/node.json -socket /run/nodespot-node/control.sock
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=2
 # Exit 78 (EX_CONFIG): the config file is invalid; restarting cannot fix it.
 RestartPreventExitStatus=78
-RuntimeDirectory=aslcp-node
+RuntimeDirectory=nodespot-node
 RuntimeDirectoryMode=0750
-# node.json and sa818.json are written here (0600, owned by aslcp-node).
-ReadWritePaths=/etc/aslcp
+# node.json and sa818.json are written here (0600, owned by nodespot-node).
+ReadWritePaths=/etc/nodespot
 UMask=0007
 Nice=-5
 NoNewPrivileges=yes

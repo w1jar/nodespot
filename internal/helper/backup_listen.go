@@ -2,7 +2,7 @@ package helper
 
 import "strings"
 
-// confLine is one line of an aslcp.conf: its section, and for a key line
+// confLine is one line of an nodespot.conf: its section, and for a key line
 // the lower-case key and where the value sits in the line.
 type confLine struct {
 	text           string
@@ -53,7 +53,7 @@ func parseConfLines(data string) []confLine {
 	return out
 }
 
-// confListen returns the effective [server] listen value of an aslcp.conf
+// confListen returns the effective [server] listen value of an nodespot.conf
 // (the last one, as config.Load reads it) and whether there is one.
 func confListen(data []byte) (string, bool) {
 	v, _, ok := listenLine(parseConfLines(string(data)))
@@ -74,7 +74,7 @@ func listenLine(lines []confLine) (string, int, bool) {
 	return v, at, ok
 }
 
-// keepListen makes the restored aslcp.conf keep this node's web port: the
+// keepListen makes the restored nodespot.conf keep this node's web port: the
 // [server] listen of backupConf is replaced by the one in currentConf (or
 // added to [server] when the backup has none). Everything else in the
 // backup file is kept byte for byte. When currentConf has no listen line,

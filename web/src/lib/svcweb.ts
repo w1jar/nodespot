@@ -6,7 +6,7 @@ export interface WebPortStatus {
   dropIn: boolean; previous: string; backPort: number; pending?: { deadline: string; seconds: number }; reverted?: string; firewall?: string;
 }
 
-/** Address of ASLCP on `port`, built from the browser's own host (plan 7.4). Port 80 is left out. */
+/** Address of nodespot on `port`, built from the browser's own host (plan 7.4). Port 80 is left out. */
 export function webAddress(loc: { protocol: string; hostname: string }, port: number, path = '/'): string {
   const host = loc.hostname.includes(':') && !loc.hostname.startsWith('[') ? `[${loc.hostname}]` : loc.hostname;
   return `${loc.protocol}//${host}${port === 80 ? '' : ':' + port}${path}`;
@@ -26,7 +26,7 @@ export function shouldConfirm(st: WebPortStatus, loc: { port: string; protocol: 
 /**
  * After a move the old address goes away. This watches it (same origin, so the
  * page's own CSP allows it): `probe` throws while the server is down. When it
- * answers again after having been down, the helper has moved ASLCP back
+ * answers again after having been down, the helper has moved nodespot back
  * ("returned"). When it stays down until `timeoutMs`, the move stuck ("gone").
  * The new address cannot be probed from this page: the CSP only allows the
  * page's own origin, and another port is another origin.

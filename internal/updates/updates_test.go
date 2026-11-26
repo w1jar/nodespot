@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 type fh struct {

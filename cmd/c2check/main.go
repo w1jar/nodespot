@@ -25,7 +25,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/artw1/aslcp/internal/dv/codec2"
+	"github.com/w1jar/nodespot/internal/dv/codec2"
 )
 
 // Pass/fail thresholds. Tune them here.

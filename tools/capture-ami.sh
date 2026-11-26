@@ -1,9 +1,9 @@
 #!/bin/bash
 # Capture read-only app_rpt status replies and events over AMI, as test data
-# for ASLCP. Run as root on the node. Sends no commands that change anything.
+# for nodespot. Run as root on the node. Sends no commands that change anything.
 # The AMI login is read from manager.conf and is not written to the output.
 set -euo pipefail
-OUT=${1:-aslcp-ami-capture.txt}
+OUT=${1:-nodespot-ami-capture.txt}
 LISTEN=${LISTEN:-60}
 ETC=${ASTERISK_ETC:-/etc/asterisk}
 CONF=$ETC/manager.conf

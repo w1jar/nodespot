@@ -13,14 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/legacy"
+	"github.com/w1jar/nodespot/internal/legacy"
 )
 
 // Operating system updates. Everything here runs fixed command lines: no
 // package name, option or path ever comes from a client.
 
 const (
-	osUpgradeUnit = "aslcp-osupgrade"
+	osUpgradeUnit = "nodespot-osupgrade"
 
 	// DefaultRebootFile and DefaultRebootPkgsFile are the markers Debian
 	// packages leave when a reboot is needed.
@@ -36,7 +36,7 @@ const (
 
 	// osUpdateOutFile is where the OS upgrade script keeps the output of its
 	// apt-get update for the apt-update-check step.
-	osUpdateOutFile = "/run/aslcp-osupdate-apt.out"
+	osUpdateOutFile = "/run/nodespot-osupdate-apt.out"
 	osUpdateOutMax  = 1 << 20
 
 	// StepAptUpdateCheck is the dv-step the OS upgrade script calls, with the
@@ -303,7 +303,7 @@ func ParseUpgradeSim(out string) (pkgs []OSPackage, keptBack []string) {
 }
 
 // OSApply starts the OS upgrade in a transient systemd unit, detached from
-// the helper and the server so it survives their restart (the aslcp
+// the helper and the server so it survives their restart (the nodespot
 // package may be among the upgraded ones).
 func (o *Ops) OSApply(ctx context.Context) (OSStatus, error) {
 	o.applyMu.Lock()
@@ -346,10 +346,10 @@ func (o *Ops) Reboot(ctx context.Context) (OKResult, error) {
 	return OKResult{OK: true}, nil
 }
 
-// AslcpRestart restarts the aslcp service. systemctl is told not to wait, so
+// NodespotRestart restarts the nodespot service. systemctl is told not to wait, so
 // the request is answered before systemd stops the service that asked.
-func (o *Ops) AslcpRestart(ctx context.Context) (OKResult, error) {
-	out, code, err := o.Run.Run(ctx, "systemctl", "--no-block", "restart", "aslcp.service")
+func (o *Ops) NodespotRestart(ctx context.Context) (OKResult, error) {
+	out, code, err := o.Run.Run(ctx, "systemctl", "--no-block", "restart", "nodespot.service")
 	if err != nil {
 		return OKResult{}, fmt.Errorf("systemctl: %w", err)
 	}
@@ -370,5 +370,5 @@ func (o *Ops) selfPath() string {
 	if p, err := os.Executable(); err == nil {
 		return p
 	}
-	return "/usr/libexec/aslcp/aslcp-helper"
+	return "/usr/libexec/nodespot/nodespot-helper"
 }

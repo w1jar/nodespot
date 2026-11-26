@@ -1,8 +1,0 @@
-# ASLCP native node: give the node's user the SHARI's devices.
-#
-# The CM108 family USB sound chip (C-Media, vendor 0d8c): its HID interface
-# keys PTT and reads COS.
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d8c", GROUP="aslcp-node", MODE="0660"
-# The CH340 USB serial adapter (vendor 1a86, product 7523) that programs the
-# SA818 module.
-SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", GROUP="aslcp-node", MODE="0660"

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/dv/imbe"
-	"github.com/artw1/aslcp/internal/dv/vocoder"
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/gsm"
-	"github.com/artw1/aslcp/internal/native/iax2"
+	"github.com/w1jar/nodespot/internal/dv/imbe"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/gsm"
+	"github.com/w1jar/nodespot/internal/native/iax2"
 )
 
 // Codec names: the values of the "codec" setting.

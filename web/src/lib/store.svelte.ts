@@ -13,12 +13,12 @@ export const app = $state<{
   node: NodeJSON | null; modes: ModeInfo[]; heard: Heard[]; events: NodeEvent[];
   favorites: Favorite[]; schedules: SchedulesSnapshot | null; nowcalling: NowCalling | null; system: SystemInfo | null;
   conn: 'connecting' | 'live' | 'reconnecting' | 'offline'; stateAt: number; version: string; haveFavorites: boolean;
-  /** Set while an ASLCP update is installing; cleared when the server returns with a new version. */
+  /** Set while an nodespot update is installing; cleared when the server returns with a new version. */
   updating: { from: string; target: string } | null;
   /** Admins only: what the header badge and the Updates tab show (SSE "updates"). */
   updates: UpdatesBadge;
   /** Set while the panel or the node restarts: the page waits for the server and reloads. */
-  restarting: { kind: 'aslcp' | 'reboot'; since: number } | null;
+  restarting: { kind: 'nodespot' | 'reboot'; since: number } | null;
   /** The public status view is on (admin setting); the app is the chrome-less /embed view. */
   publicEnabled: boolean; embed: boolean;
   /** This page was opened over the setup hotspot (GET /api/setup): a login typed here is not encrypted. */
@@ -26,7 +26,7 @@ export const app = $state<{
 }>({
   ready: false, setupNeeded: false, user: null, instance: '', node: null, modes: [], heard: [], events: [], favorites: [], schedules: null, nowcalling: null, system: null,
   conn: 'offline', stateAt: Date.now(), version: '', haveFavorites: false, updating: null,
-  updates: { aslcp: false, aslcpVersion: '', os: 0, security: 0, reboot: false }, restarting: null,
+  updates: { nodespot: false, nodespotVersion: '', os: 0, security: 0, reboot: false }, restarting: null,
   publicEnabled: false, hotspot: false, embed: location.pathname === '/embed' || location.pathname === '/embed/',
 });
 
@@ -67,7 +67,7 @@ export async function refreshNode() { setNode(await api.node()); }
  * the panel can restart (and the event stream reconnect with the new instance)
  * before that request even returns.
  */
-export function awaitRestart(kind: 'aslcp' | 'reboot', before: string = app.instance) {
+export function awaitRestart(kind: 'nodespot' | 'reboot', before: string = app.instance) {
   if (app.restarting) return;
   const since = Date.now();
   app.restarting = { kind, since };
@@ -82,9 +82,9 @@ export function awaitRestart(kind: 'aslcp' | 'reboot', before: string = app.inst
     } catch {
       sawDown = true;
     }
-    if (kind === 'aslcp' && Date.now() - since > 60000) {
+    if (kind === 'nodespot' && Date.now() - since > 60000) {
       app.restarting = null; restartFrom = '';
-      toastError(new Error('ASLCP did not restart. Check `journalctl -u aslcp`.'));
+      toastError(new Error('nodespot did not restart. Check `journalctl -u nodespot`.'));
       return;
     }
     setTimeout(tick, 2000);
@@ -105,7 +105,7 @@ export function startEvents() {
     if (h.instance) app.instance = h.instance;
     if (app.updating && h.version && h.version !== app.updating.from) {
       // The server came back running the new version: reload to get the new UI.
-      try { sessionStorage.setItem('aslcp-updated', h.version); } catch { /* ignore */ }
+      try { sessionStorage.setItem('nodespot-updated', h.version); } catch { /* ignore */ }
       location.reload();
       return;
     }
@@ -113,7 +113,7 @@ export function startEvents() {
     try { reloadedFor = sessionStorage.getItem(RELOADED_KEY); } catch { /* ignore */ }
     if (shouldReloadForVersion(app.version, h.version, reloadedFor)) {
       // Installed outside the panel (apt, dpkg): this tab runs the old UI, so reload once for this version.
-      try { sessionStorage.setItem(RELOADED_KEY, h.version); sessionStorage.setItem('aslcp-updated', h.version); } catch { /* ignore */ }
+      try { sessionStorage.setItem(RELOADED_KEY, h.version); sessionStorage.setItem('nodespot-updated', h.version); } catch { /* ignore */ }
       location.reload();
       return;
     }
@@ -200,8 +200,8 @@ export async function boot() {
   } else if (!app.publicEnabled) navigate('/login');
   app.ready = true;
   try {
-    const v = sessionStorage.getItem('aslcp-updated');
-    if (v) { sessionStorage.removeItem('aslcp-updated'); toast(`Updated to ${v}`); }
+    const v = sessionStorage.getItem('nodespot-updated');
+    if (v) { sessionStorage.removeItem('nodespot-updated'); toast(`Updated to ${v}`); }
   } catch { /* ignore */ }
 }
 

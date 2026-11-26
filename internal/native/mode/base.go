@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 // Buffer sizes of the channels Base owns.

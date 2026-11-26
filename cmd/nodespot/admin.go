@@ -14,12 +14,12 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/config"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/config"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
-// Exit codes of "aslcp admin".
+// Exit codes of "nodespot admin".
 const (
 	exitOK       = 0
 	exitError    = 1
@@ -28,9 +28,9 @@ const (
 	defaultAdmin = "admin"
 )
 
-const adminUsage = `Usage: aslcp admin <command> [options]
+const adminUsage = `Usage: nodespot admin <command> [options]
 
-Manage ASLCP accounts directly in the database of the configured data
+Manage nodespot accounts directly in the database of the configured data
 directory. Safe while the service is running. Run as root (sudo) or as the
 service user, because the database is not world-writable.
 
@@ -89,14 +89,14 @@ func runAdmin(args []string, env adminEnv) int {
 		return exitOK
 	case "create", "reset-password", "list", "setup-code":
 	default:
-		fmt.Fprintf(env.errw, "aslcp admin: unknown command %q\n\n%s", cmd, adminUsage)
+		fmt.Fprintf(env.errw, "nodespot admin: unknown command %q\n\n%s", cmd, adminUsage)
 		return exitUsage
 	}
 
-	fs := flag.NewFlagSet("aslcp admin "+cmd, flag.ContinueOnError)
+	fs := flag.NewFlagSet("nodespot admin "+cmd, flag.ContinueOnError)
 	fs.SetOutput(env.errw)
 	fs.Usage = func() { fmt.Fprint(env.errw, adminUsage) }
-	cfgPath := fs.String("config", config.DefaultConfigPath, "path to aslcp.conf")
+	cfgPath := fs.String("config", config.DefaultConfigPath, "path to nodespot.conf")
 	var username, role string
 	var quiet bool
 	switch cmd {
@@ -118,28 +118,28 @@ func runAdmin(args []string, env adminEnv) int {
 	switch cmd {
 	case "reset-password":
 		if len(pos) != 1 {
-			fmt.Fprint(env.errw, "aslcp admin reset-password: expected exactly one USER\n\n"+adminUsage)
+			fmt.Fprint(env.errw, "nodespot admin reset-password: expected exactly one USER\n\n"+adminUsage)
 			return exitUsage
 		}
 	default:
 		if len(pos) != 0 {
-			fmt.Fprintf(env.errw, "aslcp admin %s: unexpected argument %q\n\n%s", cmd, pos[0], adminUsage)
+			fmt.Fprintf(env.errw, "nodespot admin %s: unexpected argument %q\n\n%s", cmd, pos[0], adminUsage)
 			return exitUsage
 		}
 	}
 	if cmd == "create" && !store.ValidRole(role) {
-		fmt.Fprintf(env.errw, "aslcp admin create: invalid role %q (admin, operator or viewer)\n", role)
+		fmt.Fprintf(env.errw, "nodespot admin create: invalid role %q (admin, operator or viewer)\n", role)
 		return exitUsage
 	}
 
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
-		fmt.Fprintf(env.errw, "aslcp admin: %v\n", err)
+		fmt.Fprintf(env.errw, "nodespot admin: %v\n", err)
 		return exitError
 	}
 	st, done, err := openAdminStore(cfg.DataDir)
 	if err != nil {
-		fmt.Fprintf(env.errw, "aslcp admin: %v\n", err)
+		fmt.Fprintf(env.errw, "nodespot admin: %v\n", err)
 		return exitError
 	}
 	defer done()
@@ -157,7 +157,7 @@ func runAdmin(args []string, env adminEnv) int {
 		code, rerr = adminSetupCode(st, cfg.DataDir, env)
 	}
 	if rerr != nil {
-		fmt.Fprintf(env.errw, "aslcp admin %s: %v\n", cmd, rerr)
+		fmt.Fprintf(env.errw, "nodespot admin %s: %v\n", cmd, rerr)
 		return exitError
 	}
 	return code
@@ -178,7 +178,7 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-var adminDBNames = []string{"aslcp.db", "aslcp.db-wal", "aslcp.db-shm"}
+var adminDBNames = []string{"nodespot.db", "nodespot.db-wal", "nodespot.db-shm"}
 
 // openAdminStore opens the store in dir. The returned func closes it and, when
 // running as root on a directory owned by someone else (the service user),
@@ -186,18 +186,18 @@ var adminDBNames = []string{"aslcp.db", "aslcp.db-wal", "aslcp.db-shm"}
 func openAdminStore(dir string) (*store.Store, func(), error) {
 	fi, err := os.Stat(dir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("data directory %s: %v (is ASLCP installed? check --config)", dir, errors.Unwrap(err))
+		return nil, nil, fmt.Errorf("data directory %s: %v (is nodespot installed? check --config)", dir, errors.Unwrap(err))
 	}
 	if !fi.IsDir() {
 		return nil, nil, fmt.Errorf("data directory %s is not a directory", dir)
 	}
-	dbPath := filepath.Join(dir, "aslcp.db")
+	dbPath := filepath.Join(dir, "nodespot.db")
 	if syscall.Access(dir, 2) != nil {
-		return nil, nil, fmt.Errorf("cannot write to %s: run as root (sudo aslcp admin ...) or as the service user", dir)
+		return nil, nil, fmt.Errorf("cannot write to %s: run as root (sudo nodespot admin ...) or as the service user", dir)
 	}
 	if f, err := os.OpenFile(dbPath, os.O_RDWR, 0); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			return nil, nil, fmt.Errorf("cannot write to %s: run as root (sudo aslcp admin ...) or as the service user", dbPath)
+			return nil, nil, fmt.Errorf("cannot write to %s: run as root (sudo nodespot admin ...) or as the service user", dbPath)
 		}
 	} else {
 		f.Close()
@@ -336,7 +336,7 @@ func adminCreate(st *store.Store, dataDir, username, role string, env adminEnv) 
 	}
 	// Users exist now, so first-run setup is complete.
 	if err := os.Remove(filepath.Join(dataDir, "setup-code")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintf(env.errw, "aslcp admin: warning: could not remove setup-code: %v\n", err)
+		fmt.Fprintf(env.errw, "nodespot admin: warning: could not remove setup-code: %v\n", err)
 	}
 	fmt.Fprintf(env.out, "Created %s account %q.\n", role, username)
 	return nil
@@ -345,7 +345,7 @@ func adminCreate(st *store.Store, dataDir, username, role string, env adminEnv) 
 func adminResetPassword(st *store.Store, username string, env adminEnv) error {
 	u, err := st.UserByName(strings.TrimSpace(username))
 	if errors.Is(err, store.ErrNotFound) {
-		return fmt.Errorf("no such user %q (see: aslcp admin list)", username)
+		return fmt.Errorf("no such user %q (see: nodespot admin list)", username)
 	} else if err != nil {
 		return err
 	}
@@ -379,7 +379,7 @@ func adminList(st *store.Store, quiet bool, env adminEnv) (int, error) {
 		return exitOK, nil
 	}
 	if len(users) == 0 {
-		fmt.Fprintln(env.out, "No users yet. Create one with: aslcp admin create")
+		fmt.Fprintln(env.out, "No users yet. Create one with: nodespot admin create")
 		return exitOK, nil
 	}
 	tw := tabwriter.NewWriter(env.out, 0, 4, 2, ' ', 0)
@@ -398,7 +398,7 @@ func adminSetupCode(st *store.Store, dataDir string, env adminEnv) (int, error) 
 		return exitError, err
 	}
 	if n > 0 {
-		fmt.Fprintln(env.errw, "aslcp admin setup-code: setup is already complete (an account exists); if you are locked out, use: aslcp admin reset-password <user>")
+		fmt.Fprintln(env.errw, "nodespot admin setup-code: setup is already complete (an account exists); if you are locked out, use: nodespot admin reset-password <user>")
 		return exitError, nil
 	}
 	path := filepath.Join(dataDir, "setup-code")

@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 // Fake is an in-memory [Radio] for tests and for a node with no radio. Tests

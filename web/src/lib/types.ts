@@ -16,7 +16,7 @@ export interface OSUpdates {
   /** Non-fatal notes of the last check (e.g. a package repository could not be refreshed). */ warnings?: string[];
 }
 /** Admin-only SSE event "updates": counts only. */
-export interface UpdatesBadge { aslcp: boolean; aslcpVersion: string; os: number; security: number; reboot: boolean }
+export interface UpdatesBadge { nodespot: boolean; nodespotVersion: string; os: number; security: number; reboot: boolean }
 
 // ---- The node: one radio, one active mode (GET /api/node, SSE "node").
 
@@ -145,7 +145,7 @@ export interface HostList { mode: string; items: HostItem[]; truncated?: boolean
 /** A favorite: a saved target of one mode (GET /api/favorites). */
 export interface Favorite { id: number; mode: string; target: string; label: string; group: string; position: number; pinned: boolean; info: NodeInfo | null }
 
-/** The state of the aslcp-node systemd unit. */
+/** The state of the nodespot-node systemd unit. */
 export interface NodeService { available: boolean; service?: { unit: string; description: string; active: string; sub: string; enabled: string; since: string } }
 
 export interface SystemInfo {
@@ -180,7 +180,7 @@ export interface BackupSelection { secrets: boolean }
 export interface RestoreWarning { code: string; message: string }
 export interface RestoreRadio { bandwidth: string; rxMHz: number; txMHz: number; rxTone: string; txTone: string; squelch: number }
 export interface RestorePreview {
-  backup: { hostname: string; created: string; createdBy: string; aslcpVersion: string; arch: string; osId?: string; osCodename?: string; osName?: string; callsign: string; channel: string };
+  backup: { hostname: string; created: string; createdBy: string; nodespotVersion: string; arch: string; osId?: string; osCodename?: string; osName?: string; callsign: string; channel: string };
   node: { arch: string; osId?: string; osCodename?: string; osName?: string; callsign: string };
   warnings: RestoreWarning[];
   users: { username: string; role: string }[];

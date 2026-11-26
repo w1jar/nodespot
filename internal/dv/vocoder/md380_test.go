@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/vocoder"
-	"github.com/artw1/aslcp/internal/dv/vocoder/fake"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/dv/vocoder/fake"
 )
 
 var _ vocoder.AMBE = (*vocoder.MD380)(nil)

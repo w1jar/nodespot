@@ -12,7 +12,7 @@ import (
 )
 
 // DefaultStatePath is where the daemon keeps the applied settings.
-const DefaultStatePath = "/etc/aslcp/sa818.json"
+const DefaultStatePath = "/etc/nodespot/sa818.json"
 
 // stateVersion is the file format version.
 const stateVersion = 1

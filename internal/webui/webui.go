@@ -15,10 +15,10 @@ var dist embed.FS
 
 const placeholder = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ASLCP</title>
+<title>nodespot</title>
 <style>body{font:16px system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}
 code{background:#eee;padding:.1em .4em;border-radius:4px}</style></head>
-<body><h1>UI not built</h1><p>The ASLCP web interface has not been built into this binary.
+<body><h1>UI not built</h1><p>The nodespot web interface has not been built into this binary.
 Run <code>make web</code> and rebuild. The API is available under <code>/api</code>.</p></body></html>`
 
 // Handler serves the embedded UI.

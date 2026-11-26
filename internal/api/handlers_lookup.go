@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // The AllStar node list: lookup and search for the AllStar mode's pickers

@@ -1,9 +1,9 @@
 package dv
 
 import (
-	"github.com/artw1/aslcp/internal/dv/imbe"
-	"github.com/artw1/aslcp/internal/dv/network"
-	"github.com/artw1/aslcp/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/dv/imbe"
+	"github.com/w1jar/nodespot/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
 )
 
 // codecLen is the frame size of c in bytes, 0 for an unknown codec.

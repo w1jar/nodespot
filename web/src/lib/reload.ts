@@ -1,5 +1,5 @@
 /** Key (sessionStorage) holding the last version this tab already reloaded for. */
-export const RELOADED_KEY = 'aslcp-reloaded';
+export const RELOADED_KEY = 'nodespot-reloaded';
 
 /**
  * Whether a stale tab must reload when the SSE hello reports `next`.

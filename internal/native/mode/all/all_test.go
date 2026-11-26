@@ -3,7 +3,7 @@ package all
 import (
 	"testing"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 func TestAllModesRegistered(t *testing.T) {

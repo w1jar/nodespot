@@ -248,7 +248,7 @@ func (d *DB) download(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "aslcp-nodelist")
+	req.Header.Set("User-Agent", "nodespot-nodelist")
 	resp, err := d.opt.Client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)

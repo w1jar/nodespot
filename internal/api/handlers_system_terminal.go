@@ -14,9 +14,9 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // TerminalOpener is implemented by the helper client (and by the demo
@@ -25,7 +25,7 @@ import (
 // frames of helper/terminal_frame.go. Closing a stream only detaches the
 // session (it keeps running in its own unit); a FrameEnd ends it.
 type TerminalOpener interface {
-	// OpenTerminal starts a session for the ASLCP user owner and returns its
+	// OpenTerminal starts a session for the nodespot user owner and returns its
 	// id and stream.
 	OpenTerminal(ctx context.Context, rows, cols uint16, owner int64) (io.ReadWriteCloser, string, error)
 	// AttachTerminal reattaches to a detached session of owner: the recent

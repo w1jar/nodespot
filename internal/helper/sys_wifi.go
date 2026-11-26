@@ -75,8 +75,8 @@ func wifiArg(r *SysRequest) WifiRequest {
 // locations (tests inject temporary directories).
 type WifiPaths struct {
 	NMDir    string // NetworkManager keyfiles (default /etc/NetworkManager/system-connections)
-	StateDir string // hotspot.json, root only (default /var/lib/aslcp-wifi)
-	RunDir   string // watchdog state and lock (default /run/aslcp)
+	StateDir string // hotspot.json, root only (default /var/lib/nodespot-wifi)
+	RunDir   string // watchdog state and lock (default /run/nodespot)
 	Uptime   string // default /proc/uptime
 	Hostname func() string
 }
@@ -84,8 +84,8 @@ type WifiPaths struct {
 // Defaults of WifiPaths.
 const (
 	DefaultNMDir        = "/etc/NetworkManager/system-connections"
-	DefaultWifiStateDir = "/var/lib/aslcp-wifi"
-	DefaultWifiRunDir   = "/run/aslcp"
+	DefaultWifiStateDir = "/var/lib/nodespot-wifi"
+	DefaultWifiRunDir   = "/run/nodespot"
 )
 
 func (o *Ops) nmDir() string        { return orDefault(o.Wifi.NMDir, DefaultNMDir) }
@@ -713,7 +713,7 @@ func (o *Ops) WifiConnect(ctx context.Context, ssid, psk string, hidden bool) (W
 	if err != nil {
 		return WifiConnectResult{}, errors.New("NetworkManager's connection directory is not available")
 	}
-	path := filepath.Join(dir, "aslcp-"+uuid+".nmconnection")
+	path := filepath.Join(dir, "nodespot-"+uuid+".nmconnection")
 	data := buildWifiKeyfile(ssid, uuid, ssid, psk, km, hidden, prio)
 	if err := atomicWrite(path, dir, []byte(data), 0, 0, 0o600); err != nil {
 		return WifiConnectResult{}, errors.New("could not write the connection file")

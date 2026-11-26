@@ -34,8 +34,8 @@ env:
   # Public apt repository (gh-pages branch of this repository): keep in sync with
   # release.yml and the Makefile.
   APT_OWNER: w1jar
-  APT_REPO: aslcp
-  APT_URL: https://w1jar.github.io/aslcp
+  APT_REPO: nodespot
+  APT_URL: https://w1jar.github.io/nodespot
 
 jobs:
   remove:
@@ -76,13 +76,13 @@ jobs:
         if: ${{ inputs.apply }}
         working-directory: apt-repo
         run: |
-          git config user.name "aslcp-release"
+          git config user.name "nodespot-release"
           git config user.email "noreply@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
             echo "nothing to publish"
           else
-            git commit -m "aslcp: remove beta packages matching ${REMOVE_GLOB}"
+            git commit -m "nodespot: remove beta packages matching ${REMOVE_GLOB}"
             git push origin HEAD:gh-pages
           fi
         env:

@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/public"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/public"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // PublicSettingsJSON is the API object of GET/PUT /api/public (admin).

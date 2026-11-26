@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 func (s *Server) systemLogsRoutes() {

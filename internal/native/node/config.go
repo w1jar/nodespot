@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/radio"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 // DefaultConfigPath is where the daemon keeps its config.
-const DefaultConfigPath = "/etc/aslcp/node.json"
+const DefaultConfigPath = "/etc/nodespot/node.json"
 
 // ConfigVersion is the version written to new files.
 const ConfigVersion = 1

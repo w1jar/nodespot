@@ -14,17 +14,17 @@ import (
 const showPrefix = "systemctl show --no-pager"
 
 // svcOps returns Ops with temporary paths and a fake runner. conf is the
-// content of aslcp.conf ("" for none).
+// content of nodespot.conf ("" for none).
 func svcOps(t *testing.T, conf string, r map[string]resp) (*Ops, *fakeRunner) {
 	t.Helper()
 	dir := t.TempDir()
 	f := &fakeRunner{rules: r}
 	o := &Ops{Run: f, Now: func() time.Time { return time.Date(2026, 11, 20, 15, 0, 0, 0, time.UTC) },
-		AslcpConf: filepath.Join(dir, "aslcp.conf"),
+		NodespotConf: filepath.Join(dir, "nodespot.conf"),
 		Svc: SvcPaths{Record: filepath.Join(dir, "lib", "disabled-units"), StateDir: filepath.Join(dir, "webport"),
-			DropinDir: filepath.Join(dir, "aslcp.service.d"), GuardDelay: 60 * time.Second}}
+			DropinDir: filepath.Join(dir, "nodespot.service.d"), GuardDelay: 60 * time.Second}}
 	if conf != "" {
-		if err := os.WriteFile(o.AslcpConf, []byte(conf), 0o640); err != nil {
+		if err := os.WriteFile(o.NodespotConf, []byte(conf), 0o640); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -71,7 +71,7 @@ func TestSvcStatus(t *testing.T) {
 	// only allowlisted lines count
 	_ = os.WriteFile(o.Svc.Record, []byte("allmon3\nsshd.service\n../x\n"), 0o644)
 	st := o.SvcStatus(context.Background())
-	if !st.Available || !st.PortsAvailable || st.AslcpPort != 8080 || st.AslcpOn80 || len(st.Scopes) != 3 {
+	if !st.Available || !st.PortsAvailable || st.NodespotPort != 8080 || st.NodespotOn80 || len(st.Scopes) != 3 {
 		t.Fatalf("%+v", st)
 	}
 	if st.Scopes[0].Scope != "cockpit" || !st.Scopes[0].Active || !st.Scopes[0].Enabled || len(st.Scopes[0].Units) != 2 {
@@ -127,7 +127,7 @@ func TestSvcSetDisableEnable(t *testing.T) {
 }
 
 func TestSvcSetRefusals(t *testing.T) {
-	// ASLCP on port 80: Apache cannot be turned on
+	// nodespot on port 80: Apache cannot be turned on
 	o, _ := svcOps(t, "[server]\nlisten = :80\n", svcRules(t))
 	if _, err := o.SvcSet(context.Background(), "apache", SvcActionEnable, false); !errors.Is(err, ErrPort80Held) {
 		t.Fatalf("%v", err)
@@ -208,7 +208,7 @@ func TestWebPortMoveBackConfirm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conf, _ := os.ReadFile(o.AslcpConf)
+	conf, _ := os.ReadFile(o.NodespotConf)
 	if !strings.Contains(string(conf), "listen = 192.0.2.10:80\n") || !strings.Contains(string(conf), "# keep me") || !strings.Contains(string(conf), "x = 1") {
 		t.Fatalf("%s", conf)
 	}
@@ -220,8 +220,8 @@ func TestWebPortMoveBackConfirm(t *testing.T) {
 		t.Fatalf("%+v", st)
 	}
 	// reload first, then a non-blocking restart; the revert timer is armed
-	if f.called("systemctl daemon-reload") < 1 || f.called("systemctl --no-block restart aslcp.service") != 1 ||
-		f.called("systemd-run --unit=aslcp-webport-guard --on-active=60s") != 1 {
+	if f.called("systemctl daemon-reload") < 1 || f.called("systemctl --no-block restart nodespot.service") != 1 ||
+		f.called("systemd-run --unit=nodespot-webport-guard --on-active=60s") != 1 {
 		t.Fatalf("%v", f.calls)
 	}
 	// a second move is refused
@@ -230,14 +230,14 @@ func TestWebPortMoveBackConfirm(t *testing.T) {
 	}
 	// confirm clears the marker and stops the timer
 	st, err = o.WebPortSet(ctx, WebPortActionConfirm)
-	if err != nil || st.Pending != nil || f.called("systemctl stop aslcp-webport-guard.timer") < 1 {
+	if err != nil || st.Pending != nil || f.called("systemctl stop nodespot-webport-guard.timer") < 1 {
 		t.Fatalf("%v %+v %v", err, st, f.calls)
 	}
 	// the guard now does nothing
 	if err := o.WebPortGuard(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := os.ReadFile(o.AslcpConf); !strings.Contains(string(c), ":80\n") {
+	if c, _ := os.ReadFile(o.NodespotConf); !strings.Contains(string(c), ":80\n") {
 		t.Fatalf("%s", c)
 	}
 	// back restores the saved listen value and removes the drop-in
@@ -245,7 +245,7 @@ func TestWebPortMoveBackConfirm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conf, _ = os.ReadFile(o.AslcpConf)
+	conf, _ = os.ReadFile(o.NodespotConf)
 	if !strings.Contains(string(conf), "listen = 192.0.2.10:8080\n") || st.DropIn {
 		t.Fatalf("%s %+v", conf, st)
 	}
@@ -270,7 +270,7 @@ func TestWebPortMoveRefusals(t *testing.T) {
 	if _, err := o.WebPortSet(context.Background(), WebPortActionMove); !errors.Is(err, ErrPort80Busy) {
 		t.Fatalf("%v", err)
 	}
-	if c, _ := os.ReadFile(o.AslcpConf); !strings.Contains(string(c), ":8080") || f.called("systemctl --no-block") != 0 {
+	if c, _ := os.ReadFile(o.NodespotConf); !strings.Contains(string(c), ":8080") || f.called("systemctl --no-block") != 0 {
 		t.Fatalf("%s %v", c, f.calls)
 	}
 	if _, err := os.Stat(o.Svc.DropinDir); err == nil {
@@ -297,7 +297,7 @@ func TestWebPortMoveRollback(t *testing.T) {
 		t.Fatal("no error")
 	}
 	// the timer could not be armed: nothing may stay changed
-	if c, _ := os.ReadFile(o.AslcpConf); !strings.Contains(string(c), "listen = :8080\n") {
+	if c, _ := os.ReadFile(o.NodespotConf); !strings.Contains(string(c), "listen = :8080\n") {
 		t.Fatalf("%s", c)
 	}
 	if _, err := os.Stat(filepath.Join(o.Svc.DropinDir, "port80.conf")); err == nil {
@@ -319,13 +319,13 @@ func TestWebPortGuardReverts(t *testing.T) {
 	if err := o.WebPortGuard(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := os.ReadFile(o.AslcpConf); !strings.Contains(string(c), "listen = :8080\n") {
+	if c, _ := os.ReadFile(o.NodespotConf); !strings.Contains(string(c), "listen = :8080\n") {
 		t.Fatalf("%s", c)
 	}
 	if _, err := os.Stat(filepath.Join(o.Svc.DropinDir, "port80.conf")); err == nil {
 		t.Fatal("drop-in left")
 	}
-	if f.called("systemctl --no-block restart aslcp.service") != 2 {
+	if f.called("systemctl --no-block restart nodespot.service") != 2 {
 		t.Fatalf("%v", f.calls)
 	}
 	st := o.WebPortStatus(ctx)

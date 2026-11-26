@@ -21,7 +21,7 @@ Admins install CI builds of any `try/*` branch on a node from System > Updates. 
 
 A new publish job in `ci.yml`:
 
-- runs after the tests pass, only on a push to `try/**` in `w1jar/aslcp`;
+- runs after the tests pass, only on a push to `try/**` in `w1jar/nodespot`;
 - has a concurrency group, so builds publish one at a time;
 - is the only job with `contents: write`;
 - uploads the assets, prunes to the 10 newest builds, and updates `dev.json` on `gh-pages`. Reading `dev.json` needs a cache buster, as for `latest.json` (the CDN holds it about 10 minutes).
@@ -33,7 +33,7 @@ A release needs a tag, so CI would create and move a non-version tag `dev-builds
 ## 5. Node side
 
 - A new helper op downloads the deb for `dpkg --print-architecture` over HTTPS into a root-only cache and verifies the sha256.
-- It installs with `apt-get install --allow-downgrades ./file.deb` in a transient systemd unit (like the existing updates apply), so the install survives the ASLCP restart.
+- It installs with `apt-get install --allow-downgrades ./file.deb` in a transient systemd unit (like the existing updates apply), so the install survives the nodespot restart.
 - Dev versions are `X.Y.Z+dev.N.gSHA` counted from the last tag, so they sort below newer releases. The UI warns about the downgrade.
 - A "Back to the release" button reinstalls the channel's current version from apt (with allow-downgrades).
 - A build without a deb for the node's arch is listed but cannot be installed.

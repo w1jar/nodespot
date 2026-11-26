@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // clientRig serves a rig's engine on a temp socket and returns a client.

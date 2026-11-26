@@ -17,23 +17,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/api"
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/backupsvc"
-	"github.com/artw1/aslcp/internal/config"
-	"github.com/artw1/aslcp/internal/diag"
-	"github.com/artw1/aslcp/internal/favstats"
-	"github.com/artw1/aslcp/internal/hostlists"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/mode/modetest"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/node/nodetest"
-	"github.com/artw1/aslcp/internal/nodelist"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/schedules"
-	"github.com/artw1/aslcp/internal/store"
-	"github.com/artw1/aslcp/internal/system"
-	"github.com/artw1/aslcp/internal/updates"
+	"github.com/w1jar/nodespot/internal/api"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/backupsvc"
+	"github.com/w1jar/nodespot/internal/config"
+	"github.com/w1jar/nodespot/internal/diag"
+	"github.com/w1jar/nodespot/internal/favstats"
+	"github.com/w1jar/nodespot/internal/hostlists"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode/modetest"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/node/nodetest"
+	"github.com/w1jar/nodespot/internal/nodelist"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/schedules"
+	"github.com/w1jar/nodespot/internal/store"
+	"github.com/w1jar/nodespot/internal/system"
+	"github.com/w1jar/nodespot/internal/updates"
 )
 
 // localNode is the test station's AllStar node number.
@@ -180,7 +180,7 @@ func newEnv(t *testing.T, o opts) *env {
 	as.Limiter.Max = 1000 // tests log in often; rate limit has its own test
 
 	// A Unix socket path must be short, so not t.TempDir.
-	dir, err := os.MkdirTemp("", "aslcp-at")
+	dir, err := os.MkdirTemp("", "nodespot-at")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func (e *env) raw(method, path string, body any, cookie string, extra map[string
 	}
 	req, _ := http.NewRequest(method, e.ts.URL+path, rd)
 	if method != "GET" {
-		req.Header.Set("X-ASLCP", "1")
+		req.Header.Set("X-nodespot", "1")
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -422,7 +422,7 @@ func TestLoginRateLimit(t *testing.T) {
 func TestCSRFAndOrigin(t *testing.T) {
 	e := newEnv(t, opts{})
 	body := map[string]string{"username": "op", "password": "password-op"}
-	code, b, _ := e.raw("POST", "/api/login", body, "", map[string]string{"X-ASLCP": ""})
+	code, b, _ := e.raw("POST", "/api/login", body, "", map[string]string{"X-nodespot": ""})
 	if code != 403 || !strings.Contains(string(b), `"csrf"`) {
 		t.Fatalf("missing header: %d %s", code, b)
 	}
@@ -439,7 +439,7 @@ func TestCSRFAndOrigin(t *testing.T) {
 		t.Fatalf("vite origin without --dev: %d", code)
 	}
 	// authenticated state-changing request without the header is rejected too
-	code, _, _ = e.raw("POST", "/api/select", map[string]string{"mode": "allstar", "target": "2000"}, e.ck["op"], map[string]string{"X-ASLCP": ""})
+	code, _, _ = e.raw("POST", "/api/select", map[string]string{"mode": "allstar", "target": "2000"}, e.ck["op"], map[string]string{"X-nodespot": ""})
 	if code != 403 {
 		t.Fatalf("authed no header: %d", code)
 	}
@@ -1166,9 +1166,9 @@ func (s *sseStream) first() sseEvent {
 func TestInstanceHeaderMatchesHello(t *testing.T) {
 	e := newEnv(t, opts{})
 	_, _, h := e.raw("GET", "/api/session", nil, e.ck["admin"], nil)
-	inst := h.Get("X-ASLCP-Instance")
+	inst := h.Get("X-nodespot-Instance")
 	if inst == "" {
-		t.Fatal("missing X-ASLCP-Instance header")
+		t.Fatal("missing X-nodespot-Instance header")
 	}
 	var hello struct {
 		Instance string `json:"instance"`

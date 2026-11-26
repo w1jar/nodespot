@@ -193,7 +193,7 @@
     <p class="text-sm text-muted">Not available: the helper on this system has no terminal support.</p>
   {:else}
     <p class="text-xs text-muted">Off by default. Closes after {st.idleMinutes} minutes without typing, at most {st.maxHours} hours, {st.maxSessions} sessions at a time ({st.sessions} open now). Turning it off ends open sessions.</p>
-    <p class="text-xs text-muted">If the page disconnects, the session keeps running for 2 minutes, and for as long as <code>apt</code> or <code>dpkg</code> is running in it, so an ASLCP update typed here finishes safely. Closing or reloading the page only disconnects it too: a reload reattaches by itself, otherwise reattach from the list below, or just wait. The Disconnect button ends the session.</p>
+    <p class="text-xs text-muted">If the page disconnects, the session keeps running for 2 minutes, and for as long as <code>apt</code> or <code>dpkg</code> is running in it, so an nodespot update typed here finishes safely. Closing or reloading the page only disconnects it too: a reload reattaches by itself, otherwise reattach from the list below, or just wait. The Disconnect button ends the session.</p>
   {/if}
 </section>
 

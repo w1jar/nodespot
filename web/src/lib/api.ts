@@ -15,7 +15,7 @@ export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
 
 async function req<T>(method: string, path: string, body?: unknown, opts: { noAuthRedirect?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (method !== 'GET') headers['X-ASLCP'] = '1';
+  if (method !== 'GET') headers['X-nodespot'] = '1';
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let res: Response;
   try {
@@ -40,7 +40,7 @@ export async function probeServer(timeoutMs = 4000): Promise<{ status: number; i
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetch('/api/session', { headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store', signal: ac.signal });
-    return { status: res.status, instance: res.headers.get('X-ASLCP-Instance') ?? '' };
+    return { status: res.status, instance: res.headers.get('X-nodespot-Instance') ?? '' };
   } finally { clearTimeout(t); }
 }
 
@@ -71,9 +71,9 @@ async function saveDownload(res: Response, fallback: string): Promise<string> {
 async function downloadBackup(sel: BackupSelection): Promise<string> {
   let res: Response;
   try {
-    res = await fetch('/api/backup', { method: 'POST', credentials: 'same-origin', headers: { 'X-ASLCP': '1', 'Content-Type': 'application/json', Accept: 'application/gzip' }, body: JSON.stringify(sel) });
+    res = await fetch('/api/backup', { method: 'POST', credentials: 'same-origin', headers: { 'X-nodespot': '1', 'Content-Type': 'application/json', Accept: 'application/gzip' }, body: JSON.stringify(sel) });
   } catch { throw new ApiError(0, 'network', 'Cannot reach the server'); }
-  return saveDownload(res, 'aslcp-backup.tar.gz');
+  return saveDownload(res, 'nodespot-backup.tar.gz');
 }
 
 /** GET /api/system/diagnostics/bundle: the diagnostics .tar.gz, saved like a backup. */
@@ -82,7 +82,7 @@ async function downloadDiagnostics(maskIdentity: boolean): Promise<string> {
   try {
     res = await fetch(`/api/system/diagnostics/bundle?mask=${maskIdentity ? 1 : 0}`, { credentials: 'same-origin', headers: { Accept: 'application/gzip' } });
   } catch { throw new ApiError(0, 'network', 'Cannot reach the server'); }
-  return saveDownload(res, 'aslcp-diagnostics.tar.gz');
+  return saveDownload(res, 'nodespot-diagnostics.tar.gz');
 }
 
 /** POST /api/restore/upload with progress (fetch cannot report upload progress). */
@@ -94,7 +94,7 @@ function restoreUpload(file: File, auth: { password?: string; code?: string }, o
     if (auth.code !== undefined) fd.append('code', auth.code);
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/restore/upload');
-    xhr.setRequestHeader('X-ASLCP', '1');
+    xhr.setRequestHeader('X-nodespot', '1');
     xhr.setRequestHeader('Accept', 'application/json');
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
     xhr.onerror = () => reject(new ApiError(0, 'network', 'Cannot reach the server'));
@@ -175,7 +175,7 @@ export const api = {
   setUpdateChannel: (channel: 'stable' | 'beta') => req<UpdateInfo>('PUT', '/updates/channel', { channel }),
   reboot: () => req<{ ok: boolean }>('POST', '/system/reboot'),
   poweroff: () => req<void>('POST', '/system/poweroff'),
-  restartAslcp: () => req<{ ok: boolean }>('POST', '/system/restart-aslcp'),
+  restartNodespot: () => req<{ ok: boolean }>('POST', '/system/restart-nodespot'),
   sysHost: () => req<HostStatus>('GET', '/system/host'),
   setSysHost: (p: HostPatch) => req<HostStatus>('PUT', '/system/host', p),
   sysTimezones: () => req<{ timezones: string[] }>('GET', '/system/timezones'),

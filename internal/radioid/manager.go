@@ -45,7 +45,7 @@ type Options struct {
 	// Dir is the data directory the list is kept in (required).
 	Dir      string
 	URL      string // default DefaultURL
-	Version  string // for the User-Agent "ASLCP/<version>"
+	Version  string // for the User-Agent "nodespot/<version>"
 	Client   *http.Client
 	Settings Settings // nil: the switch is on and not persisted
 	Logger   *log.Logger
@@ -311,7 +311,7 @@ func (g *Manager) run(ctx context.Context, force bool) (err error) {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "ASLCP/"+g.o.Version)
+	req.Header.Set("User-Agent", "nodespot/"+g.o.Version)
 	if !force && have {
 		if m.ETag != "" {
 			req.Header.Set("If-None-Match", m.ETag)

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 const (
@@ -29,7 +29,7 @@ func newFakeWifiSys() *fakeWifiSys {
 		fakeSys: newFakeSys(),
 		status: helper.WifiStatus{Available: true, HasWifi: true, Radio: "enabled",
 			Devices: []helper.WifiDevice{{Name: "wlan0", Type: "wifi", State: "connected", Connection: "ExampleNet", Addrs: []string{"127.0.0.1"}}},
-			Active:  "ExampleNet", Hotspot: helper.WifiHotspot{Enabled: true, DelaySeconds: 180, SSID: "ASLCP-node2001", Address: "10.42.0.1"}},
+			Active:  "ExampleNet", Hotspot: helper.WifiHotspot{Enabled: true, DelaySeconds: 180, SSID: "nodespot-node2001", Address: "10.42.0.1"}},
 		nets: []helper.WifiNetwork{
 			{ID: wifiIDA, Name: "ExampleNet", SSID: "ExampleNet", Priority: 100, Autoconnect: true, Active: true, Secured: true},
 			{ID: wifiIDB, Name: "ExampleGuest", SSID: "ExampleGuest", Priority: 90, Autoconnect: true, Secured: true},
@@ -120,7 +120,7 @@ func TestWifiGetAndViaWifi(t *testing.T) {
 		ViaHotspot bool                 `json:"viaHotspot"`
 		Hotspot    helper.WifiHotspot   `json:"hotspot"`
 	}
-	if c := e.do("admin", "GET", "/api/system/wifi", nil, &v); c != 200 || !v.Available || len(v.Networks) != 2 || v.Hotspot.SSID != "ASLCP-node2001" {
+	if c := e.do("admin", "GET", "/api/system/wifi", nil, &v); c != 200 || !v.Available || len(v.Networks) != 2 || v.Hotspot.SSID != "nodespot-node2001" {
 		t.Fatalf("%d %+v", c, v)
 	}
 	// the test server is reached on 127.0.0.1, which the fake lists as the WiFi address

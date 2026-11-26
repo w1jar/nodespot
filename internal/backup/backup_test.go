@@ -30,8 +30,8 @@ func fileEntry(path, content string) Entry {
 // parts follow the files.
 func baseManifest(files ...Entry) *Manifest {
 	m := &Manifest{Format: FormatVersion, Created: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC), CreatedBy: "admin",
-		ASLCPVersion: "3.0.0", Hostname: "node", Timezone: "UTC", Arch: "arm64", Callsign: "N0CALL",
-		Files: append([]Entry{fileEntry(PathAslcpDB, dbBody)}, files...)}
+		NodespotVersion: "0.0.1", Hostname: "node", Timezone: "UTC", Arch: "arm64", Callsign: "N0CALL",
+		Files: append([]Entry{fileEntry(PathNodespotDB, dbBody)}, files...)}
 	for _, e := range files {
 		switch e.Path {
 		case PathNodeConfig:
@@ -95,9 +95,9 @@ func reg(path, content string) rawEnt {
 }
 
 func TestWriterReaderRoundTrip(t *testing.T) {
-	bodies := map[string]string{PathAslcpDB: dbBody, PathNodeConfig: "{\"version\":1}\n", PathSA818: "{\"version\":1}\n", PathAslcpConf: "[server]\n"}
+	bodies := map[string]string{PathNodespotDB: dbBody, PathNodeConfig: "{\"version\":1}\n", PathSA818: "{\"version\":1}\n", PathNodespotConf: "[server]\n"}
 	m := baseManifest(fileEntry(PathNodeConfig, bodies[PathNodeConfig]), fileEntry(PathSA818, bodies[PathSA818]),
-		fileEntry(PathAslcpConf, bodies[PathAslcpConf]))
+		fileEntry(PathNodespotConf, bodies[PathNodespotConf]))
 	m.Parts.Secrets = true
 	var buf bytes.Buffer
 	w, err := NewWriter(&buf, m)
@@ -182,7 +182,7 @@ func TestManifestValidate(t *testing.T) {
 }
 
 func TestReadRejects(t *testing.T) {
-	db := reg(PathAslcpDB, dbBody)
+	db := reg(PathNodespotDB, dbBody)
 	good := fileEntry(PathNodeConfig, "x")
 	cases := []struct {
 		name string
@@ -256,7 +256,7 @@ func TestReadFormats(t *testing.T) {
 			raw["asl3Version"] = "3.0"
 			raw["files"] = []any{map[string]any{"path": "asterisk/etc", "type": "dir"}}
 		}
-		_, err := Read(bytes.NewReader(rawArchive(t, raw, reg(PathAslcpDB, dbBody))), nil)
+		_, err := Read(bytes.NewReader(rawArchive(t, raw, reg(PathNodespotDB, dbBody))), nil)
 		if !tc.check(err) {
 			t.Errorf("format %d: %v", tc.format, err)
 		}
@@ -266,7 +266,7 @@ func TestReadFormats(t *testing.T) {
 func TestReadTruncated(t *testing.T) {
 	body := strings.Repeat("abcdefgh", 4000)
 	m := baseManifest(fileEntry(PathNodeConfig, body))
-	arc := rawArchive(t, m, reg(PathAslcpDB, dbBody), reg(PathNodeConfig, body))
+	arc := rawArchive(t, m, reg(PathNodespotDB, dbBody), reg(PathNodeConfig, body))
 	for _, n := range []int{len(arc) - 1, len(arc) / 2, 30} {
 		if _, err := Read(bytes.NewReader(arc[:n]), nil); err == nil {
 			t.Errorf("truncated at %d accepted", n)
@@ -279,7 +279,7 @@ func TestReadDecompressionBomb(t *testing.T) {
 	// reader must stop at the declared size, not expand it.
 	m := baseManifest(fileEntry(PathNodeConfig, "x"))
 	big := strings.Repeat("\x00", 8<<20)
-	arc := rawArchive(t, m, reg(PathAslcpDB, dbBody), rawEnt{hdr: tar.Header{Name: PathNodeConfig, Typeflag: tar.TypeReg, Mode: 0o644, Size: int64(len(big))}, body: big})
+	arc := rawArchive(t, m, reg(PathNodespotDB, dbBody), rawEnt{hdr: tar.Header{Name: PathNodeConfig, Typeflag: tar.TypeReg, Mode: 0o644, Size: int64(len(big))}, body: big})
 	if _, err := Read(bytes.NewReader(arc), nil); err == nil {
 		t.Fatal("accepted")
 	}
@@ -316,7 +316,7 @@ func TestReadTruncatedWithHandlerIsBadBackup(t *testing.T) {
 	rand.New(rand.NewSource(1)).Read(rb) // incompressible, so cutting the gzip lands inside the file
 	body := string(rb)
 	m := baseManifest(fileEntry(PathNodeConfig, body))
-	arc := rawArchive(t, m, reg(PathAslcpDB, dbBody), reg(PathNodeConfig, body))
+	arc := rawArchive(t, m, reg(PathNodespotDB, dbBody), reg(PathNodeConfig, body))
 	h := func(e Entry, r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err

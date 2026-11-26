@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"unicode"
 
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // Setting keys in the settings table.

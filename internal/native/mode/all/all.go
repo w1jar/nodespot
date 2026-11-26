@@ -3,8 +3,8 @@ package all
 
 import (
 	// Each mode registers itself with internal/native/mode.
-	_ "github.com/artw1/aslcp/internal/native/mode/allstar"
-	_ "github.com/artw1/aslcp/internal/native/mode/dv"
-	_ "github.com/artw1/aslcp/internal/native/mode/echolink"
-	_ "github.com/artw1/aslcp/internal/native/mode/echotest"
+	_ "github.com/w1jar/nodespot/internal/native/mode/allstar"
+	_ "github.com/w1jar/nodespot/internal/native/mode/dv"
+	_ "github.com/w1jar/nodespot/internal/native/mode/echolink"
+	_ "github.com/w1jar/nodespot/internal/native/mode/echotest"
 )

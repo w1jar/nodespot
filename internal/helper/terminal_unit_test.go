@@ -11,19 +11,19 @@ import (
 )
 
 func TestTermUnitArgv(t *testing.T) {
-	got, err := termUnitArgv("0123456789abcdef", "/usr/libexec/aslcp/aslcp-helper", 30, 100, 7)
+	got, err := termUnitArgv("0123456789abcdef", "/usr/libexec/nodespot/nodespot-helper", 30, 100, 7)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
 		"systemd-run", "--quiet",
-		"--unit=aslcp-term-0123456789abcdef",
-		"--description=ASLCP web terminal",
+		"--unit=nodespot-term-0123456789abcdef",
+		"--description=nodespot web terminal",
 		"--service-type=exec", "--collect",
 		"--property=TimeoutStopSec=5s",
-		"--", "/usr/libexec/aslcp/aslcp-helper", "term-host",
+		"--", "/usr/libexec/nodespot/nodespot-helper", "term-host",
 		"--id=0123456789abcdef",
-		"--sock=/run/aslcp/term/0123456789abcdef.sock",
+		"--sock=/run/nodespot/term/0123456789abcdef.sock",
 		"--rows=30", "--cols=100", "--owner=7",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -42,7 +42,7 @@ func TestTermUnitArgv(t *testing.T) {
 
 func TestTermUnitValidation(t *testing.T) {
 	good := "00ff00ff00ff00ff"
-	self := "/usr/libexec/aslcp/aslcp-helper"
+	self := "/usr/libexec/nodespot/nodespot-helper"
 	for _, id := range []string{"", "xyz", "0123456789ABCDEF", "0123456789abcde", "0123456789abcdef0", "0123456789abcde;", "../../etc/passwd", "0123456789abcde\n"} {
 		if _, err := termUnitArgv(id, self, 24, 80, 1); err == nil {
 			t.Errorf("id %q accepted", id)
@@ -76,11 +76,11 @@ func TestTermUnitValidation(t *testing.T) {
 
 func TestStopTermUnit(t *testing.T) {
 	id := "0123456789abcdef"
-	r := &fakeRunner{rules: map[string]resp{"systemctl stop aslcp-term-0123456789abcdef.service": {}}}
+	r := &fakeRunner{rules: map[string]resp{"systemctl stop nodespot-term-0123456789abcdef.service": {}}}
 	if err := stopTermUnit(r, id); err != nil {
 		t.Fatal(err)
 	}
-	if r.called("systemctl stop aslcp-term-0123456789abcdef.service") != 1 {
+	if r.called("systemctl stop nodespot-term-0123456789abcdef.service") != 1 {
 		t.Fatalf("calls: %v", r.calls)
 	}
 	// already gone
@@ -102,7 +102,7 @@ func TestStopTermUnit(t *testing.T) {
 func TestTermUnitEnded(t *testing.T) {
 	id := "0123456789abcdef"
 	for out, want := range map[string]bool{"active\n": false, "activating\n": false, "deactivating\n": false, "inactive\n": true, "failed\n": true, "": false} {
-		r := &fakeRunner{rules: map[string]resp{"systemctl show -p ActiveState --value aslcp-term-" + id: {out: out}}}
+		r := &fakeRunner{rules: map[string]resp{"systemctl show -p ActiveState --value nodespot-term-" + id: {out: out}}}
 		if got := termUnitEnded(r, id); got != want {
 			t.Errorf("%q: got %v, want %v", out, got, want)
 		}
@@ -142,7 +142,7 @@ func fakeCgroup(t *testing.T, unit string, procs map[int]string) {
 }
 
 func TestTermUnitPIDsAndBusy(t *testing.T) {
-	unit := "aslcp-term-0123456789abcdef.service"
+	unit := "nodespot-term-0123456789abcdef.service"
 	fakeCgroup(t, unit, map[int]string{4: "login", 5: "bash"})
 	if got := termUnitPIDs(unit); len(got) != 2 {
 		t.Fatalf("pids %v", got)
@@ -150,16 +150,16 @@ func TestTermUnitPIDsAndBusy(t *testing.T) {
 	if termUnitBusy(unit) {
 		t.Fatal("login and bash are not a package manager")
 	}
-	if termUnitPIDs("../x") != nil || termUnitPIDs("aslcp-term-zz.service") != nil {
+	if termUnitPIDs("../x") != nil || termUnitPIDs("nodespot-term-zz.service") != nil {
 		t.Fatal("invalid unit name accepted")
 	}
-	if termUnitPIDs("aslcp-term-ffffffffffffffff.service") != nil {
+	if termUnitPIDs("nodespot-term-ffffffffffffffff.service") != nil {
 		t.Fatal("missing cgroup returned pids")
 	}
 }
 
 func TestTermUnitBusyApt(t *testing.T) {
-	unit := "aslcp-term-0123456789abcdef.service"
+	unit := "nodespot-term-0123456789abcdef.service"
 	fakeCgroup(t, unit, map[int]string{4: "login", 5: "bash", 6: "dpkg"})
 	if !termUnitBusy(unit) {
 		t.Fatal("dpkg in the unit is not busy")

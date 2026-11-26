@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/mode/modetest"
-	"github.com/artw1/aslcp/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode/modetest"
+	"github.com/w1jar/nodespot/internal/native/radio"
 )
 
 var t0 = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)

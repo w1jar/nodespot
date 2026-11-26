@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/artw1/aslcp/internal/favstats"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/favstats"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // initFavStats wires the favorites activity scan to this server's AllStar

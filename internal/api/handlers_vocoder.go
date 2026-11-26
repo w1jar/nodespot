@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // VocoderHost is the part of the helper that installs the AMBE vocoder

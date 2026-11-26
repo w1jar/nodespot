@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // HeardMax is how many calls the last-heard list keeps.

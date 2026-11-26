@@ -5,11 +5,11 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/artw1/aslcp/internal/demo"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/node/nodetest"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/demo"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/node/nodetest"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // demoNodeConfig is the demo station: every mode set up with placeholder

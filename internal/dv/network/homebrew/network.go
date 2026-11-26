@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/dmr"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/dmr"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 // TGIF defaults (public master).
@@ -22,8 +22,8 @@ const (
 	TGIFAddress = ctl.TGIFAddress
 	TGIFPort    = ctl.TGIFPort
 
-	softwareID = "ASLCP"
-	packageVer = "ASLCP-2.0"
+	softwareID = "nodespot"
+	packageVer = "nodespot-0.0.1"
 )
 
 func init() {

@@ -13,7 +13,7 @@ import (
 )
 
 // DefaultSocket is the helper's socket path.
-const DefaultSocket = "/run/aslcp/helper.sock"
+const DefaultSocket = "/run/nodespot/helper.sock"
 
 // UnavailableError means the helper could not be reached.
 type UnavailableError struct {
@@ -269,8 +269,8 @@ func (c *Client) Reboot(ctx context.Context) error {
 	return c.Do(ctx, OpReboot, &v)
 }
 
-// RestartASLCP calls aslcp-restart.
-func (c *Client) RestartASLCP(ctx context.Context) error {
+// RestartNodespot calls nodespot-restart.
+func (c *Client) RestartNodespot(ctx context.Context) error {
 	var v OKResult
-	return c.Do(ctx, OpAslcpRestart, &v)
+	return c.Do(ctx, OpNodespotRestart, &v)
 }

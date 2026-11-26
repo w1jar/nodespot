@@ -904,7 +904,7 @@ func httpFetcher(o Options) Fetcher {
 	}
 	ua := o.UserAgent
 	if ua == "" {
-		ua = "aslcp"
+		ua = "nodespot"
 	}
 	c := o.Client
 	if c == nil {

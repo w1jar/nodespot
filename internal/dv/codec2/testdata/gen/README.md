@@ -18,7 +18,7 @@ git -C c2src checkout 7c334283794fa6304dc014f12df70afc8393143a
 mkdir build && cd build
 # -ffp-contract=off keeps gcc from fusing multiply-adds, as the Go port does
 gcc -O2 -ffp-contract=off -std=gnu11 -I../c2src/inc ../c2src/src/*.c \
-    /path/to/aslcp/internal/dv/codec2/testdata/gen/gen.c -lm -o gen
+    /path/to/nodespot/internal/dv/codec2/testdata/gen/gen.c -lm -o gen
 
 ./gen sig in.pcm            # 512 frames, s16le; sha256 7fe7a8bb...d47f69
 ./gen enc in.pcm enc.bits   # -> testdata/enc.frames

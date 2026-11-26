@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/artw1/aslcp/internal/native/radio/alsa"
-	"github.com/artw1/aslcp/internal/native/radio/cm108"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/radio/alsa"
+	"github.com/w1jar/nodespot/internal/native/radio/cm108"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 // Detect looks for a supported interface chip and says whether it looks like
@@ -103,7 +103,7 @@ func Open(cfg Config) (Radio, Info, error) {
 }
 
 // ProgramSA818 finds the module's serial port, programs it with s and saves
-// the applied settings to cfg.SA818StatePath (default /etc/aslcp/sa818.json).
+// the applied settings to cfg.SA818StatePath (default /etc/nodespot/sa818.json).
 // It opens and closes the port itself, so it can run while the radio is open.
 func ProgramSA818(cfg Config, s sa818.Settings) error {
 	path := cfg.SA818Port

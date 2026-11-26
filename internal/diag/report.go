@@ -98,12 +98,12 @@ func (r Report) Render() string {
 	p := func(f string, a ...any) { fmt.Fprintf(&b, f+"\n", a...) }
 	h := func(t string) { p("\n== %s ==", t) }
 
-	p("ASLCP diagnostics")
+	p("nodespot diagnostics")
 	p("Generated: %s", r.Now.UTC().Format(time.RFC3339))
-	p("Private data (IP addresses, secrets, emails, other stations' callsigns) is removed from this file; see the ASLCP docs.")
+	p("Private data (IP addresses, secrets, emails, other stations' callsigns) is removed from this file; see the nodespot docs.")
 
 	h("Versions and platform")
-	p("ASLCP:    %s", orNA(r.Version))
+	p("nodespot:    %s", orNA(r.Version))
 	p("OS:       %s", orNA(r.Platform.Distro))
 	p("Kernel:   %s", orNA(r.Platform.Kernel))
 	p("Arch:     %s/%s", r.Platform.GOOS, r.Platform.GOARCH)

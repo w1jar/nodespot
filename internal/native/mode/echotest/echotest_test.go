@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/vocoder"
-	"github.com/artw1/aslcp/internal/dv/vocoder/fake"
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/dv/vocoder/fake"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // clock is a settable clock.

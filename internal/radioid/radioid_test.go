@@ -172,7 +172,7 @@ func TestDownload(t *testing.T) {
 	if err := g.Download(ctx, false); err != nil {
 		t.Fatal(err)
 	}
-	if ua, _ := s.ua.Load().(string); ua != "ASLCP/1.3.5" {
+	if ua, _ := s.ua.Load().(string); ua != "nodespot/1.3.5" {
 		t.Errorf("User-Agent = %q", ua)
 	}
 	st := g.Status()

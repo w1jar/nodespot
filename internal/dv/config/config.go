@@ -1,4 +1,4 @@
-// Package config loads and validates the aslcp-dv config file (ctl.Config).
+// Package config loads and validates the nodespot-dv config file (ctl.Config).
 package config
 
 import (
@@ -11,8 +11,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/m17"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/m17"
 )
 
 const maxSize = 1 << 20

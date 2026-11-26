@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/favstats"
+	"github.com/w1jar/nodespot/internal/favstats"
 )
 
 const favFixture = `{"stats":{"node":2001,"data":{"apprptuptime":"1047840","totaltxtime":"358786","totalkeyups":"14834","keyed":false,"links":["2002","1998"]}},"node":{"Status":"Active","access_webtransceiver":"0"}}`

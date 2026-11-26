@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // vocoderSys is a fakeSys that also installs the vocoder: it records the

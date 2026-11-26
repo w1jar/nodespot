@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/radio/usbsys"
+	"github.com/w1jar/nodespot/internal/native/radio/usbsys"
 )
 
 func TestGPIOBit(t *testing.T) {

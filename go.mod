@@ -1,4 +1,4 @@
-module github.com/artw1/aslcp
+module github.com/w1jar/nodespot
 
 go 1.24
 

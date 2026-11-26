@@ -93,7 +93,7 @@ func TestRefreshResolveAndKeep(t *testing.T) {
 	if err := m.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if ua := s.ua.Load().(string); ua != "ASLCP/9.9" {
+	if ua := s.ua.Load().(string); ua != "nodespot/9.9" {
 		t.Fatal(ua)
 	}
 	l, err := m.Get("ysf")

@@ -17,7 +17,7 @@ import (
 // termDir holds, per session, the socket <id>.sock, the state file <id>.json
 // and, once the session is over, <id>.ended.json. Root only (0700). A
 // variable for tests.
-var termDir = "/run/aslcp/term"
+var termDir = "/run/nodespot/term"
 
 const (
 	// termRingSize is how much recent output term-host keeps for a reattach.
@@ -50,13 +50,13 @@ const (
 	EndAptFinished = "apt-finished"
 )
 
-// termHostArgs are the validated arguments of `aslcp-helper term-host`.
+// termHostArgs are the validated arguments of `nodespot-helper term-host`.
 type termHostArgs struct {
 	ID    string
 	Sock  string
 	Rows  uint16
 	Cols  uint16
-	Owner int64 // ASLCP user id that started the session (0: none)
+	Owner int64 // nodespot user id that started the session (0: none)
 }
 
 // parseTermHostArgs validates everything: term-host runs as root and its

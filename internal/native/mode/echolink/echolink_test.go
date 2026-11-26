@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	el "github.com/artw1/aslcp/internal/native/echolink"
-	"github.com/artw1/aslcp/internal/native/mode"
+	el "github.com/w1jar/nodespot/internal/native/echolink"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 type fakeConn struct {

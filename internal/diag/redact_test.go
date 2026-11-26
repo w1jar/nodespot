@@ -35,13 +35,13 @@ func TestRedact(t *testing.T) {
 		{"keyed untouched", "keyed: true", "keyed: true"},
 		{"authorization", "Authorization: Bearer abcdefghijkl", "Authorization: <redacted>"},
 		{"bearer", "got Bearer abcdefghijklmnop here", "got Bearer <redacted> here"},
-		{"cookie", "Cookie: aslcp_session=abc; x=y", "Cookie: <redacted>"},
+		{"cookie", "Cookie: nodespot_session=abc; x=y", "Cookie: <redacted>"},
 		{"url creds", "fetch https://user:pw@host.example/x", "fetch https://<redacted>@host.example/x"},
 		{"setup link", "open http://10.0.0.5:8080/#/setup?code=ABCD1234EFGH", "open http://<ipv4>:8080/#/setup?code=<redacted>"},
 		{"long token", "id 0123456789abcdef0123456789abcdef0123 end", "id <redacted> end"},
 		{"long word kept", "supercalifragilisticexpialidocious-and-more-words", "supercalifragilisticexpialidocious-and-more-words"},
 		{"literal secret", "ami: login failed with hunter2xyz!", "ami: login failed with <redacted>!"},
-		{"path kept", "/usr/libexec/aslcp/aslcp-helper", "/usr/libexec/aslcp/aslcp-helper"},
+		{"path kept", "/usr/libexec/nodespot/nodespot-helper", "/usr/libexec/nodespot/nodespot-helper"},
 	}
 	for _, c := range cases {
 		if got := Redact(c.in, o); got != c.want {
@@ -113,7 +113,7 @@ func TestRing(t *testing.T) {
 func TestReportRender(t *testing.T) {
 	r := Report{
 		Version: "0.1.1",
-		Node: NodeState{Socket: "/run/aslcp-node/control.sock", Running: true, Callsign: "N0CALL", Active: "allstar", State: "connected", Target: "2000",
+		Node: NodeState{Socket: "/run/nodespot-node/control.sock", Running: true, Callsign: "N0CALL", Active: "allstar", State: "connected", Target: "2000",
 			ModeErr: "dial 203.0.113.9:4569: refused secret=topsecret", Modes: []string{"allstar", "bm"}},
 		Config:  []string{"[node]", RedactConfigLine("secret = topsecret"), "host = 192.0.2.5"},
 		Log:     []string{"2026/11/15 12:00:00 link to N1CALL at 198.51.100.7 from N0CALL mail a@example.net", "login hunter2xyz bad"},

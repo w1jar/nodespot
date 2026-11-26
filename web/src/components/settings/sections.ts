@@ -48,7 +48,7 @@ export const groups: SettingsGroup[] = [
     { id: 'updates', label: 'Updates', bare: true, load: () => import('./Updates.svelte') },
     { id: 'network', label: 'Network', load: () => import('./Network.svelte') },
     { id: 'wifi', label: 'WiFi', load: () => import('./Wifi.svelte') },
-    { id: 'web-port', label: 'Web port', title: 'Web port of ASLCP', load: () => import('./WebPort.svelte') },
+    { id: 'web-port', label: 'Web port', title: 'Web port of nodespot', load: () => import('./WebPort.svelte') },
     { id: 'node', label: 'Node service', load: () => import('./NodeService.svelte') },
     { id: 'terminal', label: 'Terminal', load: () => import('./Terminal.svelte') },
   ] },

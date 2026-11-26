@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/gsm"
+	"github.com/w1jar/nodespot/internal/native/gsm"
 )
 
 // connSetup logs on to a fake directory and returns a config wired to a

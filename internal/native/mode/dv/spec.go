@@ -11,16 +11,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/native/mode"
 
 	// The networks register themselves with internal/dv/network.
-	_ "github.com/artw1/aslcp/internal/dv/network/bm"
-	_ "github.com/artw1/aslcp/internal/dv/network/homebrew"
-	_ "github.com/artw1/aslcp/internal/dv/network/m17"
-	_ "github.com/artw1/aslcp/internal/dv/network/nxdn"
-	_ "github.com/artw1/aslcp/internal/dv/network/p25"
-	_ "github.com/artw1/aslcp/internal/dv/network/ysf"
+	_ "github.com/w1jar/nodespot/internal/dv/network/bm"
+	_ "github.com/w1jar/nodespot/internal/dv/network/homebrew"
+	_ "github.com/w1jar/nodespot/internal/dv/network/m17"
+	_ "github.com/w1jar/nodespot/internal/dv/network/nxdn"
+	_ "github.com/w1jar/nodespot/internal/dv/network/p25"
+	_ "github.com/w1jar/nodespot/internal/dv/network/ysf"
 )
 
 // Setting keys with a meaning of their own. Every other field of a DV

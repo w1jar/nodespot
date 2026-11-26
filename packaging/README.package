@@ -1,67 +1,67 @@
-ASLCP - native radio node and web control panel
+nodespot - native radio node and web control panel
 ===============================================
 
-Open the web UI:      http://<this-host>:8080   (8080 is the default port; see "listen" in aslcp.conf)
-Admin account:        sudo aslcp admin create   (shows in the install output as a setup link)
+Open the web UI:      http://<this-host>:8080   (8080 is the default port; see "listen" in nodespot.conf)
+Admin account:        sudo nodespot admin create   (shows in the install output as a setup link)
 Setup link fallback:  http://<this-host>:<port>/#/setup?code=<code>, with the code from
-                      /var/lib/aslcp/setup-code or "journalctl -u aslcp"
-Lost password:        sudo aslcp admin reset-password <user>
-Accounts:             sudo aslcp admin list
-Configuration:        /etc/aslcp/aslcp.conf       (then: sudo systemctl restart aslcp)
-Logs:                 journalctl -u aslcp -u aslcp-helper -u aslcp-node
+                      /var/lib/nodespot/setup-code or "journalctl -u nodespot"
+Lost password:        sudo nodespot admin reset-password <user>
+Accounts:             sudo nodespot admin list
+Configuration:        /etc/nodespot/nodespot.conf       (then: sudo systemctl restart nodespot)
+Logs:                 journalctl -u nodespot -u nodespot-helper -u nodespot-node
 
 Services
-  aslcp.service         the web server, runs as user "aslcp" (hardened, no capabilities)
-  aslcp-helper.socket   socket-activated root helper; performs package updates and
-  aslcp-helper.service  firewalld changes on request from the web server. It accepts
-                        a fixed set of operations only, from root and user "aslcp".
+  nodespot.service         the web server, runs as user "nodespot" (hardened, no capabilities)
+  nodespot-helper.socket   socket-activated root helper; performs package updates and
+  nodespot-helper.service  firewalld changes on request from the web server. It accepts
+                        a fixed set of operations only, from root and user "nodespot".
 
-  aslcp-node.service    the native node: one radio (SHARI / SA818 interface), one
+  nodespot-node.service    the native node: one radio (SHARI / SA818 interface), one
                         network mode at a time (AllStarLink, EchoLink or a digital
-                        mode). No Asterisk. Runs as user "aslcp-node" with no
-                        capabilities. Config: /etc/aslcp/node.json (mode 0600: it
-                        holds network passwords) and /etc/aslcp/sa818.json. Control
-                        socket: /run/aslcp-node/control.sock (user "aslcp" is a
-                        member of group "aslcp-node" to reach it).
-                        Logs: journalctl -u aslcp-node
+                        mode). No Asterisk. Runs as user "nodespot-node" with no
+                        capabilities. Config: /etc/nodespot/node.json (mode 0600: it
+                        holds network passwords) and /etc/nodespot/sa818.json. Control
+                        socket: /run/nodespot-node/control.sock (user "nodespot" is a
+                        member of group "nodespot-node" to reach it).
+                        Logs: journalctl -u nodespot-node
 
 Firewall
-  The web port is the one in "listen" in /etc/aslcp/aslcp.conf (default 8080).
+  The web port is the one in "listen" in /etc/nodespot/nodespot.conf (default 8080).
   If firewalld is running, installing the package opens it: through the
-  firewalld service "aslcp" for 8080, as a plain TCP port for any other port.
+  firewalld service "nodespot" for 8080, as a plain TCP port for any other port.
   Otherwise open the port yourself if you use another firewall.
-  To pick another port (1024-65535, or 80): run the installer again with ASLCP_PORT (it also opens
+  To pick another port (1024-65535, or 80): run the installer again with NODESPOT_PORT (it also opens
   the port in firewalld):
-      curl -fsSL https://w1jar.github.io/aslcp/install.sh | sudo ASLCP_PORT=8181 sh
-  or edit "listen" and run  sudo systemctl restart aslcp , then open the port in
+      curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_PORT=8181 sh
+  or edit "listen" and run  sudo systemctl restart nodespot , then open the port in
   your firewall (firewalld: sudo firewall-cmd --permanent --add-port=8181/tcp
   && sudo firewall-cmd --reload).
   Port 80 and no other web UI left by an earlier ASL install: run the
-  installer with ASLCP_TAKEOVER=1. It stops and disables Allmon3, the web server of the ASL web UIs (apache2,
+  installer with NODESPOT_TAKEOVER=1. It stops and disables Allmon3, the web server of the ASL web UIs (apache2,
   lighttpd or nginx), asl-web-ui and Supermon (those that exist and are on),
-  never aslcp-node, records them in /var/lib/aslcp/takeover.list and moves ASLCP
+  never nodespot-node, records them in /var/lib/nodespot/takeover.list and moves nodespot
   to port 80:
-      curl -fsSL https://w1jar.github.io/aslcp/install.sh | sudo ASLCP_TAKEOVER=1 sh
-  Undo (ASLCP goes back to its old port, the recorded units are turned on):
-      curl -fsSL https://w1jar.github.io/aslcp/install.sh | sudo ASLCP_TAKEOVER=undo sh
+      curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_TAKEOVER=1 sh
+  Undo (nodespot goes back to its old port, the recorded units are turned on):
+      curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_TAKEOVER=undo sh
 
 AllStarLink 3 and Asterisk
-  Not needed: ASLCP 3 runs its own node and never installs them. On a node
+  Not needed: nodespot runs its own node and never installs them. On a node
   upgraded from 2.x they stay installed; stop Asterisk before the native node
   uses the radio (sudo systemctl disable --now asterisk).
 
 Updates
   Settings > Updates in the web UI (administrators), or the usual:
-      sudo apt update && sudo apt install --only-upgrade aslcp
-  The repository is added by the install script; see https://w1jar.github.io/aslcp/
+      sudo apt update && sudo apt install --only-upgrade nodespot
+  The repository is added by the install script; see https://w1jar.github.io/nodespot/
 
 Reporting bugs
   Settings > About > Report a bug (prefilled form), and Download diagnostics (admin)
-  for a log file with IP addresses and secrets removed. https://github.com/w1jar/aslcp
+  for a log file with IP addresses and secrets removed. https://github.com/w1jar/nodespot
 
 Removal
-  apt remove aslcp   keeps /var/lib/aslcp (users, favorites) and the user
-  apt purge aslcp    deletes them, the node config (/etc/aslcp/node.json,
-                     /etc/aslcp/sa818.json) and the aslcp-node user, and the state
-                     left by 2.x (/var/lib/aslcp-dv, /var/lib/aslcp-config-history,
-                     /var/lib/aslcp-dvstate*)
+  apt remove nodespot   keeps /var/lib/nodespot (users, favorites) and the user
+  apt purge nodespot    deletes them, the node config (/etc/nodespot/node.json,
+                     /etc/nodespot/sa818.json) and the nodespot-node user, and the state
+                     left by 2.x (/var/lib/nodespot-dv, /var/lib/nodespot-config-history,
+                     /var/lib/nodespot-dvstate*)

@@ -18,7 +18,7 @@
       // The page arrived on the new port: that is the confirmation.
       if (shouldConfirm(st, location)) {
         st = await api.setWebPort('confirm');
-        toast('ASLCP answers on the new port. The move is confirmed.', 'info');
+        toast('nodespot answers on the new port. The move is confirmed.', 'info');
       }
     } catch (e) { err = e instanceof Error ? e.message : String(e); } finally { busy = false; }
   }
@@ -45,18 +45,18 @@
   const reasons: Record<string, string> = {
     busy: 'Port 80 is in use by another program, such as a web server. Stop that program first.',
     unchecked: 'Cannot check whether port 80 is free (the ss tool is missing), so the move is not offered.',
-    unavailable: 'The ASLCP configuration could not be read.',
+    unavailable: 'The nodespot configuration could not be read.',
   };
 </script>
 
-<p class="text-sm text-muted">ASLCP listens on port 8080 by default. Moving it to port 80 lets you open it as http://{location.hostname}/ without a port number. Port 80 must be free.</p>
+<p class="text-sm text-muted">nodespot listens on port 8080 by default. Moving it to port 80 lets you open it as http://{location.hostname}/ without a port number. Port 80 must be free.</p>
 
 {#if err}
   <p class="text-sm text-danger" role="alert">{err}</p>
 {:else if !st}
   <p class="text-sm text-muted" role="status">Loading…</p>
 {:else if !st.available}
-  <p class="text-sm text-muted">Not available: the ASLCP configuration could not be read.</p>
+  <p class="text-sm text-muted">Not available: the nodespot configuration could not be read.</p>
 {:else}
   <section class="card space-y-3 p-4" aria-label="Web port">
     <div class="flex items-center justify-between gap-2">
@@ -68,25 +68,25 @@
     {#if wait}
       <div class="space-y-2 rounded border border-line p-3 text-sm" role="status">
         {#if wait.state === 'ready'}
-          <p>ASLCP is moving to port {wait.port}. Open the new address in a moment.</p>
+          <p>nodespot is moving to port {wait.port}. Open the new address in a moment.</p>
           <a class="btn btn-primary" href={wait.link}>Open the new address</a>
           <p class="text-xs text-muted">{wait.link}</p>
-          <p class="text-xs text-muted">The old address stops working. If the new address does not answer within 60 seconds, ASLCP goes back to its old port by itself and this page comes back.</p>
+          <p class="text-xs text-muted">The old address stops working. If the new address does not answer within 60 seconds, nodespot goes back to its old port by itself and this page comes back.</p>
         {:else}
-          <p class="text-warn">The move to port {wait.port} was not confirmed and has been undone. ASLCP is on its old port again.</p>
+          <p class="text-warn">The move to port {wait.port} was not confirmed and has been undone. nodespot is on its old port again.</p>
           <button class="btn" onclick={() => { wait = null; load(); }}>Continue</button>
         {/if}
       </div>
     {:else if st.pending}
-      <p class="text-sm text-warn" role="status">A move to port 80 is waiting for confirmation ({st.pending.seconds} s left). Open the new address to confirm it, or ASLCP goes back to its old port.</p>
+      <p class="text-sm text-warn" role="status">A move to port 80 is waiting for confirmation ({st.pending.seconds} s left). Open the new address to confirm it, or nodespot goes back to its old port.</p>
       <a class="btn btn-primary" href={webAddress(location, 80, '/#/settings/system/web-port')}>Open the new address</a>
     {/if}
     {#if st.reverted && !wait}
-      <p class="text-sm text-warn" role="status">The last move was not confirmed in time and was undone, so ASLCP is on its old port.</p>
+      <p class="text-sm text-warn" role="status">The last move was not confirmed in time and was undone, so nodespot is on its old port.</p>
     {/if}
 
     {#if st.on80}
-      <p class="text-sm">ASLCP is on port 80. To free port 80 again, move ASLCP back to port {st.backPort}.</p>
+      <p class="text-sm">nodespot is on port 80. To free port 80 again, move nodespot back to port {st.backPort}.</p>
       <button class="btn" disabled={busy || !!wait} onclick={() => (askBack = true)}>Move back to port {st.backPort}</button>
     {:else if st.canMove}
       <p class="text-sm">Port 80 is free.</p>
@@ -99,5 +99,5 @@
   </section>
 {/if}
 
-<Confirm bind:open={askMove} title="Move ASLCP to port 80?" message={`ASLCP restarts on port 80. Old bookmarks to port ${st?.port ?? 8080} stop working. Open the new address when the page offers it; if it does not answer within 60 seconds, ASLCP goes back by itself.`} confirmLabel="Move to port 80" onconfirm={() => go('move')} />
-<Confirm bind:open={askBack} title="Move ASLCP back?" message={`ASLCP restarts on port ${st?.backPort ?? 8080}. The address without a port number stops working.`} confirmLabel="Move back" onconfirm={() => go('back')} />
+<Confirm bind:open={askMove} title="Move nodespot to port 80?" message={`nodespot restarts on port 80. Old bookmarks to port ${st?.port ?? 8080} stop working. Open the new address when the page offers it; if it does not answer within 60 seconds, nodespot goes back by itself.`} confirmLabel="Move to port 80" onconfirm={() => go('move')} />
+<Confirm bind:open={askBack} title="Move nodespot back?" message={`nodespot restarts on port ${st?.backPort ?? 8080}. The address without a port number stops working.`} confirmLabel="Move back" onconfirm={() => go('back')} />

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/public"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/public"
 )
 
 var ipLike = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}`)

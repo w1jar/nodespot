@@ -359,9 +359,9 @@ func TestTermHostStopsOnSignalContext(t *testing.T) {
 // The backend against real term-host sessions: ownership, list, adoption.
 func TestTermBackendAttachListAdopt(t *testing.T) {
 	h := startHost(t, "00000000000000f1", 5, nil)
-	units := "aslcp-term-00000000000000f1.service loaded active running ASLCP web terminal\n" +
-		"aslcp-term-00000000000000f2.service loaded active running ASLCP web terminal\n" +
-		"aslcp-term-zz.service loaded active running not ours\n"
+	units := "nodespot-term-00000000000000f1.service loaded active running nodespot web terminal\n" +
+		"nodespot-term-00000000000000f2.service loaded active running nodespot web terminal\n" +
+		"nodespot-term-zz.service loaded active running not ours\n"
 	run := &fakeRunner{rules: map[string]resp{
 		"systemctl list-units": {out: units},
 		"systemctl stop":       {},
@@ -410,7 +410,7 @@ func TestTermBackendAttachListAdopt(t *testing.T) {
 	if err != nil || adopted != 1 || stopped != 1 {
 		t.Fatalf("adopted %d stopped %d err %v", adopted, stopped, err)
 	}
-	if run.called("systemctl stop aslcp-term-00000000000000f2.service") != 1 || run.called("systemctl stop aslcp-term-00000000000000f1.service") != 0 {
+	if run.called("systemctl stop nodespot-term-00000000000000f2.service") != 1 || run.called("systemctl stop nodespot-term-00000000000000f1.service") != 0 {
 		t.Fatalf("calls: %v", run.calls)
 	}
 
@@ -438,7 +438,7 @@ func TestTermBackendOpenRunsUnitThenConnects(t *testing.T) {
 	defer os.RemoveAll(dir)
 	var gotArgv string
 	run := &fakeRunner{rules: map[string]resp{"systemd-run": {}, "systemctl stop": {}}}
-	b := &termBackend{run: run, self: "/usr/libexec/aslcp/aslcp-helper", dir: dir, ready: 300 * time.Millisecond}
+	b := &termBackend{run: run, self: "/usr/libexec/nodespot/nodespot-helper", dir: dir, ready: 300 * time.Millisecond}
 	// nothing listens: the open fails and the unit is stopped again
 	_, _, err = b.Open(context.Background(), 24, 80, 3)
 	if err == nil || !strings.Contains(err.Error(), "did not start") {
@@ -454,7 +454,7 @@ func TestTermBackendOpenRunsUnitThenConnects(t *testing.T) {
 	if !strings.Contains(gotArgv, "--service-type=exec") || !strings.Contains(gotArgv, "term-host") || !strings.Contains(gotArgv, "--owner=3") {
 		t.Fatalf("argv %q", gotArgv)
 	}
-	if run.called("systemctl stop aslcp-term-") != 1 {
+	if run.called("systemctl stop nodespot-term-") != 1 {
 		t.Fatalf("unit not stopped: %v", run.calls)
 	}
 	// systemd-run failing is reported without a connect attempt

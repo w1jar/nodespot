@@ -3,7 +3,7 @@ package alsa
 import (
 	"unsafe"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 // Audio contract shared with the other native packages.

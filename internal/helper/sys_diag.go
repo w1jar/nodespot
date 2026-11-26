@@ -20,8 +20,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/artw1/aslcp/internal/diag"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/diag"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // Diagnostics bundle (docs/PLAN-1.3.0.md section 12): a .tar.gz of versions,
@@ -60,7 +60,7 @@ type DiagRequest struct {
 	// MaskIdentity replaces the node's own callsigns, public IP addresses and
 	// host names.
 	MaskIdentity bool `json:"maskIdentity"`
-	// Version is the ASLCP version string.
+	// Version is the nodespot version string.
 	Version string `json:"version,omitempty"`
 	// Report and Audit are the texts of report.txt and audit.txt, built by
 	// the API process from data the helper cannot see. They are redacted again here.
@@ -133,25 +133,25 @@ func DiagPlanInfo() DiagPlan {
 	return DiagPlan{
 		Items: []DiagItem{
 			{"README.txt", "What was collected, what was redacted, and what could not be collected"},
-			{"report.txt", "ASLCP status report: versions, the node's modes and links, updates, recent ASLCP log"},
-			{"versions.txt", "ASLCP, operating system, kernel, and the md380-emu and aslcp package versions"},
+			{"report.txt", "nodespot status report: versions, the node's modes and links, updates, recent nodespot log"},
+			{"versions.txt", "nodespot, operating system, kernel, and the md380-emu and nodespot package versions"},
 			{"system.txt", "Uptime and load, memory, disk use"},
-			{"services.txt", "State of the node, ASLCP, network and time services, and listening ports"},
+			{"services.txt", "State of the node, nodespot, network and time services, and listening ports"},
 			{"network.txt", "Interfaces, addresses, default gateway, DNS servers (no WiFi passwords or saved networks)"},
 			{"journal/<unit>.txt", fmt.Sprintf("Last %d journal lines of %s", diagJournalLines, strings.Join(logUnits(), ", "))},
-			{"config/", "aslcp.conf, the node config without its mode passwords, and the SA818 settings, with secret values replaced by <redacted>"},
+			{"config/", "nodespot.conf, the node config without its mode passwords, and the SA818 settings, with secret values replaced by <redacted>"},
 			{"audit.txt", "The last 200 audit log entries"},
 		},
 		Excluded: []string{
 			"/etc/shadow and every other password file",
 			"private keys and certificates",
-			"the ASLCP database, session tokens and the setup code",
+			"the nodespot database, session tokens and the setup code",
 			"WiFi passwords and NetworkManager connection files",
 			"terminal data",
 		},
 		Redacted: []string{
 			"the node's mode passwords (AllStar, EchoLink, DMR and the others), wherever they show up",
-			"ASLCP's own secrets and session data",
+			"nodespot's own secrets and session data",
 			"WiFi pre-shared keys",
 			"tokens, cookies, bearer headers and passwords in URLs",
 			"every password found in a config file, wherever else it shows up (for example in a log line)",
@@ -204,7 +204,7 @@ type diagBuilder struct {
 func newDiagBuilder(bases []string, opts diag.BundleOptions, now time.Time, version string) (*diagBuilder, error) {
 	var lastErr error
 	for _, base := range bases {
-		dir, err := os.MkdirTemp(base, "aslcp-diag-")
+		dir, err := os.MkdirTemp(base, "nodespot-diag-")
 		if err == nil {
 			_ = os.Chmod(dir, 0o700)
 			return &diagBuilder{dir: dir, opts: opts, now: now, version: version}, nil
@@ -260,10 +260,10 @@ func (b *diagBuilder) skip(name, why string) { b.skipped = append(b.skipped, nam
 // readme renders README.txt from what has been staged.
 func (b *diagBuilder) readme() string {
 	var w strings.Builder
-	w.WriteString("ASLCP diagnostics bundle\n========================\n\n")
+	w.WriteString("nodespot diagnostics bundle\n========================\n\n")
 	fmt.Fprintf(&w, "Created:  %s\n", b.now.UTC().Format(time.RFC3339))
 	if b.version != "" {
-		fmt.Fprintf(&w, "ASLCP:    %s\n", b.version)
+		fmt.Fprintf(&w, "nodespot:    %s\n", b.version)
 	}
 	if b.opts.MaskIdentity {
 		w.WriteString("Identity: MASKED. This node's own callsigns, public IP addresses and host names are replaced\n" +
@@ -450,7 +450,7 @@ func (o *Ops) diagConfigs(b *diagBuilder) []diagConf {
 			b.skip(name, err.Error())
 		}
 	}
-	read(o.aslcpConf(), "config/aslcp.conf", "ASLCP configuration")
+	read(o.nodespotConf(), "config/nodespot.conf", "nodespot configuration")
 	read(o.sa818State(), "config/sa818.json", "SA818 radio module settings")
 	if c, err := o.diagNodeConfig(); err == nil {
 		out = append(out, c)
@@ -566,7 +566,7 @@ func (o *Ops) DiagCollect(ctx context.Context, req *DiagRequest) (*DiagBundle, e
 
 	// Phase 2: the files.
 	if req.Report != "" {
-		b.add("report.txt", "ASLCP status report", req.Report, diag.KindText, DiagMaxReport)
+		b.add("report.txt", "nodespot status report", req.Report, diag.KindText, DiagMaxReport)
 	} else {
 		b.skip("report.txt", "not provided")
 	}
@@ -612,10 +612,10 @@ func (o *Ops) cmdText(ctx context.Context, argv ...string) string {
 	return out
 }
 
-func (o *Ops) diagVersions(ctx context.Context, aslcp string) string {
+func (o *Ops) diagVersions(ctx context.Context, nodespot string) string {
 	var w strings.Builder
-	if aslcp != "" {
-		fmt.Fprintf(&w, "ASLCP: %s\n", aslcp)
+	if nodespot != "" {
+		fmt.Fprintf(&w, "nodespot: %s\n", nodespot)
 	}
 	if b, err := os.ReadFile(o.osRelease()); err == nil {
 		fmt.Fprintf(&w, "OS: %s\n", orDefault(diag.ParseOSRelease(string(b)), "(unknown)"))
@@ -625,7 +625,7 @@ func (o *Ops) diagVersions(ctx context.Context, aslcp string) string {
 	}
 	w.WriteString("\nInstalled packages\n")
 	out, _, err := o.Run.Run(ctx, "dpkg-query", "-W", "-f=${db:Status-Abbrev} ${Package} ${Version}\\n",
-		"md380*", "aslcp*")
+		"md380*", "nodespot*")
 	if err != nil {
 		w.WriteString("(not available: dpkg-query could not be run)\n")
 		return w.String()

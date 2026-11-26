@@ -26,8 +26,8 @@
     file = f;
   }
   const UPLOAD_ERR: Record<string, string> = {
-    bad_backup: 'This is not a valid ASLCP backup (or it is damaged).',
-    backup_too_new: 'This backup was made by a newer ASLCP. Update ASLCP first, then try again.',
+    bad_backup: 'This is not a valid nodespot backup (or it is damaged).',
+    backup_too_new: 'This backup was made by a newer nodespot. Update nodespot first, then try again.',
     too_large: 'The file is too large (limit 256 MiB).',
     bad_password: 'Wrong password.',
     bad_setup_code: 'Wrong setup code.',
@@ -76,13 +76,13 @@
   /** The server restarts: poll until it answers again (connection errors are expected). */
   async function waitForServer() {
     const start = Date.now(); let sawDown = false;
-    waitNote = 'Waiting for ASLCP to restart…';
+    waitNote = 'Waiting for nodespot to restart…';
     while (Date.now() - start < 4 * 60_000) {
       await sleep(2000);
       try {
         await api.setupNeeded();
         if (sawDown || Date.now() - start > 12_000) break;
-      } catch { sawDown = true; waitNote = 'ASLCP is restarting…'; }
+      } catch { sawDown = true; waitNote = 'nodespot is restarting…'; }
     }
     await loadResult(); stage = 'done'; void pollHealth();
   }
@@ -108,7 +108,7 @@
 <div class="space-y-4 text-sm">
   {#if stage === 'pick' || stage === 'uploading'}
     <form class="space-y-3" onsubmit={upload}>
-      <p class="text-muted">Upload a backup file made by ASLCP. You will see exactly what will change before anything is touched.</p>
+      <p class="text-muted">Upload a backup file made by nodespot. You will see exactly what will change before anything is touched.</p>
       <div>
         <label class="label" for="rf-file">Backup file (.tar.gz, up to 256 MiB)</label>
         <input id="rf-file" class="input" type="file" accept=".gz,.tgz,application/gzip" disabled={stage === 'uploading'} onchange={pick} />
@@ -138,7 +138,7 @@
       <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
         {#if b.callsign}<dt class="text-muted">Callsign</dt><dd class="font-mono">{b.callsign}</dd>{/if}
         <dt class="text-muted">Created</dt><dd>{when(b.created)}{#if b.createdBy}{" "}by {b.createdBy}{/if}</dd>
-        <dt class="text-muted">ASLCP</dt><dd class="font-mono">{b.aslcpVersion}</dd>
+        <dt class="text-muted">nodespot</dt><dd class="font-mono">{b.nodespotVersion}</dd>
         {#if b.osName || b.osCodename}<dt class="text-muted">System</dt><dd class="break-words">{b.osName || b.osCodename}{#if preview.node.osCodename && b.osCodename && preview.node.osCodename !== b.osCodename}{" "}<span class="text-warn">(this node: {preview.node.osName || preview.node.osCodename})</span>{/if}</dd>{/if}
         <dt class="text-muted">Architecture</dt><dd class="font-mono">{b.arch}</dd>
         {#if b.channel}<dt class="text-muted">Update channel</dt><dd>{b.channel}</dd>{/if}
@@ -158,8 +158,8 @@
       {#if preview.missingSecrets.length}<p class="mt-1 text-warn">No password in the backup for: <span class="font-mono">{preview.missingSecrets.join(', ')}</span>. Set them up again after the restore.</p>{/if}
     </section>
 
-    <section aria-label="ASLCP data">
-      <h3 class="font-semibold">ASLCP</h3>
+    <section aria-label="nodespot data">
+      <h3 class="font-semibold">nodespot</h3>
       <p class="mt-1">These users will exist afterwards. Log in with your old password.</p>
       <ul class="mt-1 flex flex-wrap gap-1.5">{#each preview.users as u}<li class="badge">{u.username} · {u.role}</li>{/each}</ul>
       <p class="mt-1 text-muted">{preview.favorites} favorite{preview.favorites === 1 ? '' : 's'}, {preview.schedules} schedule{preview.schedules === 1 ? '' : 's'}, settings and audit log.
@@ -196,7 +196,7 @@
   {:else if stage === 'waiting'}
     <section class="space-y-3" aria-label="Restarting">
       <p class="flex items-center gap-2 font-medium" role="status"><Refresh size={14} class="animate-spin" />{waitNote}</p>
-      <p class="text-muted">The node and ASLCP are restarting. This takes a minute or two. Keep this page open.</p>
+      <p class="text-muted">The node and nodespot are restarting. This takes a minute or two. Keep this page open.</p>
       {@render stepList(steps)}
     </section>
   {:else if stage === 'done'}

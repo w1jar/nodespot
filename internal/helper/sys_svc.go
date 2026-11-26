@@ -24,9 +24,9 @@ const (
 	SvcActionEnable  = "enable"
 	SvcActionDisable = "disable"
 
-	// DefaultSvcRecord lists the units ASLCP itself disabled, one per line.
+	// DefaultSvcRecord lists the units nodespot itself disabled, one per line.
 	// postrm.sh re-enables exactly these on "apt purge".
-	DefaultSvcRecord = "/var/lib/aslcp/disabled-units"
+	DefaultSvcRecord = "/var/lib/nodespot/disabled-units"
 )
 
 func init() {
@@ -77,7 +77,7 @@ var svcPortDefs = []struct {
 // Errors the API maps to status codes. They cross the helper socket as text
 // (see the client methods in sys_svc_client.go).
 var (
-	ErrPort80Held      = errors.New("ASLCP is using port 80")
+	ErrPort80Held      = errors.New("nodespot is using port 80")
 	ErrSvcNotInstalled = errors.New("the service is not installed")
 )
 
@@ -211,7 +211,7 @@ type SvcScopeState struct {
 	Installed bool           `json:"installed"`
 	Active    bool           `json:"active"`   // a unit is running (or the socket listens)
 	Enabled   bool           `json:"enabled"`  // a unit starts at boot
-	Recorded  bool           `json:"recorded"` // ASLCP turned it off (disabled-units)
+	Recorded  bool           `json:"recorded"` // nodespot turned it off (disabled-units)
 	Units     []ServiceState `json:"units"`
 	// Firewall is filled when firewalld runs: the services an off switch
 	// could close, or an on switch reopen.
@@ -224,9 +224,9 @@ type SvcStatus struct {
 	Scopes         []SvcScopeState `json:"scopes"`
 	PortsAvailable bool            `json:"portsAvailable"` // ss works
 	Ports          []SvcPort       `json:"ports"`
-	AslcpPort      int             `json:"aslcpPort"`     // 0: unknown
-	AslcpOn80      bool            `json:"aslcpOnPort80"` // ASLCP holds port 80
-	Firewalld      bool            `json:"firewalld"`     // firewalld is running
+	NodespotPort   int             `json:"nodespotPort"`     // 0: unknown
+	NodespotOn80   bool            `json:"nodespotOnPort80"` // nodespot holds port 80
+	Firewalld      bool            `json:"firewalld"`        // firewalld is running
 }
 
 // SvcSetResult is the response of svc-set: the new status plus what changed.
@@ -314,8 +314,8 @@ func (o *Ops) SvcStatus(ctx context.Context) SvcStatus {
 		res.Ports = svcPorts(ls)
 	}
 	if p, err := o.webPort(); err == nil {
-		res.AslcpPort = p
-		res.AslcpOn80 = p == 80
+		res.NodespotPort = p
+		res.NodespotOn80 = p == 80
 	}
 	return res
 }
@@ -323,7 +323,7 @@ func (o *Ops) SvcStatus(ctx context.Context) SvcStatus {
 // ---------------------------------------------------------------- record
 
 // validRecordUnit: a line of the record file is used only if it is one of
-// the units of svcScopes. The file sits in a directory the aslcp user owns,
+// the units of svcScopes. The file sits in a directory the nodespot user owns,
 // so neither the helper nor postrm.sh trusts anything else in it.
 func validRecordUnit(u string) bool {
 	for _, units := range svcScopes {
@@ -417,7 +417,7 @@ func (o *Ops) systemctl(ctx context.Context, args ...string) error {
 // service such as cockpit.service) is only stopped. Turning on: "enable
 // --now" for each unit that can be enabled (static units start through their
 // socket) and the record entry is removed. Enabling Apache is refused while
-// ASLCP holds port 80. With firewall set, the scope's firewalld services are
+// nodespot holds port 80. With firewall set, the scope's firewalld services are
 // closed (off) or reopened (on); a firewalld failure is reported in the
 // result and does not fail the switch.
 func (o *Ops) SvcSet(ctx context.Context, scope, action string, firewall bool) (SvcSetResult, error) {

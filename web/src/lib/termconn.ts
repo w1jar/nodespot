@@ -27,7 +27,7 @@ export function endMsg(): string {
 }
 
 /** sessionStorage key (per tab) for the session to reattach to after a page reload. */
-export const SESSION_KEY = 'aslcp.term.session';
+export const SESSION_KEY = 'nodespot.term.session';
 
 /** The one session of mine that is open now and was not in the list before connecting; '' when unsure. */
 export function newSessionId(before: string[], list: TerminalSessionInfo[]): string {

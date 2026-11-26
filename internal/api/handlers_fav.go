@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 const (

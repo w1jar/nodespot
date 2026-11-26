@@ -1,4 +1,4 @@
-// In-memory web port of ASLCP for `npm run dev:mock` (docs/API.md "Web port"). Dev only.
+// In-memory web port of nodespot for `npm run dev:mock` (docs/API.md "Web port"). Dev only.
 type Ctx = {
   m: string; p: string; url: URL; body: any; user: { username: string; role: string } | undefined;
   json: (code: number, body?: unknown) => void; err: (code: number, msg: string, c: string) => void;
@@ -23,10 +23,10 @@ export function handleSvc(c: Ctx): boolean {
   if (m === 'PUT') {
     const a = c.body?.action;
     if (a === 'move') {
-      if (port === 80) { c.err(409, 'ASLCP already uses port 80', 'already_port80'); return true; }
+      if (port === 80) { c.err(409, 'nodespot already uses port 80', 'already_port80'); return true; }
       port = 80; pending = true;
     } else if (a === 'back') {
-      if (port !== 80) { c.err(409, 'ASLCP is not on port 80', 'not_port80'); return true; }
+      if (port !== 80) { c.err(409, 'nodespot is not on port 80', 'not_port80'); return true; }
       port = 8080; pending = false;
     } else if (a === 'confirm') pending = false;
     else { c.err(400, 'action must be move, back or confirm', 'bad_request'); return true; }

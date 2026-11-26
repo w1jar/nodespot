@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/legacy"
-	"github.com/artw1/aslcp/internal/schedules"
+	"github.com/w1jar/nodespot/internal/legacy"
+	"github.com/w1jar/nodespot/internal/schedules"
 )
 
 func open(t *testing.T) *Store {

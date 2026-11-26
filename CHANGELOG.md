@@ -1,13 +1,14 @@
-# Changelog
+# nodespot changelog
 
 Release notes are taken from the section of the tag being released
 (`## [X.Y.Z]`) when the tag has no annotation.
 
-## [3.0.0] - 2026-11-27
+## [0.0.1] - 2026-11-27
 
 ### Changed
+- The project is renamed from aslcp to nodespot (new repository https://github.com/w1jar/nodespot; the old one, https://github.com/w1jar/aslcp, is archived at 2.4). Packages, services, users, paths (`/etc/nodespot`, `/var/lib/nodespot`, `/run/nodespot-node`), environment variables (`NODESPOT_*`), the apt repository (https://w1jar.github.io/nodespot) and its signing key are all new. There is no upgrade path from aslcp: install nodespot fresh. This is the first nodespot release.
 - The first-run setup asks only for the station, the radio interface and the optional DMR and NXDN IDs. Modes are set up later on the Modes page.
-- ASLCP is now a standalone AllStar node. It needs no Asterisk and no ASL3: flash a fresh OS, install ASLCP, fill in one setup screen and you are on the air. This is a fresh-install release, not an upgrade over an ASL3 node.
+- nodespot is now a standalone AllStar node. It needs no Asterisk and no ASL3: flash a fresh OS, install nodespot, fill in one setup screen and you are on the air. This is a fresh-install release, not an upgrade over an ASL3 node.
 - AllStar, EchoLink, BrandMeister, DMR (TGIF and the other masters), YSF, P25, NXDN and M17 are equal modes. One is active at a time, and its audio goes out to the radio.
 - When the far AllStar node disconnects you or hangs up, the link stays down: the node does not redial, and the link is not restored at boot.
 - Changing the radio wiring (PTT pin, PTT or COS polarity, SA818 port) restarts the node service so the change takes effect at once.
@@ -23,9 +24,9 @@ Release notes are taken from the section of the tag being released
 - Each mode remembers its last tune (`tune.json` next to `node.json`) and reconnects to it when the mode becomes active, including at startup, until you disconnect on purpose. A drop or a failed connect keeps it. The "default reflector" and "default talkgroup" fields of P25, NXDN and M17 are gone; an old value seeds the remembered tune once, and old configs still load.
 - Station DMR ID and NXDN ID (optional), on the setup screen and in Settings > Station. BrandMeister, TGIF, DMR and P25 use the station DMR ID, and NXDN the station NXDN ID, when the mode does not set its own.
 - Install the AMBE vocoder (md380-emu) from the Modes page. When a mode that carries AMBE voice (BrandMeister, TGIF, DMR, YSF, NXDN or the echo test with the AMBE codec) is picked and the vocoder is missing or not running, an admin sees "Needs the AMBE vocoder (md380-emu)" with an Install button. The helper adds the md380-emu package repository with a pinned key, installs the package, keeps the service local-only and starts it. `install.sh` still does not install it. New admin API: `GET /api/vocoder` and `POST /api/vocoder/install`.
-- The native node (`aslcp-node`, `aslcp-node.service`): one radio (the SHARI) and exactly one active mode, which is AllStar, EchoLink, BrandMeister, TGIF, another DMR Homebrew master, YSF, P25, NXDN, M17 or the echo test. The radio is separate from the networks. Whatever mode is active, its audio goes out to the radio and the radio's audio goes out to it. Selecting another mode drops the old one first, and networks are never bridged to each other. AllStar keeps its registration current in the background whenever it is configured. EchoLink logs in to the directory only while it is the active mode.
+- The native node (`nodespot-node`, `nodespot-node.service`): one radio (the SHARI) and exactly one active mode, which is AllStar, EchoLink, BrandMeister, TGIF, another DMR Homebrew master, YSF, P25, NXDN, M17 or the echo test. The radio is separate from the networks. Whatever mode is active, its audio goes out to the radio and the radio's audio goes out to it. Selecting another mode drops the old one first, and networks are never bridged to each other. AllStar keeps its registration current in the background whenever it is configured. EchoLink logs in to the directory only while it is the active mode.
 - Echo test mode (`echotest`) for setting levels: it records what the radio receives (up to 60 seconds, after the receive AGC), waits about a second and plays it back on the radio. A new transmission stops the playback and records again. The `codec` setting (plain, AMBE, IMBE, Codec2, GSM or ulaw) runs each frame through encode and decode, and only AMBE needs the vocoder. Each recording gets a level report (peak, voiced RMS, clipped samples, duration, and "clipping" or "too quiet" warnings) in the mode status, the node status and the app. The Radio tune page has a live input meter with a -20 to -6 dBFS target band (`GET /api/radio/input`), an Echo test card and a button to switch to the mode. It replaces the old DV loopback echo test.
-- AllStar link diagnostics. With `aslcp-node -debug` every IAX2 full frame in and out is logged with its fields, and every dropped frame with the reason. The AllStar status carries link counters (voice frames received as full and mini frames, voice sent, VNAKs sent and received, retransmits, parse errors, dropped frames, gaps), shown in one compact line on the Modes page while linked.
+- AllStar link diagnostics. With `nodespot-node -debug` every IAX2 full frame in and out is logged with its fields, and every dropped frame with the reason. The AllStar status carries link counters (voice frames received as full and mini frames, voice sent, VNAKs sent and received, retransmits, parse errors, dropped frames, gaps), shown in one compact line on the Modes page while linked.
 - When an AllStar link attempt ends in a hangup or rejection within about 10 minutes of the node registering, the message says so ("registered 3 min ago; other nodes may refuse calls for up to ~10 min until their node lists update").
 - A short playout buffer at the start of each received transmission, so network jitter does not cause gaps on the air.
 - If unkeying the transmitter fails, the node keeps retrying and the status says so.
@@ -33,30 +34,34 @@ Release notes are taken from the section of the tag being released
   - the simplex logic: COS, PTT while the mode talks, a 500 ms hang, a 3 minute transmit timeout both ways, and a courtesy tone after a local transmission;
   - AGC on the network's audio (on by default) and on the radio's audio (off by default);
   - the station ID. It goes out on the radio only, never to a network, and only after activity: within 10 minutes of the first transmission and once more when activity ends. Where it can, it rides the tail of a transmission instead of keying up again.
-- The node config is `/etc/aslcp/node.json` (mode 0600). It holds the station (callsign, radio channel and levels, ID, the active mode and target restored at boot, advanced settings) and each mode's settings. Errors are reported in plain words, and the file reloads on SIGHUP or when it changes. Without the file the node runs idle.
-- Control API on `/run/aslcp-node/control.sock` (JSON lines, no TCP listener). Ops: `status`, `modes` (never returns passwords), `save_station`, `save_mode`, `delete_mode`, `select`, `connect`, `disconnect`, `last_heard`, `now_calling`, `radio_levels`, `radio_tune`, `radio_program`, `reload` and `subscribe`.
-- A udev rule (`60-aslcp-node.rules`) gives the node's user the CM108 HID interface and the CH340 serial port of the SA818.
+- The node config is `/etc/nodespot/node.json` (mode 0600). It holds the station (callsign, radio channel and levels, ID, the active mode and target restored at boot, advanced settings) and each mode's settings. Errors are reported in plain words, and the file reloads on SIGHUP or when it changes. Without the file the node runs idle.
+- Control API on `/run/nodespot-node/control.sock` (JSON lines, no TCP listener). Ops: `status`, `modes` (never returns passwords), `save_station`, `save_mode`, `delete_mode`, `select`, `connect`, `disconnect`, `last_heard`, `now_calling`, `radio_levels`, `radio_tune`, `radio_program`, `reload` and `subscribe`.
+- A udev rule (`60-nodespot-node.rules`) gives the node's user the CM108 HID interface and the CH340 serial port of the SA818.
 - USB radio interface support with presets: the radio side is one driver for the CM108, CM108AH, CM108B, CM109, CM119 and CM119A sound chips (the ones chan_simpleusb supports). Pick a preset (SHARI, a generic USB interface on an external radio such as a URI-style board, or none for a radioless node) and override the PTT pin, COS and CTCSS input pins and their polarity if needed; the SA818 frequency and tone fields show only when the interface has an SA818. The detected chip and USB id show in the node status, the setup screen and the Radio tune page. A config with no preset keeps the SHARI behavior when a SHARI is detected.
 - The web UI is rebuilt around modes. A first-run Node setup (shown when the node reports it needs one) asks for the station callsign, the radio frequency and CTCSS/DCS (hidden on a radioless node), the station ID on or off (the licensee is responsible for IDing), and collapsible sections for AllStar, EchoLink, BrandMeister and the other DMR masters, YSF, P25, NXDN and M17. Detected hardware is shown read-only, and saved passwords show "set" and stay empty unless changed.
 - A Modes view with the modes as equal choices: pick a mode, pick a target (favorites, recent or typed), connect or disconnect. One mode is active at a time, and the audio goes to the radio whatever the mode.
 - The Dashboard shows the station card, the active mode and target, who is talking, and one Last heard list across all modes.
 - Settings pages per mode, a Station page, a Radio tune page for the native levels and the SA818 (with a Program button), a Caller lookup page, and a Node service page (status and restart).
-- The demo and mock modes (`npm run dev:mock`, `aslcp -demo`) render every page, with `MOCK_STATION_SETUP=1`, `MOCK_NO_RADIO=1` and `MOCK_HOTSPOT=1` to try the first-run setup, a radioless node and the hotspot case.
+- The demo and mock modes (`npm run dev:mock`, `nodespot -demo`) render every page, with `MOCK_STATION_SETUP=1`, `MOCK_NO_RADIO=1` and `MOCK_HOTSPOT=1` to try the first-run setup, a radioless node and the hotspot case.
 
 ### Changed
-- `aslcp-node.service` is enabled and started on install and runs as its own user, `aslcp-node`. An upgrade stops and disables the old `aslcp-dv.service`.
-- The web server runs on the native node only, over its control socket (`[node] socket` in `aslcp.conf`, default `/run/aslcp-node/control.sock`). It no longer talks to Asterisk. The API now covers the node status, the modes and their settings (passwords are write-only: reading only says whether one is set, and saving an empty password keeps the stored one), selecting a mode and target, disconnecting, favorites per mode, Last heard and Now calling across all modes, the radio tune page (levels and SA818 programming), and the status and restart of `aslcp-node.service`. Schedules pick a mode and target.
-- Backups use format 2: the ASLCP database, `aslcp.conf`, the node config and the SA818 settings. Mode passwords are only included when asked for. A restore fills a blank password from the node's current config and lists the modes that still need one (`missingSecrets`), which are left out. Backups made by 2.x (format 1, an Asterisk node) are refused with a message.
-- Diagnostics collect the node config (passwords removed) and the `aslcp-node` journal instead of the Asterisk files.
-- The installer no longer installs AllStarLink 3. `ASLCP_DV` is still accepted and does nothing (digital modes are built in).
+- `nodespot-node.service` is enabled and started on install and runs as its own user, `nodespot-node`.
+- The web server runs on the native node only, over its control socket (`[node] socket` in `nodespot.conf`, default `/run/nodespot-node/control.sock`). It no longer talks to Asterisk. The API now covers the node status, the modes and their settings (passwords are write-only: reading only says whether one is set, and saving an empty password keeps the stored one), selecting a mode and target, disconnecting, favorites per mode, Last heard and Now calling across all modes, the radio tune page (levels and SA818 programming), and the status and restart of `nodespot-node.service`. Schedules pick a mode and target.
+- Backups use format 2: the nodespot database, `nodespot.conf`, the node config and the SA818 settings. Mode passwords are only included when asked for. A restore fills a blank password from the node's current config and lists the modes that still need one (`missingSecrets`), which are left out. Backups made by aslcp 2.x (format 1, an Asterisk node) are refused with a message.
+- Diagnostics collect the node config (passwords removed) and the `nodespot-node` journal instead of the Asterisk files.
+- The installer no longer installs AllStarLink 3. `NODESPOT_DV` is still accepted and does nothing (digital modes are built in).
 - Schedules, favorites, Now Calling, Last heard and the public page use modes and targets. A schedule's overlap check ignores the mode, because the node has one radio and one active mode.
 
-### Removed
+### Removed (compared with aslcp 2.4)
 - The digital voice engine `aslcp-dv`, its service and its Asterisk USRP bridge (`internal/dv/bridge`, `internal/dv/usrp`). The native node replaces them.
 - Everything that needed Asterisk or ASL3: the AMI client, the Asterisk config editor and its history, the SimpleUSB tune page, the bridge and private node handling, the Asterisk service control and the ASL3 package checks, the `[ami]` section of `aslcp.conf` (an old file with it still loads), the `asl3` package recommendation, and the installer options `ASLCP_ASL3` and `ASLCP_ASL_TELEMETRY`.
 - The aslcp user is no longer added to group `asterisk`.
 - Not supported by the native node: incoming calls (it only calls out and listens on no public port), DTMF commands, hub features, autopatch, stats posting, and bridging networks to each other.
 - The web UI pages for Asterisk, AllStarLink services, the node list, favorite statistics, the digital modes bridge and the private node.
+
+## aslcp history (archived project)
+
+Everything below belongs to the archived aslcp project (https://github.com/w1jar/aslcp), which nodespot continues. These version numbers are not nodespot releases.
 
 ## [2.4.2] - 2026-11-25
 

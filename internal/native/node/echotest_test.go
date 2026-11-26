@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/mode/echotest"
-	"github.com/artw1/aslcp/internal/native/mode/modetest"
-	"github.com/artw1/aslcp/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode/echotest"
+	"github.com/w1jar/nodespot/internal/native/mode/modetest"
+	"github.com/w1jar/nodespot/internal/native/radio"
 )
 
 // echoRig is an engine on a fake radio with the real echo test mode, both

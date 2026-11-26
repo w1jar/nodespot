@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
 )
 
 func TestRunLogsFailedSessionsOnce(t *testing.T) {

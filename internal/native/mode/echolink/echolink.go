@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	el "github.com/artw1/aslcp/internal/native/echolink"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	el "github.com/w1jar/nodespot/internal/native/echolink"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // Directory is the part of *echolink.Directory the mode uses.

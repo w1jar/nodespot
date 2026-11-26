@@ -2,7 +2,7 @@
 // Content-Security-Policy can forbid inline scripts). Default is dark; only an
 // explicit "light" (or "system" resolving to a light OS) turns it off.
 try {
-  var t = localStorage.getItem('aslcp-theme');
+  var t = localStorage.getItem('nodespot-theme');
   if (t !== 'light' && t !== 'system') t = 'dark';
   if (t === 'dark' || matchMedia('(prefers-color-scheme: dark)').matches) {
     document.documentElement.classList.add('dark');

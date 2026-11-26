@@ -16,7 +16,7 @@
 // library, by altering the notices that refer to the LGPL so that they refer
 // to the GPL, and expressly allows naming a version of the GPL newer than 2.
 // This package is such a copy: it is distributed here under the GNU General
-// Public License version 3 or later (see LICENSE), the licence of ASLCP as a
+// Public License version 3 or later (see LICENSE), the licence of nodespot as a
 // whole.
 //
 // Every ported file carries the SPDX identifier GPL-3.0-or-later, the

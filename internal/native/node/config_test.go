@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	_ "github.com/artw1/aslcp/internal/native/mode/all"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	_ "github.com/w1jar/nodespot/internal/native/mode/all"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 func TestParseTone(t *testing.T) {

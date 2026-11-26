@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	_ "github.com/artw1/aslcp/internal/native/mode/all"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	_ "github.com/w1jar/nodespot/internal/native/mode/all"
 )
 
 func modeInfo(t *testing.T, g *rig, name string) ModeInfo {

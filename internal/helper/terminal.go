@@ -43,7 +43,7 @@ func isTerminalStreamOp(op string) bool { return op == OpTerminalOpen || op == O
 
 // TerminalRequest is the argument of the terminal ops. Sizes are optional
 // (zero: 24 rows, 80 columns) and bounded; ID names a session (attach, end);
-// Owner is the ASLCP user id the web server acts for; Ack lists ended records
+// Owner is the nodespot user id the web server acts for; Ack lists ended records
 // to forget (list). Nothing else is accepted, so no client string reaches a
 // command line or an environment.
 type TerminalRequest struct {

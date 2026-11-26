@@ -1,10 +1,10 @@
-// Command aslcp-node is the native node: one radio (a USB interface such as
+// Command nodespot-node is the native node: one radio (a USB interface such as
 // the SHARI) and exactly one active network mode, AllStar, EchoLink or one of
 // the digital voice networks. Whatever mode is active, its audio goes out to the radio and the
 // radio's audio goes out to it; networks are never bridged.
 //
-// It reads /etc/aslcp/node.json (a missing file is a first boot: the node
-// runs idle), serves the control API on /run/aslcp-node/control.sock and
+// It reads /etc/nodespot/node.json (a missing file is a first boot: the node
+// runs idle), serves the control API on /run/nodespot-node/control.sock and
 // logs to stderr. SIGHUP reloads the config; SIGINT and SIGTERM stop it.
 // Every exit path unkeys the transmitter.
 package main
@@ -24,10 +24,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	_ "github.com/artw1/aslcp/internal/native/mode/all"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	_ "github.com/w1jar/nodespot/internal/native/mode/all"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/radio"
 )
 
 var version = "dev"
@@ -40,12 +40,12 @@ const exitConfig = 78
 const exitRestart = 75
 
 // webUser is the web app's user, which may use the control socket.
-const webUser = "aslcp"
+const webUser = "nodespot"
 
 func main() { os.Exit(run(os.Args[1:], os.Stderr)) }
 
 func run(args []string, stderr io.Writer) (code int) {
-	fs := flag.NewFlagSet("aslcp-node", flag.ContinueOnError)
+	fs := flag.NewFlagSet("nodespot-node", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgPath := fs.String("config", node.DefaultConfigPath, "config file")
 	sock := fs.String("socket", node.DefaultSocket, "control socket")
@@ -55,7 +55,7 @@ func run(args []string, stderr io.Writer) (code int) {
 		return 2
 	}
 	if *showVersion {
-		fmt.Fprintln(stderr, "aslcp-node", version)
+		fmt.Fprintln(stderr, "nodespot-node", version)
 		return 0
 	}
 	level := slog.LevelInfo

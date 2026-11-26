@@ -9,7 +9,7 @@ import (
 
 func TestParseTermHostArgs(t *testing.T) {
 	id := "0123456789abcdef"
-	sock := "/run/aslcp/term/" + id + ".sock"
+	sock := "/run/nodespot/term/" + id + ".sock"
 	ok := []string{"--id=" + id, "--sock=" + sock, "--rows=30", "--cols=100", "--owner=7"}
 	a, err := parseTermHostArgs(ok)
 	if err != nil {
@@ -32,9 +32,9 @@ func TestParseTermHostArgs(t *testing.T) {
 		"upper id":         with(0, "--id=0123456789ABCDEF"),
 		"path id":          with(0, "--id=../../../etc/passwd"),
 		"sock elsewhere":   with(1, "--sock=/tmp/"+id+".sock"),
-		"sock traversal":   with(1, "--sock=/run/aslcp/term/../"+id+".sock"),
-		"sock other id":    with(1, "--sock=/run/aslcp/term/ffffffffffffffff.sock"),
-		"sock subdir":      with(1, "--sock=/run/aslcp/term/x/"+id+".sock"),
+		"sock traversal":   with(1, "--sock=/run/nodespot/term/../"+id+".sock"),
+		"sock other id":    with(1, "--sock=/run/nodespot/term/ffffffffffffffff.sock"),
+		"sock subdir":      with(1, "--sock=/run/nodespot/term/x/"+id+".sock"),
 		"empty sock":       with(1, "--sock="),
 		"zero rows":        with(2, "--rows=0"),
 		"huge rows":        with(2, "--rows=501"),

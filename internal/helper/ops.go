@@ -11,34 +11,34 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/config"
+	"github.com/w1jar/nodespot/internal/config"
 )
 
 const (
-	pkgName     = "aslcp"
-	upgradeUnit = "aslcp-upgrade"
-	fwService   = "aslcp"
+	pkgName     = "nodespot"
+	upgradeUnit = "nodespot-upgrade"
+	fwService   = "nodespot"
 	logLines    = 50
 
 	// DefaultSourceList is the apt source written by install.sh.
-	DefaultSourceList = "/etc/apt/sources.list.d/aslcp.list"
+	DefaultSourceList = "/etc/apt/sources.list.d/nodespot.list"
 )
 
 // Ops implements the operations on top of a Runner.
 type Ops struct {
 	Run Runner
-	// SourceList is the aslcp apt source file whose suite is the update
+	// SourceList is the nodespot apt source file whose suite is the update
 	// channel (default DefaultSourceList).
 	SourceList string
 
 	// Backup and restore locations (defaults in backup.go); injectable for
 	// tests.
-	NodeConfig string // default node.DefaultConfigPath
-	SA818State string // default sa818.DefaultStatePath
-	NodeUser   string // owner of the restored node files (default DefaultNodeUser)
-	AslcpConf  string // default DefaultAslcpConf (restored; read for the web port)
-	ResolvConf string // default DefaultResolvConf (net-status)
-	OSRelease  string // default DefaultOSRelease
+	NodeConfig   string // default node.DefaultConfigPath
+	SA818State   string // default sa818.DefaultStatePath
+	NodeUser     string // owner of the restored node files (default DefaultNodeUser)
+	NodespotConf string // default DefaultNodespotConf (restored; read for the web port)
+	ResolvConf   string // default DefaultResolvConf (net-status)
+	OSRelease    string // default DefaultOSRelease
 	// Svc holds the paths and timing of the services switch and the port 80
 	// move (sys_svc.go, sys_webport.go); the zero value means the defaults.
 	Svc SvcPaths
@@ -149,8 +149,8 @@ func (o *Ops) HandleRequest(ctx context.Context, req Request) (any, error) {
 		return o.OSApply(ctx)
 	case OpReboot:
 		return o.Reboot(ctx)
-	case OpAslcpRestart:
-		return o.AslcpRestart(ctx)
+	case OpNodespotRestart:
+		return o.NodespotRestart(ctx)
 	case OpFirewallStatus:
 		return o.FirewallStatus(ctx)
 	case OpFirewallOpen:
@@ -192,12 +192,12 @@ func (o *Ops) sourceList() string {
 	return DefaultSourceList
 }
 
-// sourceLine matches an aslcp apt source line: deb [options] URL SUITE ...
+// sourceLine matches an nodespot apt source line: deb [options] URL SUITE ...
 // where SUITE is one of the two channels. Group 1 is everything before the
 // suite, 2 the suite, 3 the rest of the line.
 var sourceLine = regexp.MustCompile(`^(\s*deb\s+(?:\[[^\]\n]*\]\s+)?\S+\s+)(stable|beta)(\s.*|)$`)
 
-// readChannel returns the suite of the first aslcp line of the source file.
+// readChannel returns the suite of the first nodespot line of the source file.
 func readChannel(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -208,10 +208,10 @@ func readChannel(path string) (string, error) {
 			return m[2], nil
 		}
 	}
-	return "", errors.New("no aslcp source line found")
+	return "", errors.New("no nodespot source line found")
 }
 
-// SetChannel rewrites only the suite word of the aslcp line(s) of the source
+// SetChannel rewrites only the suite word of the nodespot line(s) of the source
 // file (atomically, mode 0644) and returns the new status. It refuses while
 // an upgrade runs. channel must be ChannelStable or ChannelBeta.
 func (o *Ops) SetChannel(ctx context.Context, channel string) (Status, error) {
@@ -242,7 +242,7 @@ func (o *Ops) setChannelLocked(ctx context.Context, channel string) (Status, err
 		}
 	}
 	if !found {
-		return Status{}, errors.New("no aslcp line found in the apt source")
+		return Status{}, errors.New("no nodespot line found in the apt source")
 	}
 	if out := strings.Join(lines, "\n"); out != string(data) {
 		if err := writeAtomic(path, []byte(out)); err != nil {
@@ -378,8 +378,8 @@ var ErrBusy = errors.New("an update is already running")
 // sends reaches it. One unit does the (scoped) index refresh and the install,
 // so the first apt run is not paid twice. Quiet, no recommends, no changelog
 // reader (APT_LISTCHANGES_FRONTEND=none is set in the unit environment).
-const upgradeScript = "apt-get update -o DPkg::Lock::Timeout=600 -o Dir::Etc::sourcelist=sources.list.d/aslcp.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 -q && " +
-	"apt-get install -y -q -o DPkg::Lock::Timeout=600 --only-upgrade --no-install-recommends -o Dpkg::Options::=--force-confold -o Dpkg::Use-Pty=0 aslcp"
+const upgradeScript = "apt-get update -o DPkg::Lock::Timeout=600 -o Dir::Etc::sourcelist=sources.list.d/nodespot.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 -q && " +
+	"apt-get install -y -q -o DPkg::Lock::Timeout=600 --only-upgrade --no-install-recommends -o Dpkg::Options::=--force-confold -o Dpkg::Use-Pty=0 nodespot"
 
 // upgradeArgv is the systemd-run command line of update-apply.
 func upgradeArgv() []string {
@@ -418,13 +418,13 @@ func (o *Ops) UpdateApply(ctx context.Context) (Status, error) {
 	return st, nil
 }
 
-// defaultPort is the port the packaged firewalld service "aslcp" covers.
+// defaultPort is the port the packaged firewalld service "nodespot" covers.
 const defaultPort = 8080
 
-// webPort reads the port from the [server] listen setting of aslcp.conf. The
+// webPort reads the port from the [server] listen setting of nodespot.conf. The
 // port is never taken from the request: the operations stay argument-free.
 func (o *Ops) webPort() (int, error) {
-	c, err := config.Load(o.aslcpConf())
+	c, err := config.Load(o.nodespotConf())
 	if err != nil {
 		return 0, err
 	}
@@ -443,7 +443,7 @@ func (o *Ops) fwQuery(ctx context.Context, query string) bool {
 }
 
 // FirewallStatus reports firewalld state for the configured web port: open
-// when the aslcp service (port 8080 only) or the port itself is enabled.
+// when the nodespot service (port 8080 only) or the port itself is enabled.
 func (o *Ops) FirewallStatus(ctx context.Context) (Firewall, error) {
 	var fw Firewall
 	out, code, err := o.Run.Run(ctx, "firewall-cmd", "--state")
@@ -470,7 +470,7 @@ func (o *Ops) FirewallStatus(ctx context.Context) (Firewall, error) {
 }
 
 // FirewallOpen opens the configured web port permanently and reloads: the
-// aslcp service for 8080, else --add-port=<port>/tcp.
+// nodespot service for 8080, else --add-port=<port>/tcp.
 func (o *Ops) FirewallOpen(ctx context.Context) (Firewall, error) {
 	fw, err := o.FirewallStatus(ctx)
 	if !fw.Present {

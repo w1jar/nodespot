@@ -1,12 +1,12 @@
-# Replacing ASL3 with a native ASLCP node
+# Replacing ASL3 with a native nodespot node
 
 Research notes, 2026-11-26. Sizes and times are estimates, not measured from a prototype.
 
 ## Goal
 
-> **Update (3.0.0):** the design is now *modes*. AllStar, EchoLink, BrandMeister, DMR (other Homebrew masters), YSF, P25, NXDN and M17 are equal modes, exactly one active at a time. The radio (the SHARI, or a fake radio on a radioless node) is the one fixed local end: the active mode's audio goes out to the radio and the radio's audio goes out to it. Networks are never bridged. There is no ASL3 import and no rollback to Asterisk: 3.0.0 is a fresh install. Where the notes below say otherwise (USRP, a DV bridge, ASL3 upgrades, running beside Asterisk), the modes design wins.
+> **Update:** the design is now *modes*. AllStar, EchoLink, BrandMeister, DMR (other Homebrew masters), YSF, P25, NXDN and M17 are equal modes, exactly one active at a time. The radio (the SHARI, or a fake radio on a radioless node) is the one fixed local end: the active mode's audio goes out to the radio and the radio's audio goes out to it. Networks are never bridged. There is no ASL3 import and no rollback to Asterisk: nodespot is a fresh install. Where the notes below say otherwise (USRP, a DV bridge, ASL3 upgrades, running beside Asterisk), the modes design wins.
 
-Register on AllStarLink, get a node number, install ASLCP, enter a few numbers and passwords, and be on AllStar and EchoLink. DV setup stays as it is today.
+Register on AllStarLink, get a node number, install nodespot, enter a few numbers and passwords, and be on AllStar and EchoLink. DV setup stays as it is today.
 
 | Field | From |
 | --- | --- |
@@ -36,11 +36,11 @@ Replacing ASL3 entirely is a large project: about 12k–21k lines of Go plus 5k�
 
 **Recommendation:** keep Asterisk for IAX2 linking first and move the radio side (SimpleUSB, EchoLink) into Go over USRP, about 4k–6.5k lines. Build native registration and IAX2 on a test node in parallel, and cut over only after a long soak with Asterisk kept as the rollback.
 
-## What ASLCP uses from ASL3 today
+## What nodespot uses from ASL3 today
 
-ASLCP touches many files but does little with them: about 4 AMI actions, 10 CLI strings, 1 event family, 9 config files, 2 systemd units and one UDP bridge. About 3,500 lines of ASLCP Go exist only to talk to or configure Asterisk. All radio, linking, audio and EchoLink behavior lives in Asterisk.
+nodespot touches many files but does little with them: about 4 AMI actions, 10 CLI strings, 1 event family, 9 config files, 2 systemd units and one UDP bridge. About 3,500 lines of nodespot Go exist only to talk to or configure Asterisk. All radio, linking, audio and EchoLink behavior lives in Asterisk.
 
-| Area | What ASLCP uses | Where |
+| Area | What nodespot uses | Where |
 | --- | --- | --- |
 | AMI transport | Login, `Command` action, `Events: call` filter, credentials from manager.conf | `internal/ami/` |
 | Status | `RptLocalNodes`, `RptStatus` (RptStat, XStat, SawStat, NodeStat), `RPT_*` events | `internal/rpt/client.go`, `events.go`, `monitor.go` |
@@ -52,7 +52,7 @@ ASLCP touches many files but does little with them: about 4 AMI actions, 10 CLI 
 | DV bridge node | chan\_usrp over loopback UDP, a rpt.conf stanza, a permanent `ilink 13` link | `internal/dv/usrp/`, `internal/astconf/bridge.go` |
 | Node list and stats | Node directory download and public stats polling; never registration, extnodes or astdb | `internal/nodelist/`, `internal/favstats/` |
 
-ASLCP never sends `rpt fun`, `rpt macro`, playback or DTMF commands. It only reads status and issues ilink, which keeps the control surface a replacement must offer very narrow. The DV bridge already sits behind a small USRP interface, so it is the easiest piece to move.
+nodespot never sends `rpt fun`, `rpt macro`, playback or DTMF commands. It only reads status and issues ilink, which keeps the control surface a replacement must offer very narrow. The DV bridge already sits behind a small USRP interface, so it is the easiest piece to move.
 
 ## Replacement pieces
 
@@ -68,10 +68,10 @@ IAX2 linking is the largest and riskiest piece; the radio side is bounded and we
 | Registration and node lookup (stats posting later, opt-in) | S–M | 500–900 | Low; stats posting is opt-in and comes later |
 | Radioless node and link mixer | S | 300–500 | Low: one link at a time, no hub mixing |
 | DV bridge integration | S | 200–400 | Low |
-| ASLCP migration (new state source, config, backup) | L | 2,500–5,000 changed, 3,500 deleted | UI and API mostly kept |
+| nodespot migration (new state source, config, backup) | L | 2,500–5,000 changed, 3,500 deleted | UI and API mostly kept |
 | Tests, fakes, captures, soak | L | 6,000–9,000 | Realistically the larger half of the work |
 
-Left out on purpose: remote base and autopatch. Lost unless rebuilt: the app\_rpt web transceiver, Allmon3 and Supermon compatibility (they read AMI; not needed, ASLCP replaces them), and community troubleshooting knowledge.
+Left out on purpose: remote base and autopatch. Lost unless rebuilt: the app\_rpt web transceiver, Allmon3 and Supermon compatibility (they read AMI; not needed, nodespot replaces them), and community troubleshooting knowledge.
 
 ## Middle paths
 
@@ -85,7 +85,7 @@ Path A also builds pieces a later IAX2 slice needs: the audio device, resampler,
 
 ## Minimum native node
 
-ASLCP needs a small part of what Asterisk and app\_rpt offer: AllStar linking, EchoLink, one radio and the DV bridge. It is an end-user node with one link at a time, not a hub. Everything else stays out.
+nodespot needs a small part of what Asterisk and app\_rpt offer: AllStar linking, EchoLink, one radio and the DV bridge. It is an end-user node with one link at a time, not a hub. Everything else stays out.
 
 **Must have**
 
@@ -114,7 +114,7 @@ The SA818 cannot report its settings back, so we keep our own copy, as `/etc/sa8
 
 **Ready, station fallbacks and remembered tunes.** A mode is *ready* when every required value is set on the mode or comes from the station: the callsign (EchoLink adds `-L`), the DMR ID or the NXDN ID. An empty field uses the station value, and the UI shows it as the placeholder ("from station: N0CALL"). The echo test needs nothing and is always ready. `modes` lists each mode's `configured` (ready), `missing` (keys of the required values still absent), `saved` and `last` (the remembered target). There is no "default reflector" or "default talkgroup" setting: each mode remembers its last tune in `tune.json` next to `node.json` (`{"version":1,"modes":{"p25":{"target":{...}},"ysf":{"unlinked":true}}}`, mode 0600) and reconnects to it whenever the mode becomes active, including at startup. Only an explicit disconnect forgets it; a far-end drop or a failed connect keeps it. An old `address` setting (and `station.active.target`) seeds the remembered target once when no tune is stored, then is ignored; the old keys still parse.
 
-**USB radio interfaces and presets.** The radio side is one USB driver with presets, not a SHARI special case. Any C-Media CM108, CM108AH, CM108B, CM109, CM119, CM119A or CM119B sound chip (USB vendor `0d8c`, the products chan\_simpleusb accepts, plus the 0x6a00 to 0x6aff range some small makers use) is detected from sysfs, with its hidraw node and ALSA card. A preset fills in the settings, and each can be overridden in the station's radio settings (`/etc/aslcp/node.json`, `station.radio`):
+**USB radio interfaces and presets.** The radio side is one USB driver with presets, not a SHARI special case. Any C-Media CM108, CM108AH, CM108B, CM109, CM119, CM119A or CM119B sound chip (USB vendor `0d8c`, the products chan\_simpleusb accepts, plus the 0x6a00 to 0x6aff range some small makers use) is detected from sysfs, with its hidraw node and ALSA card. A preset fills in the settings, and each can be overridden in the station's radio settings (`/etc/nodespot/node.json`, `station.radio`):
 
 | Preset | PTT | COS (carrier) | CTCSS input | SA818 |
 | --- | --- | --- | --- | --- |
@@ -261,7 +261,7 @@ Start with feasibility and the radio side; the native IAX2 node runs on a test n
 
 Keep the API and UI behind a `Node` interface backed today by `internal/rpt`, so each step ships without a UI rewrite.
 
-**Status (branch try/native-node, 3.0.0).** Built: the `aslcp-node` daemon (`internal/native/...`) with the radio (CM108 HID PTT/COS, ALSA audio, SA818 programming, a fake radio), the node engine (one active mode, simplex logic, hang, transmit timeouts, courtesy tone, AGCs, ID on RF only after activity, playout prebuffer), the modes (AllStar over native IAX2 with background registration, EchoLink with GSM and the directory, and the DV networks on the existing protocol and vocoder code), the control socket, the web app and UI rebuilt around modes, the first-run setup, backups and packaging without ASL3. The echo test mode (`echotest`) with level reports and a live input meter on the Radio tune page is built. Unit tests use loopback fakes and fake clocks only.
+**Status (branch try/native-node).** Built: the `nodespot-node` daemon (`internal/native/...`) with the radio (CM108 HID PTT/COS, ALSA audio, SA818 programming, a fake radio), the node engine (one active mode, simplex logic, hang, transmit timeouts, courtesy tone, AGCs, ID on RF only after activity, playout prebuffer), the modes (AllStar over native IAX2 with background registration, EchoLink with GSM and the directory, and the DV networks on the existing protocol and vocoder code), the control socket, the web app and UI rebuilt around modes, the first-run setup, backups and packaging without ASL3. The echo test mode (`echotest`) with level reports and a live input meter on the Radio tune page is built. Unit tests use loopback fakes and fake clocks only.
 
 Untested on real hardware or networks: registration against AllStarLink and the DNS check; IAX2 calls to real app\_rpt nodes (call token, MD5, keying, link lists, disconnect and hangup handling); EchoLink directory login and QSOs behind a home router; each DV network's login and audio (and the md380-emu AMBE vocoder); the echo test on a real radio (levels and the warning thresholds); CM108 PTT/COS on a real SHARI, ALSA timing and levels, SA818 programming; the ID and courtesy tone on air; the self-restart after a radio wiring change; the .deb install on a fresh OS.
 
@@ -284,7 +284,7 @@ Untested on real hardware or networks: registration against AllStarLink and the 
 - [x] Answered: either works. The protocol is the same; the callsign, with or without -L, is just a setting.
 - [x] Answered: one. This is an end-user node, not a hub.
 - [x] Answered: our SHARI's sound chip is a CM108B (USB ID 0d8c:0012, already on chan\_simpleusb's supported list). Pins are stock: COS from the chip's inverted input (carrierfrom = usbinvert), CTCSS input off, PTT not inverted.
-- [x] Answered: no. ASLCP does not use them at run time; it only switches Allmon3 off, can back up its config, and can import favorites from an AllScan or Supermon install. Its public page replaces their public pages.
+- [x] Answered: no. nodespot does not use them at run time; it only switches Allmon3 off, can back up its config, and can import favorites from an AllScan or Supermon install. Its public page replaces their public pages.
 
 ## AMBE vocoder (md380-emu)
 
@@ -292,7 +292,7 @@ BrandMeister, TGIF, other DMR masters, YSF and NXDN carry AMBE voice, and the ec
 
 ## Sources
 
-Code references point into the ASLCP repository; size estimates are rough and not measured from a prototype.
+Code references point into the nodespot repository; size estimates are rough and not measured from a prototype.
 
 - [AllStarLink/app\_rpt](https://github.com/AllStarLink/app_rpt) — `apps/app_rpt.c`, `apps/app_rpt/rpt_config.c`, `res/res_rpt_http_registrations.c`, `configs/rpt/extensions.conf`
 - [asl3-update-nodelist](https://github.com/AllStarLink/asl3-update-nodelist)

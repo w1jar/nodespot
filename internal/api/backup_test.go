@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/backupsvc"
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/backupsvc"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 type bkEnv struct {
@@ -86,7 +86,7 @@ func (e *env) upload(role string, fields map[string]string, file []byte) (int, m
 func (e *env) uploadRaw(role string, body io.Reader, ct string) (int, map[string]any) {
 	e.t.Helper()
 	req, _ := http.NewRequest("POST", e.ts.URL+"/api/restore/upload", body)
-	req.Header.Set("X-ASLCP", "1")
+	req.Header.Set("X-nodespot", "1")
 	req.Header.Set("Content-Type", ct)
 	if c := e.ck[role]; c != "" {
 		req.Header.Set("Cookie", auth.CookieName+"="+c)
@@ -110,7 +110,7 @@ func (e *bkEnv) backupBytes(role string) []byte {
 	if st != 200 {
 		e.t.Fatalf("create: %d %s", st, b)
 	}
-	if h.Get("Content-Type") != "application/gzip" || !strings.HasPrefix(h.Get("Content-Disposition"), `attachment; filename="aslcp-backup-node-a-`) {
+	if h.Get("Content-Type") != "application/gzip" || !strings.HasPrefix(h.Get("Content-Disposition"), `attachment; filename="nodespot-backup-node-a-`) {
 		e.t.Fatalf("headers %v", h)
 	}
 	return b
@@ -133,7 +133,7 @@ func TestBackupAuthMatrix(t *testing.T) {
 		expectErr(t, e.env, "", c.m, c.p, map[string]string{}, 401, "unauthorized")
 	}
 	// CSRF
-	st, _, _ := e.raw("POST", "/api/backup", map[string]bool{}, e.ck["admin"], map[string]string{"X-ASLCP": ""})
+	st, _, _ := e.raw("POST", "/api/backup", map[string]bool{}, e.ck["admin"], map[string]string{"X-nodespot": ""})
 	if st != 403 {
 		t.Fatalf("csrf: %d", st)
 	}
@@ -198,7 +198,7 @@ func TestBackupRoundTripDemo(t *testing.T) {
 	if parts["sa818"] != true || parts["node"] != true || parts["secrets"] != true || parts["conf"] != false {
 		t.Errorf("parts: %v", parts)
 	}
-	if b := prev["backup"].(map[string]any); b["hostname"] != "node-a" || b["aslcpVersion"] != "1.0.0" || b["callsign"] != "N0CALL" {
+	if b := prev["backup"].(map[string]any); b["hostname"] != "node-a" || b["nodespotVersion"] != "1.0.0" || b["callsign"] != "N0CALL" {
 		t.Errorf("backup: %v", b)
 	}
 

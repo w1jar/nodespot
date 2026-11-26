@@ -26,12 +26,12 @@ type Error struct{ Code, Msg string }
 
 func (e *Error) Error() string {
 	if e.Msg == "" {
-		return "aslcp-dv: " + e.Code
+		return "nodespot-dv: " + e.Code
 	}
-	return "aslcp-dv: " + e.Code + ": " + e.Msg
+	return "nodespot-dv: " + e.Code + ": " + e.Msg
 }
 
-// Client talks to aslcp-dv's control socket: one short connection per
+// Client talks to nodespot-dv's control socket: one short connection per
 // request, plus Subscribe for the event stream.
 type Client struct {
 	path string
@@ -73,13 +73,13 @@ func readResponse(br *bufio.Reader) (Response, error) {
 	}
 	var resp Response
 	if err := json.Unmarshal(line, &resp); err != nil {
-		return resp, fmt.Errorf("aslcp-dv: bad response: %w", err)
+		return resp, fmt.Errorf("nodespot-dv: bad response: %w", err)
 	}
 	return resp, nil
 }
 
 // ErrLineTooLong is returned for a line over MaxLine bytes.
-var ErrLineTooLong = errors.New("aslcp-dv: line too long")
+var ErrLineTooLong = errors.New("nodespot-dv: line too long")
 
 // readLine reads one NDJSON line of at most MaxLine bytes.
 func readLine(br *bufio.Reader) ([]byte, error) {
@@ -143,7 +143,7 @@ func (c *Client) do(ctx context.Context, op string, args any) (Status, error) {
 	var st Status
 	if len(resp.Result) > 0 {
 		if err := json.Unmarshal(resp.Result, &st); err != nil {
-			return st, fmt.Errorf("aslcp-dv: bad status: %w", err)
+			return st, fmt.Errorf("nodespot-dv: bad status: %w", err)
 		}
 	}
 	return st, nil
@@ -211,7 +211,7 @@ func (c *Client) Subscribe(ctx context.Context, first func(Status), fn func(Even
 	var st Status
 	if len(resp.Result) > 0 {
 		if err := json.Unmarshal(resp.Result, &st); err != nil {
-			return fmt.Errorf("aslcp-dv: bad status: %w", err)
+			return fmt.Errorf("nodespot-dv: bad status: %w", err)
 		}
 	}
 	if first != nil {
@@ -224,13 +224,13 @@ func (c *Client) Subscribe(ctx context.Context, first func(Status), fn func(Even
 		}
 		var ev Event
 		if err := json.Unmarshal(line, &ev); err != nil {
-			return fmt.Errorf("aslcp-dv: bad event: %w", err)
+			return fmt.Errorf("nodespot-dv: bad event: %w", err)
 		}
 		if ev.Type == EvOverflow {
 			if fn != nil {
 				fn(ev)
 			}
-			return errors.New("aslcp-dv: subscriber overflow")
+			return errors.New("nodespot-dv: subscriber overflow")
 		}
 		if fn != nil {
 			fn(ev)

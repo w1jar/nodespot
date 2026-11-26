@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/updates"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/updates"
 )
 
 type fakeHelper struct {

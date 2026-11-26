@@ -7,7 +7,7 @@ type Ctx = {
 };
 
 const ZONES = ['America/Chicago', 'America/New_York', 'Europe/London', 'UTC'];
-const UNITS = ['aslcp', 'aslcp-node', 'aslcp-helper', 'NetworkManager', 'systemd-networkd'];
+const UNITS = ['nodespot', 'nodespot-node', 'nodespot-helper', 'NetworkManager', 'systemd-networkd'];
 const host = { hostname: 'node-demo', prettyHostname: '', os: 'Debian GNU/Linux 12 (bookworm)', hostnameAvailable: true, hostnamectlAvailable: true, hostnamectlMissing: false, timezone: 'America/Chicago', ntp: true, ntpSynchronized: true, canNtp: true, localRtc: false, timeAvailable: true, now: '', clock: '' };
 const audit: { id: number; time: string; user: string; action: string; detail: string }[] = [];
 function note(user: string, action: string, detail: object) { audit.push({ id: audit.length + 1, time: new Date().toISOString(), user, action, detail: JSON.stringify(detail) }); }
@@ -18,17 +18,17 @@ const DIAG_PLAN = {
   available: true, maskDefault: true, maxBytes: 12 << 20, timeLimit: 90,
   items: [
     { name: 'README.txt', desc: 'What was collected, what was redacted, and what could not be collected' },
-    { name: 'report.txt', desc: 'ASLCP status report: versions, the node and its active mode, updates, recent ASLCP log' },
-    { name: 'versions.txt', desc: 'ASLCP, the node, operating system, kernel, and package versions' },
+    { name: 'report.txt', desc: 'nodespot status report: versions, the node and its active mode, updates, recent nodespot log' },
+    { name: 'versions.txt', desc: 'nodespot, the node, operating system, kernel, and package versions' },
     { name: 'system.txt', desc: 'Uptime and load, memory, disk use' },
-    { name: 'services.txt', desc: 'State of the ASLCP, node and network services, and listening ports' },
+    { name: 'services.txt', desc: 'State of the nodespot, node and network services, and listening ports' },
     { name: 'network.txt', desc: 'Interfaces, addresses, default gateway, DNS servers (no WiFi passwords or saved networks)' },
     { name: 'journal/<unit>.txt', desc: 'Last 500 journal lines of each allowed unit' },
-    { name: 'config/', desc: 'The node configuration and aslcp.conf, with secret values replaced by <redacted>' },
+    { name: 'config/', desc: 'The node configuration and nodespot.conf, with secret values replaced by <redacted>' },
     { name: 'audit.txt', desc: 'The last 200 audit log entries' },
   ],
-  excluded: ['/etc/shadow and every other password file', 'Private keys and certificates', 'The ASLCP database and session tokens', 'Saved WiFi networks'],
-  redacted: ['Mode passwords (AllStar, EchoLink, DMR masters)', 'ASLCP secrets', 'WiFi pre-shared keys', 'Your callsign and public IP addresses (when masking is on)'],
+  excluded: ['/etc/shadow and every other password file', 'Private keys and certificates', 'The nodespot database and session tokens', 'Saved WiFi networks'],
+  redacted: ['Mode passwords (AllStar, EchoLink, DMR masters)', 'nodespot secrets', 'WiFi pre-shared keys', 'Your callsign and public IP addresses (when masking is on)'],
 };
 const status = () => { const d = new Date(); return { ...host, now: d.toISOString(), clock: d.toString() }; };
 
@@ -72,7 +72,7 @@ export function handleSystem(c: Ctx): boolean {
     if (!['0', '1'].includes(mask)) { c.err(400, 'mask must be 0 or 1', 'bad_request'); return true; }
     note(who, 'system.diagnostics.download', { maskIdentity: mask === '1' });
     const d = new Date(), z = (n: number) => String(n).padStart(2, '0');
-    c.file(`aslcp-diagnostics-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.tar.gz`, `mock diagnostics bundle (not a real archive), identity ${mask === '1' ? 'masked' : 'not masked'}\n`);
+    c.file(`nodespot-diagnostics-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.tar.gz`, `mock diagnostics bundle (not a real archive), identity ${mask === '1' ? 'masked' : 'not masked'}\n`);
     return true;
   }
   if (p === '/system/timezones') { c.json(200, { timezones: ZONES }); return true; }
@@ -86,7 +86,7 @@ export function handleSystem(c: Ctx): boolean {
     c.json(200, { unit, lines, since: c.url.searchParams.get('since') ?? '', text, truncated: false, available: true }); return true;
   }
   if (p === '/system/services') {
-    c.json(200, { available: true, services: [['aslcp-node.service', 'ASLCP node', 'active', 'running'], ['aslcp.service', 'ASL Control Panel', 'active', 'running'], ['aslcp-helper.service', 'ASLCP helper', 'active', 'running'], ['NetworkManager.service', 'Network Manager', 'active', 'running'], ['chrony.service', 'chrony', 'inactive', 'dead']].map(([unit, description, active, sub]) => ({ unit, description, active, sub, enabled: 'enabled', since: active === 'active' ? 'Mon 2026-11-16 08:00:01 UTC' : '' })) }); return true;
+    c.json(200, { available: true, services: [['nodespot-node.service', 'nodespot node', 'active', 'running'], ['nodespot.service', 'ASL Control Panel', 'active', 'running'], ['nodespot-helper.service', 'nodespot helper', 'active', 'running'], ['NetworkManager.service', 'Network Manager', 'active', 'running'], ['chrony.service', 'chrony', 'inactive', 'dead']].map(([unit, description, active, sub]) => ({ unit, description, active, sub, enabled: 'enabled', since: active === 'active' ? 'Mon 2026-11-16 08:00:01 UTC' : '' })) }); return true;
   }
   if (p === '/system/network') {
     c.json(200, { available: true, interfaces: [

@@ -8,14 +8,14 @@ import (
 )
 
 func TestNodeRestart(t *testing.T) {
-	const cmd = "systemctl restart aslcp-node.service"
+	const cmd = "systemctl restart nodespot-node.service"
 	for _, tc := range []struct {
 		name    string
 		r       resp
 		wantErr string
 	}{
 		{"ok", resp{}, ""},
-		{"fails", resp{code: 1, out: "Job for aslcp-node.service failed."}, "aslcp-node.service failed"},
+		{"fails", resp{code: 1, out: "Job for nodespot-node.service failed."}, "nodespot-node.service failed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o, f := osOps(t, map[string]resp{cmd: tc.r})
@@ -37,12 +37,12 @@ func TestNodeRestart(t *testing.T) {
 }
 
 func TestNodeRestartOverSocket(t *testing.T) {
-	o, f := osOps(t, map[string]resp{"systemctl restart aslcp-node.service": {}})
+	o, f := osOps(t, map[string]resp{"systemctl restart nodespot-node.service": {}})
 	c, _ := startServer(t, o, PeerUID, []uint32{0, uint32(os.Getuid())})
 	if err := c.NodeRestart(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if f.called("systemctl restart aslcp-node.service") != 1 {
+	if f.called("systemctl restart nodespot-node.service") != 1 {
 		t.Fatalf("calls %v", f.calls)
 	}
 }

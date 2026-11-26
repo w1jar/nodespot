@@ -15,7 +15,7 @@ func TestFlags(t *testing.T) {
 		code int
 		out  string
 	}{
-		{name: "version", args: []string{"-version"}, code: 0, out: "aslcp-node"},
+		{name: "version", args: []string{"-version"}, code: 0, out: "nodespot-node"},
 		{name: "bad flag", args: []string{"-colour"}, code: 2},
 	}
 	for _, c := range cases {

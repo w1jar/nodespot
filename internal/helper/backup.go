@@ -13,31 +13,31 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/backup"
-	"github.com/artw1/aslcp/internal/native/mode"
-	_ "github.com/artw1/aslcp/internal/native/mode/all" // the mode specs name the secrets
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/backup"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	_ "github.com/w1jar/nodespot/internal/native/mode/all" // the mode specs name the secrets
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 // Default locations of the backup parts.
 const (
-	DefaultAslcpConf = "/etc/aslcp/aslcp.conf"
-	DefaultOSRelease = "/etc/os-release"
+	DefaultNodespotConf = "/etc/nodespot/nodespot.conf"
+	DefaultOSRelease    = "/etc/os-release"
 	// DefaultNodeUser owns the node's files.
-	DefaultNodeUser = "aslcp-node"
+	DefaultNodeUser = "nodespot-node"
 	defaultTempDir  = "/var/tmp"
-	nodeService     = "aslcp-node"
+	nodeService     = "nodespot-node"
 
 	maxNodeFile = 4 << 20
 )
 
-func (o *Ops) nodeConfig() string  { return orDefault(o.NodeConfig, node.DefaultConfigPath) }
-func (o *Ops) sa818State() string  { return orDefault(o.SA818State, sa818.DefaultStatePath) }
-func (o *Ops) nodeUser() string    { return orDefault(o.NodeUser, DefaultNodeUser) }
-func (o *Ops) aslcpConf() string   { return orDefault(o.AslcpConf, DefaultAslcpConf) }
-func (o *Ops) osRelease() string   { return orDefault(o.OSRelease, DefaultOSRelease) }
-func (o *Ops) tempDirRoot() string { return orDefault(o.TempDir, defaultTempDir) }
+func (o *Ops) nodeConfig() string   { return orDefault(o.NodeConfig, node.DefaultConfigPath) }
+func (o *Ops) sa818State() string   { return orDefault(o.SA818State, sa818.DefaultStatePath) }
+func (o *Ops) nodeUser() string     { return orDefault(o.NodeUser, DefaultNodeUser) }
+func (o *Ops) nodespotConf() string { return orDefault(o.NodespotConf, DefaultNodespotConf) }
+func (o *Ops) osRelease() string    { return orDefault(o.OSRelease, DefaultOSRelease) }
+func (o *Ops) tempDirRoot() string  { return orDefault(o.TempDir, defaultTempDir) }
 
 func orDefault(v, d string) string {
 	if v != "" {
@@ -73,7 +73,7 @@ func parseNodeConfig(b []byte) (*node.Config, error) {
 		return nil, fmt.Errorf("the node config is not valid: %w", err)
 	}
 	if c.Version > node.ConfigVersion {
-		return nil, fmt.Errorf("the node config has version %d, newer than this ASLCP knows (%d); update ASLCP first", c.Version, node.ConfigVersion)
+		return nil, fmt.Errorf("the node config has version %d, newer than this nodespot knows (%d); update nodespot first", c.Version, node.ConfigVersion)
 	}
 	if c.Modes == nil {
 		c.Modes = map[string]mode.Settings{}
@@ -126,7 +126,7 @@ func validSA818(b []byte) error {
 		return fmt.Errorf("the SA818 settings are not valid: %w", err)
 	}
 	if st.Version != 1 {
-		return fmt.Errorf("the SA818 settings have version %d, which this ASLCP does not know", st.Version)
+		return fmt.Errorf("the SA818 settings have version %d, which this nodespot does not know", st.Version)
 	}
 	return nil
 }

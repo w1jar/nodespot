@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // Fake is a Mode that records what the node does to it and lets a test

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // Setting keys.

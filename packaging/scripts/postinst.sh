@@ -1,62 +1,62 @@
 #!/bin/sh
-# postinst for aslcp. POSIX sh; safe to run repeatedly.
+# postinst for nodespot. POSIX sh; safe to run repeatedly.
 set -e
 
-DATADIR=/var/lib/aslcp
+DATADIR=/var/lib/nodespot
 FW_MARKER="$DATADIR/.firewalld-rule-added"
 FW_SUM="$DATADIR/.firewalld-service-sum"
-FW_SERVICE_FILE=/usr/lib/firewalld/services/aslcp.xml
+FW_SERVICE_FILE=/usr/lib/firewalld/services/nodespot.xml
 NODE_MARKER="$DATADIR/.node-enabled"
 
 # Timing notes (Raspberry Pi 3): every firewall-cmd call starts Python
 # (~1 s), a firewalld reload takes several seconds, runuser/su start a PAM
 # session. An upgrade therefore skips everything that is already in place and
-# restarts aslcp.service LAST, so the web interface is back as early as
+# restarts nodespot.service LAST, so the web interface is back as early as
 # possible and the upgrade's own journal stays short.
 FIRST_INSTALL=
 
 have_systemd() { [ -d /run/systemd/system ]; }
 
 configure_user() {
-	if ! getent passwd aslcp >/dev/null 2>&1; then
-		if getent group aslcp >/dev/null 2>&1; then
-			adduser --system --ingroup aslcp --home "$DATADIR" --no-create-home \
-				--gecos "ASLCP web control panel" --shell /usr/sbin/nologin aslcp
+	if ! getent passwd nodespot >/dev/null 2>&1; then
+		if getent group nodespot >/dev/null 2>&1; then
+			adduser --system --ingroup nodespot --home "$DATADIR" --no-create-home \
+				--gecos "nodespot web control panel" --shell /usr/sbin/nologin nodespot
 		else
 			adduser --system --group --home "$DATADIR" --no-create-home \
-				--gecos "ASLCP web control panel" --shell /usr/sbin/nologin aslcp
+				--gecos "nodespot web control panel" --shell /usr/sbin/nologin nodespot
 		fi
 	fi
-	install -d -m 0750 -o aslcp -g aslcp "$DATADIR"
+	install -d -m 0750 -o nodespot -g nodespot "$DATADIR"
 }
 
 # The native node runs as its own user, so it never gets access to
-# /var/lib/aslcp. It owns /etc/aslcp/node.json (0600: it holds network
-# passwords) and gets the SHARI's devices through 60-aslcp-node.rules. The
-# aslcp user joins its group to reach the control socket (mode 0660,
-# /run/aslcp-node/control.sock).
+# /var/lib/nodespot. It owns /etc/nodespot/node.json (0600: it holds network
+# passwords) and gets the SHARI's devices through 60-nodespot-node.rules. The
+# nodespot user joins its group to reach the control socket (mode 0660,
+# /run/nodespot-node/control.sock).
 configure_node_user() {
-	if ! getent passwd aslcp-node >/dev/null 2>&1; then
-		if getent group aslcp-node >/dev/null 2>&1; then
-			adduser --system --ingroup aslcp-node --home /nonexistent --no-create-home \
-				--gecos "ASLCP native node" --shell /usr/sbin/nologin aslcp-node
+	if ! getent passwd nodespot-node >/dev/null 2>&1; then
+		if getent group nodespot-node >/dev/null 2>&1; then
+			adduser --system --ingroup nodespot-node --home /nonexistent --no-create-home \
+				--gecos "nodespot native node" --shell /usr/sbin/nologin nodespot-node
 		else
 			adduser --system --group --home /nonexistent --no-create-home \
-				--gecos "ASLCP native node" --shell /usr/sbin/nologin aslcp-node
+				--gecos "nodespot native node" --shell /usr/sbin/nologin nodespot-node
 		fi
 	fi
-	if getent group audio >/dev/null 2>&1 && ! id -nG aslcp-node | tr ' ' '\n' | grep -qx audio; then
-		adduser aslcp-node audio >/dev/null
+	if getent group audio >/dev/null 2>&1 && ! id -nG nodespot-node | tr ' ' '\n' | grep -qx audio; then
+		adduser nodespot-node audio >/dev/null
 	fi
-	if ! id -nG aslcp | tr ' ' '\n' | grep -qx aslcp-node; then
-		adduser aslcp aslcp-node >/dev/null
+	if ! id -nG nodespot | tr ' ' '\n' | grep -qx nodespot-node; then
+		adduser nodespot nodespot-node >/dev/null
 	fi
-	# The node writes its config next to aslcp.conf (atomically, so it needs
+	# The node writes its config next to nodespot.conf (atomically, so it needs
 	# the directory); everyone else keeps read access.
-	install -d -m 0775 -o root -g aslcp-node /etc/aslcp
-	for f in /etc/aslcp/node.json /etc/aslcp/sa818.json; do
+	install -d -m 0775 -o root -g nodespot-node /etc/nodespot
+	for f in /etc/nodespot/node.json /etc/nodespot/sa818.json; do
 		[ -e "$f" ] || continue
-		chown aslcp-node:aslcp-node "$f"
+		chown nodespot-node:nodespot-node "$f"
 		chmod 0600 "$f"
 	done
 	if command -v udevadm >/dev/null 2>&1; then
@@ -65,54 +65,54 @@ configure_node_user() {
 	fi
 }
 
-# Everything the restart of aslcp.service depends on. daemon-reload is fast
+# Everything the restart of nodespot.service depends on. daemon-reload is fast
 # and needed in case unit files changed.
 prepare_services() {
 	have_systemd || return 0
 	systemctl daemon-reload || true
 	if [ -n "$FIRST_INSTALL" ]; then
-		systemctl enable aslcp-helper.socket aslcp.service >/dev/null 2>&1 || true
+		systemctl enable nodespot-helper.socket nodespot.service >/dev/null 2>&1 || true
 	fi
 	# The setup hotspot watchdog (it does nothing without NetworkManager and
 	# a WiFi device). Enabled on first install only, so an admin who disabled
 	# the timer keeps it off; started on every configure to run the new code.
 	if [ -n "$FIRST_INSTALL" ]; then
-		systemctl enable aslcp-wifi-watchdog.timer >/dev/null 2>&1 || true
+		systemctl enable nodespot-wifi-watchdog.timer >/dev/null 2>&1 || true
 	fi
-	if systemctl is-enabled aslcp-wifi-watchdog.timer >/dev/null 2>&1; then
-		systemctl restart aslcp-wifi-watchdog.timer >/dev/null 2>&1 || true
+	if systemctl is-enabled nodespot-wifi-watchdog.timer >/dev/null 2>&1; then
+		systemctl restart nodespot-wifi-watchdog.timer >/dev/null 2>&1 || true
 	fi
 	# 3.0 replaced the digital voice engine with the native node: stop the
 	# old engine if it is still running from before the upgrade.
-	if systemctl is-active aslcp-dv.service >/dev/null 2>&1 || systemctl is-enabled aslcp-dv.service >/dev/null 2>&1; then
-		systemctl disable --now aslcp-dv.service >/dev/null 2>&1 || true
+	if systemctl is-active nodespot-dv.service >/dev/null 2>&1 || systemctl is-enabled nodespot-dv.service >/dev/null 2>&1; then
+		systemctl disable --now nodespot-dv.service >/dev/null 2>&1 || true
 	fi
 	# The native node is enabled once (first install, or the upgrade that
 	# brings it), so an admin who disabled it keeps it off; an enabled node
 	# runs the new binary after an upgrade.
 	if [ ! -e "$NODE_MARKER" ]; then
-		systemctl enable aslcp-node.service >/dev/null 2>&1 || true
+		systemctl enable nodespot-node.service >/dev/null 2>&1 || true
 		touch "$NODE_MARKER" 2>/dev/null || true
 	fi
-	if systemctl is-enabled aslcp-node.service >/dev/null 2>&1; then
-		systemctl restart aslcp-node.service >/dev/null 2>&1 || echo "aslcp: warning: could not start aslcp-node.service (see: journalctl -u aslcp-node)"
+	if systemctl is-enabled nodespot-node.service >/dev/null 2>&1; then
+		systemctl restart nodespot-node.service >/dev/null 2>&1 || echo "nodespot: warning: could not start nodespot-node.service (see: journalctl -u nodespot-node)"
 	fi
 	# Restart (not just start) so an upgrade runs the new helper binary.
-	systemctl stop aslcp-helper.service >/dev/null 2>&1 || true
-	systemctl restart aslcp-helper.socket || echo "aslcp: warning: could not start aslcp-helper.socket"
+	systemctl stop nodespot-helper.service >/dev/null 2>&1 || true
+	systemctl restart nodespot-helper.socket || echo "nodespot: warning: could not start nodespot-helper.socket"
 }
 
 # The LAST step: the web interface is down only for the restart itself.
 restart_app() {
 	have_systemd || return 0
-	systemctl restart aslcp.service || echo "aslcp: warning: could not start aslcp.service (see: journalctl -u aslcp)"
+	systemctl restart nodespot.service || echo "nodespot: warning: could not start nodespot.service (see: journalctl -u nodespot)"
 }
 
 fw_service_sum() {
 	cksum <"$FW_SERVICE_FILE" 2>/dev/null | awk '{print $1 ":" $2}'
 }
 
-# conf_port: TCP port of "listen" in the [server] section of aslcp.conf
+# conf_port: TCP port of "listen" in the [server] section of nodespot.conf
 # (":8080" or "addr:port"); 8080 when unset or invalid.
 conf_port() {
 	l=$(awk '
@@ -121,7 +121,7 @@ conf_port() {
 		sec { i = index($0, "="); if (i == 0) next
 			k = substr($0, 1, i - 1); gsub(/[ \t]/, "", k)
 			if (k == "listen") { val = substr($0, i + 1); sub(/[ \t]*[;#].*$/, "", val); gsub(/^[ \t]+|[ \t]+$/, "", val); out = val } }
-		END { print out }' "${ASLCP_CONF:-/etc/aslcp/aslcp.conf}" 2>/dev/null || true)
+		END { print out }' "${NODESPOT_CONF:-/etc/nodespot/nodespot.conf}" 2>/dev/null || true)
 	p=${l##*:}
 	case "$p" in
 	'' | *[!0-9]* | 0*) p=8080 ;;
@@ -130,13 +130,13 @@ conf_port() {
 	printf '%s\n' "$p"
 }
 
-# Port 8080 uses the packaged firewalld service "aslcp"; any other port is
+# Port 8080 uses the packaged firewalld service "nodespot"; any other port is
 # opened directly (--add-port).
 configure_firewalld() {
 	command -v firewall-cmd >/dev/null 2>&1 || return 0
 	port=$(conf_port)
 	if [ "$port" = 8080 ]; then
-		fw_query=--query-service=aslcp fw_add=--add-service=aslcp fw_what="service 'aslcp'"
+		fw_query=--query-service=nodespot fw_add=--add-service=nodespot fw_what="service 'nodespot'"
 	else
 		fw_query=--query-port=$port/tcp fw_add=--add-port=$port/tcp fw_what="port"
 	fi
@@ -160,33 +160,12 @@ configure_firewalld() {
 	if firewall-cmd --permanent "$fw_add" >/dev/null 2>&1 && firewall-cmd --reload >/dev/null 2>&1; then
 		touch "$FW_MARKER"
 		[ -z "$sum" ] || echo "$sum" >"$FW_SUM" 2>/dev/null || true
-		echo "aslcp: firewalld is running: opened TCP $port ($fw_what, permanent)."
+		echo "nodespot: firewalld is running: opened TCP $port ($fw_what, permanent)."
 	else
-		echo "aslcp: warning: firewalld is running but opening TCP $port failed;"
-		echo "aslcp:   run: firewall-cmd --permanent $fw_add && firewall-cmd --reload"
+		echo "nodespot: warning: firewalld is running but opening TCP $port failed;"
+		echo "nodespot:   run: firewall-cmd --permanent $fw_add && firewall-cmd --reload"
 	fi
 }
-
-# ---8<--- migrate-urls (the public repo moved: artw1/aslcp-apt -> artw1/aslcp -> w1jar/aslcp)
-# Idempotent. Only the exact old URLs are rewritten (artw1.github.io/aslcp and
-# artw1.github.io/aslcp-apt, followed by "/", whitespace or end of line) to
-# w1jar.github.io/aslcp; the signed-by option and the rest of the line stay.
-# One anchored pattern covers both old names, so ".../aslcp" cannot match the
-# start of ".../aslcp-apt" and leave a wrong "-apt" behind.
-migrate_urls() {
-	list=${ASLCP_APT_LIST:-/etc/apt/sources.list.d/aslcp.list}
-	conf=${ASLCP_CONF:-/etc/aslcp/aslcp.conf}
-	old_host='artw1\.github\.io/aslcp(-apt)?'
-	if [ -f "$list" ] && grep -Eq "${old_host}([^A-Za-z0-9_-]|\$)" "$list"; then
-		sed -i -E "s#${old_host}([^A-Za-z0-9_-]|\$)#w1jar.github.io/aslcp\2#g" "$list"
-		echo "aslcp: note: the apt source $list now points to https://w1jar.github.io/aslcp (the repository moved)."
-	fi
-	if [ -f "$conf" ] && grep -Eq "^[[:space:]]*url[[:space:]]*=[[:space:]]*https://${old_host}/?[[:space:]]*\$" "$conf"; then
-		sed -i -E "s#^([[:space:]]*url[[:space:]]*=[[:space:]]*)https://${old_host}/?[[:space:]]*\$#\1https://w1jar.github.io/aslcp#" "$conf"
-		echo "aslcp: note: updated the [updates] url in $conf to https://w1jar.github.io/aslcp (the repository moved)."
-	fi
-}
-# --->8--- migrate-urls
 
 first_install_message() {
 	ip=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -204,30 +183,29 @@ first_install_message() {
 	else
 		G='' Y='' R=''
 	fi
-	printf '\n%saslcp: installed.%s\n' "$G" "$R"
+	printf '\n%snodespot: installed.%s\n' "$G" "$R"
 	if [ -n "$code" ]; then
-		printf 'aslcp: open the one-time setup link to create the administrator or restore a backup:\n'
+		printf 'nodespot: open the one-time setup link to create the administrator or restore a backup:\n'
 		printf '    %shttp://%s:%s/#/setup?code=%s%s\n' "$Y" "$ip" "$port" "$code" "$R"
-		echo "aslcp: show the code again:   sudo aslcp admin setup-code"
+		echo "nodespot: show the code again:   sudo nodespot admin setup-code"
 	else
-		echo "aslcp: open http://$ip:$port and get the setup code with:   sudo aslcp admin setup-code"
+		echo "nodespot: open http://$ip:$port and get the setup code with:   sudo nodespot admin setup-code"
 	fi
-	echo "aslcp: or create the admin in the terminal:   sudo aslcp admin create"
+	echo "nodespot: or create the admin in the terminal:   sudo nodespot admin create"
 	echo
 }
 
 case "$1" in
 configure)
 	[ -n "$2" ] || FIRST_INSTALL=1
-	migrate_urls
 	configure_user
 	configure_node_user
 	prepare_services
 	configure_firewalld
 	restart_app
 	# install.sh prints the setup link itself once everything (the port) is
-	# done, so it sets ASLCP_INSTALLER=1 to keep this one from showing early.
-	if [ -z "$2" ] && [ -z "${ASLCP_INSTALLER:-}" ]; then
+	# done, so it sets NODESPOT_INSTALLER=1 to keep this one from showing early.
+	if [ -z "$2" ] && [ -z "${NODESPOT_INSTALLER:-}" ]; then
 		first_install_message
 	fi
 	;;

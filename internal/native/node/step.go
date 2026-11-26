@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // stepParams are the station settings the 20 ms step uses, derived from

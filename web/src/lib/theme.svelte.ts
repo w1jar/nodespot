@@ -2,7 +2,7 @@ export type Theme = 'system' | 'light' | 'dark';
 // Dark is the default; 'system' is stored explicitly so it can be told apart
 // from "never chose".
 function read(): Theme {
-  try { const v = localStorage.getItem('aslcp-theme'); if (v === 'light' || v === 'dark' || v === 'system') return v; } catch { /* ignore */ }
+  try { const v = localStorage.getItem('nodespot-theme'); if (v === 'light' || v === 'dark' || v === 'system') return v; } catch { /* ignore */ }
   return 'dark';
 }
 export const theme = $state<{ value: Theme }>({ value: read() });
@@ -12,7 +12,7 @@ function apply() {
 }
 export function setTheme(t: Theme) {
   theme.value = t;
-  try { localStorage.setItem('aslcp-theme', t); } catch { /* ignore */ }
+  try { localStorage.setItem('nodespot-theme', t); } catch { /* ignore */ }
   apply();
 }
 // dark -> light -> system -> dark

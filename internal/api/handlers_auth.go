@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 func (s *Server) handleSetupGet(w http.ResponseWriter, r *http.Request) {

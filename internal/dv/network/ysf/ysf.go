@@ -68,9 +68,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/network"
-	air "github.com/artw1/aslcp/internal/dv/ysf"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/network"
+	air "github.com/w1jar/nodespot/internal/dv/ysf"
 )
 
 const (

@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/radio"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/system"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/system"
 )
 
 // Node is the node daemon's control API as the server uses it.

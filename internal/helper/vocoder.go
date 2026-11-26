@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/legacy"
+	"github.com/w1jar/nodespot/internal/legacy"
 )
 
 // The AMBE vocoder (md380-emu) is installed on demand, from the Modes page,
@@ -43,7 +43,7 @@ const (
 
 	// DefaultVocoderDropin is the unit drop-in that keeps the vocoder, which
 	// binds every address, reachable from this machine only.
-	DefaultVocoderDropin = "/etc/systemd/system/md380-emu.service.d/aslcp.conf"
+	DefaultVocoderDropin = "/etc/systemd/system/md380-emu.service.d/nodespot.conf"
 	vocoderDropinText    = "[Service]\nIPAddressDeny=any\nIPAddressAllow=localhost\n"
 
 	vocoderSuite      = "bookworm" // the repository uses it on trixie too
@@ -55,7 +55,7 @@ const (
 	vocoderPkg     = "md380-emu"
 	vocoderQemuPkg = "qemu-user-static"
 	// vocoderJobUnit is the transient unit of the install job.
-	vocoderJobUnit = "aslcp-vocoder-install"
+	vocoderJobUnit = "nodespot-vocoder-install"
 )
 
 // Errors of the vocoder ops. The client gets the texts back (client.go) and
