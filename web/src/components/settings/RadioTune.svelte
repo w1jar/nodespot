@@ -1,10 +1,11 @@
 <script lang="ts">
-  // The radio: the interface, the SA818 channel, and the timing and ID. Whatever mode is active, audio goes to this radio.
+  // The radio: the interface, the SA818 card (channel, volume, tail tone, filters), and the timing and ID. Whatever mode is active, audio goes to this radio.
   // The levels and AGC are on the Audio tab (AudioTune.svelte).
   import { api } from '../../lib/api';
   import { refreshNode } from '../../lib/store.svelte';
   import { toast, toastError } from '../../lib/toast.svelte';
   import { stationBody, validateStation } from '../../lib/station';
+  import { SA818_FILTER_KEYS, TAIL_CHOICES, filterOn, programmedText, sa818Body, sa818VolumeError, tailChoice, tailValue } from '../../lib/audio';
   import { hasSA818, isShari, pinError, radioBody, resolveInterface } from '../../lib/radio';
   import type { RadioInfo, Station } from '../../lib/types';
   import StationFields from '../StationFields.svelte';
@@ -25,13 +26,18 @@
   async function save(ev: Event) {
     ev.preventDefault();
     if (!st) return;
-    err = validateStation(st, sa818) || (info ? pinError(iface) : '');
+    err = validateStation(st, sa818) || (sa818 ? sa818VolumeError(st.radio.sa818Volume) : '') || (info ? pinError(iface) : '');
     if (err) return;
     busy = true;
     try { const body = stationBody(st, sa818);
+      if (sa818) body.radio = sa818Body(body.radio);
       if (info) body.radio = radioBody(body.radio, info.presets, isShari(info));
       await api.saveStation(body); await refreshNode(); await load(); toast('Radio settings saved'); } catch (e) { toastError(e); } finally { busy = false; }
   }
+  const chk = 'mt-0.5 size-4 accent-[var(--accent)]';
+  const FLAG_LABELS = { emphasis: 'Pre/de-emphasis', highPass: 'High-pass (removes PL tone)', lowPass: 'Low-pass' } as const;
+  const FLAG_HELP = { emphasis: 'Off by default.', highPass: 'On by default.', lowPass: 'On by default.' } as const;
+  function setFilter(k: (typeof SA818_FILTER_KEYS)[number], on: boolean) { if (st) st.radio.sa818Filter = { ...st.radio.sa818Filter, [k]: on }; }
   async function program() {
     prog = true;
     try { await api.radioProgram(); toast('Radio programmed'); } catch (e) { toastError(e); } finally { prog = false; }
@@ -52,15 +58,38 @@
     <form class="space-y-3" onsubmit={save}>
       {#if sa818}
         <StationFields bind:st radio idToggle={false} idPrefix="rt" />
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="label" for="rt-sa-volume">Volume (1 to 8)</label>
+            <input id="rt-sa-volume" class="input tabular-nums" type="number" inputmode="numeric" min="1" max="8" step="1" bind:value={st.radio.sa818Volume} placeholder="8" />
+            <p class="mt-1 text-xs text-muted">The module's speaker output level. Empty is 8.</p>
+          </div>
+          <div>
+            <label class="label" for="rt-sa-tail">Tail tone</label>
+            <select id="rt-sa-tail" class="input" value={tailChoice(st.radio.sa818Tail)} onchange={(e) => (st!.radio.sa818Tail = tailValue(e.currentTarget.value))}>
+              {#each TAIL_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
+            </select>
+            <p class="mt-1 text-xs text-muted">Open adds the module's squelch tail tone at the end of each transmission; Closed does not. Leave as is changes nothing.</p>
+          </div>
+        </div>
+        <fieldset class="space-y-2">
+          <legend class="text-sm font-medium">Filters</legend>
+          <div class="grid gap-2 sm:grid-cols-3">
+            {#each SA818_FILTER_KEYS as k (k)}
+              <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class={chk} checked={filterOn(st.radio.sa818Filter, k)} onchange={(e) => setFilter(k, e.currentTarget.checked)} /><span>{FLAG_LABELS[k]}<span class="block text-xs text-muted">{FLAG_HELP[k]}</span></span></label>
+            {/each}
+          </div>
+        </fieldset>
+        <p class="text-xs text-muted" data-testid="sa818-programmed">{programmedText(info ?? undefined)}</p>
       {:else}
         <p class="text-sm text-muted">The frequency and tone are set on the radio itself. Save to keep the interface settings above.</p>
       {/if}
       {#if err}<p class="text-sm text-danger" role="alert">{err}</p>{/if}
       <div class="flex flex-wrap gap-2">
         <button class="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-        {#if sa818 && st.radio.sa818Port}<button class="btn" type="button" onclick={program} disabled={prog}>{prog ? 'Programming…' : 'Program the SA818'}</button>{/if}
+        {#if sa818}<button class="btn" type="button" onclick={program} disabled={prog}>{prog ? 'Programming…' : 'Program the SA818'}</button>{/if}
       </div>
-      {#if sa818 && st.radio.sa818Port}<p class="text-xs text-muted">SA818 on <span class="font-mono">{st.radio.sa818Port}</span>. Saving programs the channel when the radio is present.</p>{/if}
+      {#if sa818}<p class="text-xs text-muted">{#if st.radio.sa818Port}SA818 on <span class="font-mono">{st.radio.sa818Port}</span>.{:else}The node finds the SA818's serial port itself.{/if} Saving programs the radio when a module value changed.</p>{/if}
     </form>
   </section>
 {/if}

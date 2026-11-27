@@ -286,13 +286,62 @@ func TestSA818Filters(t *testing.T) {
 	if got := cmds[2]; got != "AT+SETFILTER=0,0,1" {
 		t.Fatalf("filter command %q, want emphasis on (0), high-pass on (0), low-pass bypassed (1)", got)
 	}
-	// Changing only the filters is not a channel change: nothing is programmed.
+	// Changing only the filters reprograms the module, like any module value.
 	old := RadioConfig{FrequencyMHz: 446.1}
-	if channelChanged(old, r) {
-		t.Fatal("a filter change counts as a channel change")
+	if !channelChanged(old, r) {
+		t.Fatal("a filter change does not count as a change")
 	}
 	b, _ := json.Marshal(r)
 	if !strings.Contains(string(b), `"sa818Filter":{"emphasis":true,"lowPass":false}`) {
+		t.Fatalf("json %s", b)
+	}
+}
+
+func TestSA818VolumeAndTail(t *testing.T) {
+	r := RadioConfig{FrequencyMHz: 446.1}
+	s, err := r.SA818()
+	if err != nil || s.Volume != 8 || s.Tail != nil {
+		t.Fatalf("defaults: %+v, %v", s, err)
+	}
+	cmds, _ := s.Commands()
+	if len(cmds) != 3 {
+		t.Fatalf("default commands %q send a tail command", cmds)
+	}
+	vol := 5
+	r.SA818Volume, r.SA818Tail = &vol, bp(false)
+	s, err = r.SA818()
+	if err != nil || s.Volume != 5 || s.Tail == nil || *s.Tail {
+		t.Fatalf("set: %+v, %v", s, err)
+	}
+	cmds, _ = s.Commands()
+	if cmds[1] != "AT+DMOSETVOLUME=5" || cmds[3] != "AT+SETTAIL=0" {
+		t.Fatalf("commands %q", cmds)
+	}
+	for _, v := range []int{0, 9} {
+		c := quietConfig()
+		c.Station.Radio = RadioConfig{FrequencyMHz: 446.1, SA818Volume: &v}
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "volume must be 1 to 8") {
+			t.Errorf("volume %d: err = %v", v, err)
+		}
+	}
+	// Each module value counts as a change; an unset value equals its default.
+	base := RadioConfig{FrequencyMHz: 446.1}
+	eight := 8
+	same := RadioConfig{FrequencyMHz: 446.1, SA818Volume: &eight}
+	if channelChanged(base, same) {
+		t.Fatal("volume 8 differs from unset")
+	}
+	for name, c := range map[string]RadioConfig{
+		"volume":  {FrequencyMHz: 446.1, SA818Volume: &vol},
+		"tail":    {FrequencyMHz: 446.1, SA818Tail: bp(true)},
+		"filters": {FrequencyMHz: 446.1, SA818Filter: &SA818Filter{LowPass: bp(false)}},
+	} {
+		if !channelChanged(base, c) {
+			t.Errorf("%s change is not a change", name)
+		}
+	}
+	b, _ := json.Marshal(r)
+	if !strings.Contains(string(b), `"sa818Volume":5`) || !strings.Contains(string(b), `"sa818Tail":false`) {
 		t.Fatalf("json %s", b)
 	}
 }

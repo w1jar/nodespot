@@ -138,7 +138,7 @@
         <div class="-mx-2 flex items-center gap-1.5 rounded border border-transparent px-2 py-1 text-sm {localTx && node.active ? 'talk-live talk-local' : talker || app.nowcalling?.current ? 'talk-live' : ''}" data-testid="talker" data-live={localTx && node.active ? 'local' : talker || app.nowcalling?.current ? 'remote' : undefined} aria-live="polite">
           <Mic size={14} class="shrink-0 {localTx && node.active ? 'talk-mic text-accent' : talker || app.nowcalling?.current ? 'talk-mic text-danger' : 'text-muted'}" aria-hidden="true" />
           {#if localTx && node.active}<span class="min-w-0 truncate" data-testid="local-tx"><b>Local station</b> · sending to {modeTitle(node.active, app.modes)}</span>
-          {:else if talker}<span class="min-w-0 truncate"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
+          {:else if talker}<span class="min-w-0 truncate"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name}{' · '}{talker.name}{/if}{#if talker.place}{' · '}<span class="text-muted">{talker.place}</span>{/if}</span>
           {:else if app.nowcalling?.current}<span class="min-w-0 truncate"><b class="font-mono">{who(app.nowcalling.current)}</b></span>
           {:else}<span class="text-muted">Nobody is talking</span>{/if}
         </div>

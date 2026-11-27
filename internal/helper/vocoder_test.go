@@ -367,7 +367,7 @@ func TestWaitVocoderInstall(t *testing.T) {
 	out, err := run(started, seq(VocoderStatus{Job: "running", JobLog: "a\n"},
 		VocoderStatus{Job: "running", JobLog: "a\nb\n"},
 		VocoderStatus{Job: "done", JobLog: "a\nb\nvocoder installed\n", Installed: true, Active: true}))
-	if err != nil || out != "installing the vocoder (md380-emu); this can take a few minutes\na\nb\nvocoder installed\n" {
+	if err != nil || out != "installing the software AMBE vocoder; this can take a few minutes\na\nb\nvocoder installed\n" {
 		t.Errorf("success: %q %v", out, err)
 	}
 

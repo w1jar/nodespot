@@ -154,7 +154,7 @@ type Env struct {
 	Log *slog.Logger
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
-	// MD380 is the address of the md380-emu AMBE vocoder (DMR and YSF).
+	// MD380 is the address of the software AMBE vocoder AMBE vocoder (DMR and YSF).
 	MD380 string
 	// MD380Timeout bounds one vocoder request (0 = the vocoder default).
 	MD380Timeout time.Duration
@@ -187,7 +187,7 @@ type Spec struct {
 	Fields      []Field `json:"fields"`
 	// NeedsHost: targets need an address (from Reflectors or Target.Host).
 	NeedsHost bool `json:"needsHost,omitempty"`
-	// NeedsAMBE: the mode's voice is AMBE, which the md380-emu vocoder
+	// NeedsAMBE: the mode's voice is AMBE, which the software AMBE vocoder
 	// encodes and decodes (the UI offers to install it).
 	NeedsAMBE bool `json:"needsAmbe,omitempty"`
 	// AMBEFor, when set, decides NeedsAMBE from the saved settings (the
@@ -203,7 +203,7 @@ type Spec struct {
 	New func(Env, Settings) (Mode, error) `json:"-"`
 }
 
-// AMBENeeded reports whether the mode needs the md380-emu vocoder with the
+// AMBENeeded reports whether the mode needs the software AMBE vocoder with the
 // settings s: AMBEFor when the spec has one, else NeedsAMBE.
 func (sp Spec) AMBENeeded(s Settings) bool {
 	if sp.AMBEFor != nil {

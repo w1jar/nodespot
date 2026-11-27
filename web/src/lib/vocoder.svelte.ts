@@ -1,4 +1,4 @@
-// The AMBE vocoder (md380-emu) install status, shared by the Modes page and the Dashboard: one load, one poll while an install runs.
+// The software AMBE vocoder install status, shared by the Modes page and the Dashboard: one load, one poll while an install runs.
 import { api } from './api';
 import { refreshModes } from './store.svelte';
 import { toast } from './toast.svelte';

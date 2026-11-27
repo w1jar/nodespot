@@ -1,4 +1,4 @@
-// Package vocoder defines the voice codecs the engine uses and the md380-emu
+// Package vocoder defines the voice codecs the engine uses and the software AMBE vocoder
 // client that provides AMBE+2.
 package vocoder
 
@@ -37,9 +37,9 @@ type Codec2 interface {
 // frame whose encode timed out.
 var SilenceAMBE = [AMBEBytes]byte{0xf8, 0x01, 0xa9, 0x9f, 0x8c, 0xe0, 0x80}
 
-// Stats are the md380 client counters, summed over both directions.
+// Stats are the vocoder client counters, summed over both directions.
 type Stats struct {
-	Frames   uint64 // requests answered by md380-emu
+	Frames   uint64 // requests answered by the software AMBE vocoder
 	Timeouts uint64 // requests that timed out or failed (replaced by silence)
 	Down     bool   // too many consecutive timeouts
 }

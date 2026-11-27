@@ -121,7 +121,7 @@ export interface ModeSettings { values?: Record<string, string>; favorites?: Tar
 /** One mode of GET /api/modes. Operators and viewers get no fields, settings or secretsSet. */
 export interface ModeInfo {
   name: string; title: string; targetLabel?: string; targetHelp?: string; needsHost?: boolean;
-  /** The mode's voice is AMBE: it needs the md380-emu vocoder (see Vocoder). */
+  /** The mode's voice is AMBE: it needs the software AMBE vocoder (see Vocoder). */
   needsAmbe?: boolean;
   fields?: ModeField[]; settings?: ModeSettings; secretsSet?: Record<string, boolean>;
   /** Ready to use: every required value is set on the mode or comes from the station. The echo test is always ready. */
@@ -151,7 +151,7 @@ export interface StationId {
   wpm?: number; pitchHz?: number; levelDb?: number; voiceFile?: string;
   [key: string]: unknown;
 }
-/** station.advanced: timers and AGC. Unset or 0 is the node's default. Unknown keys (md380 and others) survive a save. */
+/** station.advanced: timers and AGC. Unset or 0 is the node's default. Unknown keys (such as `md380`, and others) survive a save. */
 export interface StationAdvanced {
   hangMs?: number; txTimeoutS?: number;
   /** AGC: radioAgc is radio to network, modeAgc network to radio; both on by default. Targets -40 to -6 dBFS (unset -22). */
@@ -181,6 +181,10 @@ export interface Station {
     rxBoost?: boolean;
     /** The SA818's filter flags, written to the module only by Program. Unset flags take the defaults: emphasis off, high-pass and low-pass on. */
     sa818Filter?: Sa818Filter;
+    /** The SA818's volume, 1 to 8; unset is 8. Written with the other module values when the channel or a module value changes. */
+    sa818Volume?: number;
+    /** The SA818's tail tone: true opens it, false closes it; unset sends nothing and leaves the module as it is. */
+    sa818Tail?: boolean;
   };
   id: StationId;
   advanced: StationAdvanced;
@@ -194,12 +198,15 @@ export interface RadioInterface {
 export interface Sa818Filter { emphasis?: boolean; highPass?: boolean; lowPass?: boolean }
 /** What the SA818's filters were last programmed to (from its state file); absent when never programmed. */
 export interface Sa818Programmed { emphasis: boolean; highPass: boolean; lowPass: boolean; at?: string }
+/** What the SA818 was last programmed with besides the frequency and tone; tail is absent when no tail command was sent. */
+export interface Sa818Last { squelch: number; volume: number; tail?: boolean; filters: Sa818Programmed; at?: string }
 export interface RadioPreset { name: string; title: string; description: string; defaults: RadioInterface }
 /** GET /api/radio/info (admin). */
 export interface RadioInfo {
   present: boolean; detected: boolean; chip?: string; usbId?: string; product?: string; busPath?: string; shari: boolean;
   interface: RadioInterface; preset: string; presets: RadioPreset[]; resolved?: RadioInterface; restartRequired?: boolean;
   sa818Filters?: Sa818Programmed;
+  sa818Programmed?: Sa818Last;
 }
 export interface Reading { RMSDb: number; PeakDb: number; Active: boolean; Clipped: number; Frames: number }
 /** GET and PUT /api/radio: the sound chip's levels. -1 means the chip has no such control. */

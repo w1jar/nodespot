@@ -95,7 +95,7 @@ type OSStatus struct {
 	RebootPkgs     []string    `json:"rebootPkgs"`
 	Job            string      `json:"job"`
 	JobLog         string      `json:"jobLog"`
-	// Warnings are non-fatal notes of os-check, e.g. that the md380-emu
+	// Warnings are non-fatal notes of os-check, e.g. that the software AMBE vocoder
 	// repository could not be refreshed.
 	Warnings []string `json:"warnings,omitempty"`
 }

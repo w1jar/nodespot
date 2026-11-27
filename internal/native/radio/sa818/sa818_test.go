@@ -61,6 +61,8 @@ func okModule(cmd string) string {
 		return "+DMOSETGROUP:0\r\n"
 	case strings.HasPrefix(cmd, "AT+DMOSETVOLUME"):
 		return "+DMOSETVOLUME:0\r\n"
+	case strings.HasPrefix(cmd, "AT+SETTAIL"):
+		return "+DMOSETTAIL:0\r\n"
 	case strings.HasPrefix(cmd, "AT+SETFILTER"):
 		return "+DMOSETFILTER:0\r\n"
 	}
@@ -142,6 +144,18 @@ func TestCommands(t *testing.T) {
 			"AT+DMOSETGROUP=1,146.5200,146.5200,025I,4,023N",
 			"AT+DMOSETVOLUME=8",
 			"AT+SETFILTER=1,0,0",
+		}, false},
+		{"tail open", func(s *Settings) { s.Tail = ptr(true) }, []string{
+			"AT+DMOSETGROUP=1,146.5200,146.5200,0000,4,0000",
+			"AT+DMOSETVOLUME=8",
+			"AT+SETFILTER=1,0,0",
+			"AT+SETTAIL=1",
+		}, false},
+		{"tail closed", func(s *Settings) { s.Tail = ptr(false) }, []string{
+			"AT+DMOSETGROUP=1,146.5200,146.5200,0000,4,0000",
+			"AT+DMOSETVOLUME=8",
+			"AT+SETFILTER=1,0,0",
+			"AT+SETTAIL=0",
 		}, false},
 		{"frequency out of band", func(s *Settings) { s.RxMHz = 200 }, nil, true},
 		{"squelch too high", func(s *Settings) { s.Squelch = 9 }, nil, true},
@@ -276,7 +290,7 @@ func TestProgrammerSavesOnlyOnSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Settings != s || st.Version != 2 || !st.AppliedAt.Equal(time.Date(2026, 11, 26, 3, 4, 5, 0, time.UTC)) {
+	if st.Settings != s || st.Version != 3 || !st.AppliedAt.Equal(time.Date(2026, 11, 26, 3, 4, 5, 0, time.UTC)) {
 		t.Errorf("state = %+v", st)
 	}
 	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o644 {
@@ -336,6 +350,53 @@ func TestFindPort(t *testing.T) {
 // does not count as programmed.
 func TestStateVersion1IsStale(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sa818.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"applied_at":"2026-01-01T00:00:00Z","settings":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadState(path); err == nil {
+		t.Fatal("a version 1 state loaded")
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func TestApplyTailOverFakeSerial(t *testing.T) {
+	f := &fakeSerial{reply: okModule}
+	c := newClient(f)
+	s := DefaultSettings()
+	s.RxMHz, s.TxMHz = 146.52, 146.52
+	s.Tail = ptr(true)
+	if err := c.Apply(s); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sent[len(f.sent)-1]; got != "AT+SETTAIL=1" {
+		t.Errorf("last command %q", got)
+	}
+	bad := &fakeSerial{reply: func(cmd string) string {
+		if strings.HasPrefix(cmd, "AT+SETTAIL") {
+			return "+DMOSETTAIL:1\r\n"
+		}
+		return okModule(cmd)
+	}}
+	if err := newClient(bad).Apply(s); err == nil || !strings.Contains(err.Error(), "SETTAIL refused") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// A version 2 state file has no tail field; it still loads, with the tail
+// unset, so an upgrade does not program the module again. Version 1 does not.
+func TestStateVersion2Loads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sa818.json")
+	if err := os.WriteFile(path, []byte(`{"version":2,"applied_at":"2026-01-01T00:00:00Z","settings":{"volume":8}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := LoadState(path)
+	if err != nil {
+		t.Fatalf("version 2: %v", err)
+	}
+	if st.Settings.Tail != nil || st.Settings.Volume != 8 {
+		t.Errorf("settings = %+v", st.Settings)
+	}
 	if err := os.WriteFile(path, []byte(`{"version":1,"applied_at":"2026-01-01T00:00:00Z","settings":{}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}

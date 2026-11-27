@@ -1,5 +1,5 @@
 // Package legacy names the previous third-party digital voice stack in one
-// place. nodespot refers to it only to install md380-emu from that stack's apt
+// place. nodespot refers to it only to install the vocoder from that stack's apt
 // repository, to stop and purge old installs (units, packages, apt source),
 // and to migrate its own old data (state directories, settings keys, backup
 // part ids, database tables). Nothing else in the code base spells these
@@ -8,7 +8,7 @@ package legacy
 
 import "strings"
 
-// External apt repository that ships md380-emu.
+// External apt repository that ships the software AMBE vocoder.
 const (
 	AptRepoURL   = "http://dvswitch.org/DVSwitch_Repository"
 	KeyURL       = "https://dvswitch.org/DVSwitch_Repository/dvswitch-keyring.gpg"

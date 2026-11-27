@@ -82,8 +82,18 @@ const hostListsStatus = () => {
 
 // ---- Station and node state.
 const station: Record<string, any> & { callsign: string; radio: Record<string, any>; id: Record<string, any>; advanced: Record<string, any> } = { callsign: 'N0CALL', dmrId: 1234567, radio: { frequencyMHz: 146.52, tone: '100.0', squelch: 4, narrow: false, rxVolume: 0.6, txVolume: 0.55, preset: '', sa818Port: '/dev/ttyUSB0' }, id: { enabled: true, intervalS: 600, wpm: 20, pitchHz: 800, levelDb: -12 }, advanced: { hangMs: 600, modeAgc: true } };
-// What the SA818's filters were last programmed to; unknown until the Program button is used.
-let programmedFilters: { emphasis: boolean; highPass: boolean; lowPass: boolean; at: string } | null = null;
+// What the SA818 was last programmed with; unknown until the Program button is used or a module value is saved.
+type ProgFilters = { emphasis: boolean; highPass: boolean; lowPass: boolean; at: string };
+let programmedFilters = null as ProgFilters | null;
+let programmedSA818 = null as { squelch: number; volume: number; tail?: boolean; filters: ProgFilters; at: string } | null;
+// Like the node: sends the configured channel squelch, volume (unset: 8), tail (unset: nothing) and filters (unset: emphasis
+// off, high-pass and low-pass on), and remembers them.
+function programSA818() {
+  const r = station.radio, f = r.sa818Filter ?? {};
+  const pf: ProgFilters = { emphasis: f.emphasis === true, highPass: f.highPass !== false, lowPass: f.lowPass !== false, at: iso(now()) };
+  programmedFilters = pf;
+  programmedSA818 = { squelch: r.squelch ?? 4, volume: r.sa818Volume ?? 8, ...(typeof r.sa818Tail === 'boolean' ? { tail: r.sa818Tail } : {}), filters: pf, at: pf.at };
+}
 let stationSet = process.env.MOCK_STATION_SETUP !== '1';
 if (!stationSet) { station.callsign = ''; delete station.dmrId; }
 const radioPresent = process.env.MOCK_NO_RADIO !== '1';
@@ -431,7 +441,14 @@ export function mockApi(): Plugin {
             for (const [k] of ids) { if (body[k]) station[k] = Number(body[k]); else delete station[k]; }
             if (body.radio) {
               for (const k of ['preset', 'pttGpio', 'pttActiveLow', 'cosSource', 'cosActiveLow', 'ctcssSource', 'ctcssActiveLow', 'sa818']) delete (station.radio as Record<string, unknown>)[k];
+              const before = JSON.stringify([station.radio.frequencyMHz, station.radio.tone, station.radio.squelch, station.radio.narrow, station.radio.sa818Volume ?? 8, station.radio.sa818Tail, station.radio.sa818Filter]);
+              for (const k of ['sa818Volume', 'sa818Tail', 'sa818Filter']) delete (station.radio as Record<string, unknown>)[k];
+              const vol = body.radio.sa818Volume;
+              if (vol !== undefined && (!Number.isInteger(vol) || vol < 1 || vol > 8)) return err(res, 400, 'radio: SA818 volume must be 1 to 8', 'bad_request');
               Object.assign(station.radio, body.radio);
+              // Like the node: a changed channel or module value programs the SA818 when the interface has one.
+              const after = JSON.stringify([station.radio.frequencyMHz, station.radio.tone, station.radio.squelch, station.radio.narrow, station.radio.sa818Volume ?? 8, station.radio.sa818Tail, station.radio.sa818Filter]);
+              if (before !== after && resolved().sa818 && station.radio.frequencyMHz) programSA818();
             }
             // Like the node: the sent id and advanced replace the saved ones, and the limits are the node's.
             const lim: Record<string, [number, number]> = { hangMs: [1, 10000], txTimeoutS: [1, 1800], rxAgcTargetDb: [-40, -6], txAgcTargetDb: [-40, -6], agcMaxDb: [1, 30], rxGainDb: [-20, 20], txGainDb: [-20, 20], rxOnDelayMs: [0, 1000], txOnDelayMs: [0, 1000], txOffDelayMs: [0, 2000], intervalS: [1, 600], tailWindowS: [1, 600], endQuietS: [1, 600], wpm: [5, 60], pitchHz: [200, 2000], levelDb: [-60, -1] };
@@ -497,14 +514,11 @@ export function mockApi(): Plugin {
         if (p === '/radio/info' && m === 'GET') {
           if (!isAdmin) return forbid();
           const r = resolved();
-          return json(res, 200, { present: radioPresent && r.audio, detected: radioPresent, ...usbChip, shari: radioPresent, interface: r, preset: station.radio.preset ?? '', presets, resolved: r, ...(programmedFilters ? { sa818Filters: programmedFilters } : {}) });
+          return json(res, 200, { present: radioPresent && r.audio, detected: radioPresent, ...usbChip, shari: radioPresent, interface: r, preset: station.radio.preset ?? '', presets, resolved: r, ...(programmedFilters ? { sa818Filters: programmedFilters } : {}), ...(programmedSA818 ? { sa818Programmed: programmedSA818 } : {}) });
         }
         if (p === '/radio/program' && m === 'POST') {
           if (!isAdmin) return forbid();
-          // Like the node: Program sends the configured SA818 filters (unset: emphasis off, high-pass and low-pass on) and the
-          // state file remembers them.
-          const f = station.radio.sa818Filter ?? {};
-          programmedFilters = { emphasis: f.emphasis === true, highPass: f.highPass !== false, lowPass: f.lowPass !== false, at: iso(now()) };
+          programSA818();
           return json(res, 200, nodeJSON());
         }
         if (p === '/radio/tone' && (m === 'POST' || m === 'DELETE')) {

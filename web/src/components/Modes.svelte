@@ -174,7 +174,7 @@
   const vocNeeded = $derived(admin && needsVocoder(info, voc));
   const settingsOpen = $derived(openFor[sel] ?? (!!info && (!info.configured || vocNeeded)));
 
-  // The AMBE vocoder (md380-emu): an install is a helper job; the shared store polls until it ends.
+  // The software AMBE vocoder: an install is a helper job; the shared store polls until it ends.
   $effect(() => { if (admin) return trackVocoder(); });
 
   const DOT = { ok: 'bg-ok', err: 'bg-danger', warn: 'bg-warn', off: 'bg-muted', unset: 'bg-muted/40' } as const;
@@ -271,7 +271,7 @@
             </div>
             {@render hideSwitch()}
             {#if ambeNote}
-              <p class="text-xs text-warn" role="status" data-testid="echo-ambe-note">The AMBE codec needs the md380-emu vocoder. Until it is installed the playback is not coded. Install it in the <a class="underline hover:no-underline" href="#/modes?mode=dmr">DMR settings</a>.</p>
+              <p class="text-xs text-warn" role="status" data-testid="echo-ambe-note">The AMBE codec needs the software AMBE vocoder. Until it is installed the playback is not coded. Install it in the <a class="underline hover:no-underline" href="#/modes?mode=dmr">DMR settings</a>.</p>
             {/if}
           </div>
         {/if}
@@ -303,7 +303,7 @@
               <div class="flex items-center gap-1.5 text-sm">
                 <Mic size={14} class="shrink-0 {localTx ? 'talk-mic text-accent' : talker ? 'talk-mic text-danger' : 'text-muted'}" aria-hidden="true" />
                 {#if localTx}<span class="min-w-0 truncate" data-testid="mode-local-tx"><b>Local station</b> · sending to {modeTitle(active, app.modes)}</span>
-                {:else if talker}<span class="min-w-0 truncate" data-testid="mode-talker"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
+                {:else if talker}<span class="min-w-0 truncate" data-testid="mode-talker"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name}{' · '}{talker.name}{/if}{#if talker.place}{' · '}<span class="text-muted">{talker.place}</span>{/if}</span>
                 {:else}<span class="text-muted">{isActive ? 'Nobody is talking' : '—'}</span>{/if}
               </div>
             </div>

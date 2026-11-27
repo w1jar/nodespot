@@ -15,7 +15,7 @@ import (
 	"github.com/w1jar/nodespot/internal/legacy"
 )
 
-// The AMBE vocoder (md380-emu) is installed on demand, from the Modes page,
+// The software AMBE vocoder is installed on demand, from the Modes page,
 // the first time a mode that needs it is used (docs/NATIVE_NODE.md). The two
 // ops here run fixed command lines: the package list, the paths and the units
 // are constants, and nothing a client sends reaches a command line or a path.
@@ -73,7 +73,7 @@ type VocoderStatus struct {
 	Supported bool   `json:"supported"`
 	Reason    string `json:"reason,omitempty"`
 	Arch      string `json:"arch,omitempty"`
-	Installed bool   `json:"installed"` // the md380-emu package is installed
+	Installed bool   `json:"installed"` // the vocoder package is installed
 	Active    bool   `json:"active"`    // md380-emu.service is active
 	// Job is "", running, failed or done (the install job).
 	Job    string `json:"job,omitempty"`
@@ -127,7 +127,7 @@ func init() {
 	})
 }
 
-// VocoderStatus reports whether md380-emu is installed and active, whether
+// VocoderStatus reports whether the software AMBE vocoder is installed and active, whether
 // this host can install it and the state of the install job. It runs no apt.
 func (o *Ops) VocoderStatus(ctx context.Context) (VocoderStatus, error) {
 	var st VocoderStatus

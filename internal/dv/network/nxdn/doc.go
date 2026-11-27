@@ -22,7 +22,7 @@
 // # Voice
 //
 // Every NXDND voice packet is 80 ms and carries four AMBE+2 frames of 49 bits;
-// each is handed to the sink as one 7-byte network.VoiceFrame (md380 layout,
+// each is handed to the sink as one 7-byte network.VoiceFrame (vocoder layout,
 // no transcoding). A call starts with a VCALL header packet; a voice packet
 // that arrives with no call open starts one (late entry, source and
 // destination are in the datagram header). A call ends on a TX_REL packet, on

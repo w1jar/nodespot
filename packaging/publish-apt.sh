@@ -492,6 +492,10 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 <div class="opt"><input type="radio" name="chan" id="o-stable" value="stable" checked><label for="o-stable">Stable<small>Tested releases. This is the default.</small></label></div>
 <div class="opt"><input type="radio" name="chan" id="o-beta" value="beta"><label for="o-beta">Beta<small>New builds before they are promoted to stable. You get fixes sooner, but they may be less stable.</small></label></div>
 </fieldset>
+<fieldset>
+<legend>AMBE vocoder</legend>
+<div class="opt"><input type="checkbox" id="o-voc"><label for="o-voc">Also install the software AMBE vocoder<small>Needed for voice on BrandMeister, TGIF, DMR, YSF and NXDN. It can take a few minutes. You can also install it later from the Modes page.</small></label></div>
+</fieldset>
 </form>
 <h3>Your command</h3>
 <div class="cmd">
@@ -504,6 +508,7 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 <dt><code>NODESPOT_PORT=8181</code></dt><dd>Web port, 1024-65535, or 80. The default is 8080. Avoid 9090 (Cockpit).</dd>
 <dt><code>NODESPOT_TAKEOVER=1</code></dt><dd>Run nodespot on port 80 and turn off web services an earlier ASL install left (<code>yes</code> and <code>true</code> work too). See below.</dd>
 <dt><code>NODESPOT_CHANNEL=beta</code></dt><dd>Use the beta channel (new builds before they are promoted to stable). The default is <code>stable</code>.</dd>
+<dt><code>NODESPOT_VOCODER=1</code></dt><dd>Also install the software AMBE vocoder, which BrandMeister, TGIF, DMR, YSF and NXDN voice need. <code>yes</code> and <code>true</code> work too. If it fails, nodespot is still installed and the vocoder can be installed later from the Modes page.</dd>
 </dl>
 <p style="margin-top:10px">Example with several options:</p>
 <div class="cmd"><pre tabindex="0"><code id="cmd-example">curl -fsSL @APT_URL@/install.sh | sudo NODESPOT_PORT=8181 NODESPOT_CHANNEL=beta sh</code></pre><button type="button" class="copy" data-copy="cmd-example" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
@@ -591,7 +596,7 @@ sudo apt update &amp;&amp; sudo apt install nodespot</code></pre><button type="b
 
   var wiz = document.getElementById("wizard"), stat = document.getElementById("params-static");
   var port = document.getElementById("o-port"),
-    beta = document.getElementById("o-beta"), take = document.getElementById("o-take"), out = document.getElementById("cmd-gen"),
+    beta = document.getElementById("o-beta"), take = document.getElementById("o-take"), voc = document.getElementById("o-voc"), out = document.getElementById("cmd-gen"),
     err = document.getElementById("o-port-err"), warn = document.getElementById("o-port-warn"),
     copyGen = document.getElementById("copy-gen");
   wiz.hidden = false; stat.hidden = true;
@@ -610,6 +615,7 @@ sudo apt update &amp;&amp; sudo apt install nodespot</code></pre><button type="b
     if (take.checked) vars.push("NODESPOT_TAKEOVER=1");
     if (raw !== "" && raw !== "8080" && !(take.checked && raw === "80")) vars.push("NODESPOT_PORT=" + raw);
     if (beta.checked) vars.push("NODESPOT_CHANNEL=beta");
+    if (voc.checked) vars.push("NODESPOT_VOCODER=1");
     out.textContent = "curl -fsSL " + BASE + "/install.sh | sudo " + (vars.length ? vars.join(" ") + " " : "") + "sh";
   }
   document.getElementById("opts").addEventListener("input", build);

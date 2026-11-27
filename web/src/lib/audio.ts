@@ -1,6 +1,6 @@
 // The Radio and Audio tabs of Settings, Station: limits, defaults and checks for station.advanced and station.id. Pure functions, tested in
 // audio.test.ts. The limits match Validate in internal/native/node/config.go; 0 or unset means the node's default.
-import type { Sa818Filter, Station, StationAdvanced, StationId } from './types';
+import type { Sa818Filter, Sa818Last, Sa818Programmed, Station, StationAdvanced, StationId } from './types';
 
 /** keepZero: 0 is a value of its own (off), saved as such; only empty is the node's default. */
 export interface NumField { key: string; label: string; unit: string; min: number; max: number; step: number; def: number; help: string; keepZero?: boolean }
@@ -91,39 +91,70 @@ function cleanBool(o: Record<string, unknown>, key: keyof typeof AGC_DEFAULTS): 
 
 /** The station to save: `base` (the latest saved station) with advanced and id replaced by the edited ones; every other key,
  * known or not, is carried over. */
-export function audioBody(base: Station, adv: StationAdvanced, id: StationId, filt?: Sa818Filter): Station {
+export function audioBody(base: Station, adv: StationAdvanced, id: StationId): Station {
   const a = cleanNums({ ...adv }, [...GAIN_FIELDS, ...AGC_FIELDS, ...TIMER_FIELDS, ...DELAY_FIELDS]) as Record<string, unknown>;
   if (typeof a.plFilter !== 'boolean') delete a.plFilter; // unset is automatic
   for (const k of Object.keys(AGC_DEFAULTS) as (keyof typeof AGC_DEFAULTS)[]) cleanBool(a, k);
   const i = cleanNums({ ...id }, ID_FIELDS) as Record<string, unknown>;
   if (typeof i.voiceFile === 'string') { const v = i.voiceFile.trim(); if (v === '') delete i.voiceFile; else i.voiceFile = v; }
   if (i.enabled === true) delete i.enabled; // on is the default
-  const out: Station = { ...base, advanced: a as StationAdvanced, id: i as StationId };
-  if (filt !== undefined) {
-    // Only flags that differ from the defaults are stored; the defaults are left out.
-    const f: Sa818Filter = {};
-    for (const k of SA818_FILTER_KEYS) if (typeof filt[k] === 'boolean' && filt[k] !== SA818_FILTER_DEFAULTS[k]) f[k] = filt[k];
-    const radio = { ...base.radio } as Record<string, unknown>;
-    if (Object.keys(f).length) radio.sa818Filter = f; else delete radio.sa818Filter;
-    out.radio = radio as Station['radio'];
-  }
-  return out;
+  return { ...base, advanced: a as StationAdvanced, id: i as StationId };
 }
 
 /** Whether the edited card differs from the saved one (compared as they would be saved). */
-export function audioDirty(base: Station, adv: StationAdvanced, id: StationId, filt?: Sa818Filter): boolean {
-  const a = audioBody(base, base.advanced, base.id, base.radio?.sa818Filter ?? {}), b = audioBody(base, adv, id, filt ?? base.radio?.sa818Filter ?? {});
-  return JSON.stringify([sortKeys(a.advanced), sortKeys(a.id), sortKeys((a.radio?.sa818Filter ?? {}) as Record<string, unknown>)])
-    !== JSON.stringify([sortKeys(b.advanced), sortKeys(b.id), sortKeys((b.radio?.sa818Filter ?? {}) as Record<string, unknown>)]);
+export function audioDirty(base: Station, adv: StationAdvanced, id: StationId): boolean {
+  const a = audioBody(base, base.advanced, base.id), b = audioBody(base, adv, id);
+  return JSON.stringify([sortKeys(a.advanced), sortKeys(a.id)]) !== JSON.stringify([sortKeys(b.advanced), sortKeys(b.id)]);
 }
 
 /** The PL filter as the node will run it: the saved choice, else automatic (on unless the radio is an SA818). */
 export function effectivePL(adv: StationAdvanced, sa818: boolean): boolean { return adv.plFilter ?? !sa818; }
 
-/** What to show for the SA818's filters as last programmed: a text per flag, or 'unknown until programmed'. */
-export function programmedText(p?: { emphasis: boolean; highPass: boolean; lowPass: boolean }): string {
-  if (!p) return 'Unknown until programmed';
-  return `Programmed: emphasis ${p.emphasis ? 'on' : 'off'}, high-pass ${p.highPass ? 'on' : 'off'}, low-pass ${p.lowPass ? 'on' : 'off'}`;
+/** The SA818 volume limits: 1 to 8, empty is the node's 8. */
+export const SA818_VOLUME_DEFAULT = 8;
+
+/** The tail tone select: unset sends nothing and leaves the module as it is. */
+export type TailChoice = 'keep' | 'open' | 'closed';
+export const TAIL_CHOICES: { value: TailChoice; label: string }[] = [
+  { value: 'keep', label: 'Leave as is' },
+  { value: 'open', label: 'Open' },
+  { value: 'closed', label: 'Closed' },
+];
+export const tailChoice = (t: boolean | undefined): TailChoice => (t === undefined ? 'keep' : t ? 'open' : 'closed');
+export const tailValue = (c: string): boolean | undefined => (c === 'open' ? true : c === 'closed' ? false : undefined);
+
+/** An error text for the SA818 volume field, or ''. Empty is the default. */
+export function sa818VolumeError(v: unknown): string {
+  if (v === undefined || v === null || v === '') return '';
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 8 ? '' : 'The SA818 volume must be a whole number from 1 to 8';
+}
+
+/** The radio settings to save with the SA818 values cleaned: volume empty or 8 is left out (the same thing to the node), the tail
+ * only when set, and only filter flags that differ from the defaults. Everything else is carried over. */
+export function sa818Body(radio: Station['radio']): Station['radio'] {
+  const r = { ...radio } as Record<string, unknown>;
+  const v = r.sa818Volume;
+  if (v === undefined || v === null || v === '' || Number(v) === SA818_VOLUME_DEFAULT) delete r.sa818Volume; else r.sa818Volume = Number(v);
+  if (typeof r.sa818Tail !== 'boolean') delete r.sa818Tail;
+  const f: Sa818Filter = {}, filt = radio.sa818Filter;
+  for (const k of SA818_FILTER_KEYS) if (typeof filt?.[k] === 'boolean' && filt[k] !== SA818_FILTER_DEFAULTS[k]) f[k] = filt[k];
+  if (Object.keys(f).length) r.sa818Filter = f; else delete r.sa818Filter;
+  return r as Station['radio'];
+}
+
+/** What to show for the SA818 as last programmed: squelch, volume, tail tone and filters, or 'Unknown until programmed'. An old
+ * node reports only the filters. */
+export function programmedText(info?: { sa818Programmed?: Sa818Last; sa818Filters?: Sa818Programmed }): string {
+  const last = info?.sa818Programmed;
+  const f = last?.filters ?? info?.sa818Filters;
+  if (!f) return 'Unknown until programmed';
+  const flag = (on: boolean) => (on ? 'on' : 'off');
+  const parts: string[] = [];
+  if (last) {
+    parts.push(`squelch ${last.squelch}`, `volume ${last.volume}`, last.tail === undefined ? 'tail tone not set' : `tail tone ${last.tail ? 'open' : 'closed'}`);
+  }
+  parts.push(`emphasis ${flag(f.emphasis)}`, `high-pass ${flag(f.highPass)}`, `low-pass ${flag(f.lowPass)}`);
+  return `Last programmed: ${parts.join(', ')}`;
 }
 function sortKeys(o: Record<string, unknown>): Record<string, unknown> { return Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]])); }
 

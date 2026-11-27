@@ -23,7 +23,7 @@ func Spec() mode.Spec {
 			{Key: KeyDelay, Label: "Playback delay (ms)", Kind: mode.FieldNumber, Advanced: true,
 				Default: "1000", Help: "Pause between the end of your transmission and the playback."},
 		},
-		// Only the AMBE codec needs the md380-emu vocoder.
+		// Only the AMBE codec needs the software AMBE vocoder.
 		AMBEFor: func(s mode.Settings) bool {
 			return strings.EqualFold(s.Get(KeyCodec, CodecPlain), CodecAMBE)
 		},

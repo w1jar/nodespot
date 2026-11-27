@@ -380,7 +380,7 @@ func TestAMBEVocoderErrorStillPlaysBack(t *testing.T) {
 	}
 }
 
-// The default vocoder is the md380-emu client, here against the fake
+// The default vocoder is the software AMBE vocoder client, here against the fake
 // server the DV tests use.
 func TestAMBEThroughMD380Client(t *testing.T) {
 	srv, err := fake.New("127.0.0.1:0")
@@ -422,7 +422,7 @@ func TestAMBEVocoderDownIsReported(t *testing.T) {
 		t.Fatalf("expected the recording as it was, got %d frames", len(got))
 	}
 	st := m.Status()
-	if !strings.Contains(st.Error, "md380-emu") || !strings.Contains(st.Detail, "AMBE vocoder not working") {
+	if !strings.Contains(st.Error, "software AMBE vocoder") || !strings.Contains(st.Detail, "AMBE vocoder not working") {
 		t.Fatalf("status %+v", st)
 	}
 }

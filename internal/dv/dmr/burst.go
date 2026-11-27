@@ -40,12 +40,12 @@ func (b *Burst) Voice72() (f [3]AMBE72) {
 	return f
 }
 
-// PutVoice FEC-encodes three md380 frames into the payload of b.
+// PutVoice FEC-encodes three AMBE frames into the payload of b.
 func (b *Burst) PutVoice(f [3]AMBE) {
 	b.PutVoice72([3]AMBE72{EncodeAMBE(f[0]), EncodeAMBE(f[1]), EncodeAMBE(f[2])})
 }
 
-// Voice decodes the three md380 frames of a voice burst; errs is the sum of
+// Voice decodes the three AMBE frames of a voice burst; errs is the sum of
 // the corrected bit errors (see DecodeAMBE).
 func (b *Burst) Voice() (f [3]AMBE, errs int) {
 	v := b.Voice72()

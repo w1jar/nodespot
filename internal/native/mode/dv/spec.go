@@ -1,7 +1,7 @@
 // Package dv is the digital voice modes: BrandMeister, TGIF, other DMR
 // Homebrew masters, YSF, P25, NXDN, M17. Each is a
 // mode.Mode over one internal/dv/network client, with the radio's audio
-// encoded to the network's codec (AMBE through md380-emu, IMBE or Codec2
+// encoded to the network's codec (AMBE through the software AMBE vocoder, IMBE or Codec2
 // in Go) and the network's voice decoded for the radio.
 package dv
 
@@ -50,7 +50,7 @@ type def struct {
 	login       bool // logs in to a master (DMR networks)
 	target      targetKind
 	needsHost   bool // a target must resolve to a host (P25)
-	ambe        bool // the network carries AMBE voice, so the md380-emu vocoder is needed
+	ambe        bool // the network carries AMBE voice, so the software AMBE vocoder is needed
 	label, help string
 	fields      []mode.Field
 	legacy      []string // setting keys of older configs, ignored (see mode.Spec.Legacy)

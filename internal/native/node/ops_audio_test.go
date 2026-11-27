@@ -11,9 +11,9 @@ import (
 	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
-// Changing the SA818 filters, or any other audio setting, saves them and
-// sends nothing to the module. Only Program sends them.
-func TestSA818FiltersSentOnlyByProgram(t *testing.T) {
+// Changing a module value (filters, volume, tail) programs the module when
+// the config is saved; other audio settings send nothing.
+func TestSA818ModuleValuesProgram(t *testing.T) {
 	var sent []sa818.Settings
 	state := filepath.Join(t.TempDir(), "sa818.json")
 	cfg := quietConfig()
@@ -38,12 +38,28 @@ func TestSA818FiltersSentOnlyByProgram(t *testing.T) {
 	if err := e.SaveStation(st); err != nil {
 		t.Fatal(err)
 	}
-	if len(sent) != 0 {
-		t.Fatalf("saving sent %d programs to the SA818", len(sent))
+	if len(sent) != 1 {
+		t.Fatalf("saving a filter change sent %d programs to the SA818", len(sent))
 	}
-	if err := e.ProgramRadio(); err != nil || len(sent) != 1 {
+	// Audio settings that are not module values send nothing.
+	st = e.Config().Station
+	st.Advanced.RxGainDB = 5
+	if err := e.SaveStation(st); err != nil || len(sent) != 1 {
+		t.Fatalf("save: %v, %d sent", err, len(sent))
+	}
+	st = e.Config().Station
+	v := 3
+	st.Radio.SA818Volume, st.Radio.SA818Tail = &v, bp(true)
+	if err := e.SaveStation(st); err != nil || len(sent) != 2 {
+		t.Fatalf("save: %v, %d sent", err, len(sent))
+	}
+	if sent[1].Volume != 3 || sent[1].Tail == nil || !*sent[1].Tail {
+		t.Fatalf("programmed %+v", sent[1])
+	}
+	if err := e.ProgramRadio(); err != nil || len(sent) != 3 {
 		t.Fatalf("program: %v, %d sent", err, len(sent))
 	}
+	sent[0] = sent[2]
 	if f := sent[0].Filters; f.Emphasis || f.HighPass || !f.LowPass {
 		t.Fatalf("programmed filters %+v", f)
 	}
@@ -52,6 +68,34 @@ func TestSA818FiltersSentOnlyByProgram(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := e.RadioInfo()
+	if p := d.SA818Programmed; p == nil || p.Volume != 3 || p.Squelch != 4 || p.Tail == nil || !*p.Tail || p.Filters.LowPass != true {
+		t.Fatalf("programmed %+v", p)
+	}
+	// At boot nothing is programmed when the state matches, and one change
+	// in any module value programs again.
+	n := len(sent)
+	if err := e.ProgramIfChanged(); err != nil || len(sent) != n {
+		t.Fatalf("boot with matching state: %v, %d sent", err, len(sent)-n)
+	}
+	for _, tc := range []struct {
+		name string
+		mod  func(*sa818.Settings)
+	}{
+		{"volume", func(s *sa818.Settings) { s.Volume = 2 }},
+		{"tail", func(s *sa818.Settings) { s.Tail = nil }},
+		{"filters", func(s *sa818.Settings) { s.Filters.Emphasis = !s.Filters.Emphasis }},
+	} {
+		old := sent[0]
+		tc.mod(&old)
+		if err := sa818.SaveState(state, sa818.State{AppliedAt: time.Unix(1e9, 0), Settings: old}); err != nil {
+			t.Fatal(err)
+		}
+		n = len(sent)
+		if err := e.ProgramIfChanged(); err != nil || len(sent) != n+1 {
+			t.Fatalf("boot after %s change: %v, %d sent", tc.name, err, len(sent)-n)
+		}
+	}
+
 	if d.SA818Filters == nil || d.SA818Filters.Emphasis || d.SA818Filters.HighPass || !d.SA818Filters.LowPass {
 		t.Fatalf("shown filters %+v", d.SA818Filters)
 	}

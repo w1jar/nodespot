@@ -21,7 +21,7 @@ type VocoderHost interface {
 
 // VocoderJSON is the answer of GET /api/vocoder and POST /api/vocoder/install.
 type VocoderJSON struct {
-	// Installed: the md380-emu package is installed. Active: its service runs.
+	// Installed: the vocoder package is installed. Active: its service runs.
 	Installed bool `json:"installed"`
 	Active    bool `json:"active"`
 	// Needed lists the modes (by name) that need the vocoder.

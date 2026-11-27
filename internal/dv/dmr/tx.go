@@ -1,7 +1,7 @@
 package dmr
 
 // TX builds the bursts of one transmitted call: Start, then Write for every
-// 20 ms md380 frame, then End. Not safe for concurrent use.
+// 20 ms AMBE frame, then End. Not safe for concurrent use.
 type TX struct {
 	cfg   TXConfig
 	lc    LC
@@ -46,7 +46,7 @@ func (t *TX) Start() []TXFrame {
 	return out
 }
 
-// Write adds one md380 frame; every third frame completes a voice burst,
+// Write adds one AMBE frame; every third frame completes a voice burst,
 // which is returned.
 func (t *TX) Write(f AMBE) []TXFrame {
 	if t.ended {

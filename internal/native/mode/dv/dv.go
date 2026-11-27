@@ -17,7 +17,7 @@ import (
 	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
-// DefaultMD380 is the md380-emu address used when the node gives none.
+// DefaultMD380 is the software AMBE vocoder address used when the node gives none.
 const DefaultMD380 = "127.0.0.1:2470"
 
 // Timing defaults, the same as the DV module's.
@@ -32,7 +32,7 @@ const (
 type Options struct {
 	// NewNetwork builds the network client; default network.New.
 	NewNetwork func(cfg ctl.NetConfig, id ctl.Identity) (network.Network, error)
-	// AMBE is the AMBE vocoder; default md380-emu at Env.MD380.
+	// AMBE is the AMBE vocoder; default the software AMBE vocoder at Env.MD380.
 	AMBE      vocoder.AMBE
 	NewIMBE   func() vocoder.IMBE
 	NewCodec2 func() vocoder.Codec2

@@ -31,7 +31,7 @@
 // in the first communications frame (FN=0, FT=1) where blocks 0..2 carry
 // CSD3 and only blocks 3 and 4 carry voice.
 //
-// The 49-bit AMBE frame is passed as 7 bytes in the md380 layout: bits 0..47
+// The 49-bit AMBE frame is passed as 7 bytes in the vocoder layout: bits 0..47
 // MSB first in bytes 0..5, bit 48 in the MSB of byte 6.
 package ysf
 
@@ -65,7 +65,7 @@ const (
 	DTVoiceFRMode = 3 // "VW"
 )
 
-// AMBESilence is a 49-bit AMBE+2 silence frame in md380 layout (the
+// AMBESilence is a 49-bit AMBE+2 silence frame in vocoder layout (the
 // AMBE_SILENCE of MMDVM_CM YSF2NXDN; its VCH encoding is MMDVM_CM's
 // YSF_SILENCE).
 var AMBESilence = [AMBELen]byte{0xF8, 0x01, 0xA9, 0x9F, 0x8C, 0xE0, 0x80}

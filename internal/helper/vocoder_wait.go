@@ -45,7 +45,7 @@ func waitVocoderInstall(ctx context.Context, w io.Writer,
 		fmt.Fprintln(w, "the vocoder is already installed and running")
 		return nil
 	}
-	fmt.Fprintln(w, "installing the vocoder (md380-emu); this can take a few minutes")
+	fmt.Fprintln(w, "installing the software AMBE vocoder; this can take a few minutes")
 	deadline := time.Now().Add(maxWait)
 	shown, idle := "", 0
 	for {
@@ -83,7 +83,7 @@ func vocoderDone(st VocoderStatus) error {
 	if st.Installed && st.Active {
 		return nil
 	}
-	return fmt.Errorf("the vocoder install ended but md380-emu is not running: %s", lastLogLine(st.JobLog))
+	return fmt.Errorf("the vocoder install ended but the software AMBE vocoder is not running: %s", lastLogLine(st.JobLog))
 }
 
 // vocoderWaitErr strips the machine code prefix ("not_supported: ...") the
