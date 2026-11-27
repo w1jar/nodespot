@@ -12,6 +12,7 @@ Release notes are taken from the section of the tag being released
 - Settings > Station showed the callsign, frequency, tone, squelch and narrow fields a second time next to the Radio page's Channel card, and "Identify the station" a second time next to Timing and ID. The Station card now has the callsign and the DMR and NXDN IDs only; the channel is on the Radio page's Channel card (without the callsign) and the ID switch is in Timing and ID. The first-run setup page is unchanged.
 
 ### Changed
+- Modes page: the node, reflector and talkgroup picker now has its own card above the favorites, and the connection status is a slim strip, so the status no longer looks like the place to choose.
 - All of the SA818's values are in the Channel card: frequency, tone and squelch as before, plus volume (1 to 8, default 8), tail tone (leave as is, open or closed) and the three filters, which moved there from Timing and ID > Advanced. The card shows what the module was last programmed with, or "Unknown until programmed". Saving reprograms the module when any of these values changed, and so does a restart, not only when the channel changed.
 - The AMBE vocoder is now called the software AMBE vocoder everywhere in the web UI, the installer and the docs.
 - Web UI names: AllStar is now ASL, System Fusion is now YSF and the echo test is now Parrot (mode buttons, titles, messages and the Parrot's callsign in Last heard). Mode IDs, API fields and URLs are unchanged.

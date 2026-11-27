@@ -69,6 +69,8 @@
   const linked = $derived(isActive && (st?.state === 'connected' || st?.state === 'connecting') && !!st?.target);
   const kind = $derived(pickerKind(info));
   const title = $derived(info?.title || modeTitle(sel));
+  /** The noun of the picker card's heading: node, reflector or talkgroup. */
+  const pickNoun = $derived(/talkgroup/i.test(targetLabel(info)) ? 'talkgroup' : /reflector/i.test(targetLabel(info)) ? 'reflector' : 'node');
 
   // ---- Activating a mode: highlighted at once, confirmed by the node status, "Not confirmed" after CONFIRM_MS.
   let busy = $state(false);
@@ -279,36 +281,38 @@
         {#if !info.configured}
           <p class="text-sm text-muted" data-testid="not-ready-line">{#if admin}This mode is not ready. Open its settings below.{:else}This mode is not set up yet. Ask an administrator.{/if}</p>
         {:else}
-          <!-- Status: what it is linked to, who is talking, the AllStar counters, the echo test report. -->
-          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2" data-testid="mode-status">
-            {#if sel !== 'echotest'}
-              <div class="rounded border bg-surface-2 px-3 py-2 {linked ? 'border-ok/40' : 'border-line'}">
-                <div class="text-[11px] uppercase tracking-wide text-muted">{targetLabel(info)}</div>
-                {#if linked}
-                  <div class="flex items-center gap-2">
-                    <div class="min-w-0 flex-1 truncate font-mono font-medium text-ok" data-testid="linked-target">{targetText(st?.target)}</div>
+          <!-- Status: a slim strip (not a control): what it is linked to, who is talking, the counters, the echo test report. -->
+          <div class="space-y-0.5 px-0.5" data-testid="mode-status">
+            <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              {#if sel !== 'echotest'}
+                <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                  {#if linked}
+                    <span class="text-[11px] uppercase tracking-wide text-muted">{targetLabel(info)}</span>
+                    <span class="min-w-0 truncate font-mono font-medium text-ok" data-testid="linked-target">{targetText(st?.target)}</span>
                     {#if op}<button class="btn btn-sm btn-bad-outline shrink-0" disabled={busy} onclick={disconnect}><Unplug size={12} aria-hidden="true" />Disconnect</button>{/if}
-                  </div>
-                  {#if st?.links?.length && sel === 'allstar'}<div class="truncate text-xs text-muted">Links: {st.links.join(', ')}</div>{/if}
-                {:else if isActive && st?.error}
-                  <div class="text-sm text-danger" role="alert">{st.error}</div>
-                {:else}
-                  <div class="text-muted">{isActive ? 'Not connected' : 'Not the active mode'}</div>
-                {/if}
-                {#if info.last && !linked}<div class="mt-1 text-xs text-muted" data-testid="last-tune">Last: <button type="button" class="font-mono underline hover:no-underline" onclick={() => { text = info.last?.id ?? ''; }}>{targetText(info.last)}</button></div>{/if}
-              </div>
-            {/if}
-            <div class="rounded border border-line bg-surface-2 px-3 py-2 {localTx ? 'talk-live talk-local' : talker ? 'talk-live' : ''}" aria-live="polite" data-testid="mode-now-calling" data-live={localTx ? 'local' : talker ? 'remote' : undefined}>
-              <div class="text-[11px] uppercase tracking-wide text-muted">Now calling</div>
-              <div class="flex items-center gap-1.5 text-sm">
+                  {:else if isActive && st?.error}
+                    <span class="text-danger" role="alert">{st.error}</span>
+                  {:else}
+                    <span class="text-muted">{isActive ? 'Not connected' : 'Not the active mode'}</span>
+                  {/if}
+                  {#if info.last && !linked}
+                    <span class="text-muted" aria-hidden="true">·</span>
+                    <span class="text-xs text-muted" data-testid="last-tune">Last: <span class="font-mono">{targetText(info.last)}</span></span>
+                    {#if op && hasTarget(info)}<button type="button" class="btn btn-sm shrink-0" disabled={busy} data-testid="reconnect" title="Connect {title} to {info.last.id} again" onclick={() => connect(info.last?.id ?? '', info.last?.name && info.last.name !== info.last.id ? info.last.name : '')}>Reconnect</button>{/if}
+                  {/if}
+                </div>
+              {/if}
+              <div class="flex min-w-0 items-center gap-1.5 text-sm {localTx ? 'talk-live talk-local' : talker ? 'talk-live' : ''} {sel === 'echotest' ? '' : 'ml-auto'}" aria-live="polite" data-testid="mode-now-calling" data-live={localTx ? 'local' : talker ? 'remote' : undefined}>
+                <span class="shrink-0 whitespace-nowrap text-[11px] uppercase tracking-wide text-muted">Now calling</span>
                 <Mic size={14} class="shrink-0 {localTx ? 'talk-mic text-accent' : talker ? 'talk-mic text-danger' : 'text-muted'}" aria-hidden="true" />
                 {#if localTx}<span class="min-w-0 truncate" data-testid="mode-local-tx"><b>Local station</b> · sending to {modeTitle(active, app.modes)}</span>
                 {:else if talker}<span class="min-w-0 truncate" data-testid="mode-talker"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name}{' · '}{talker.name}{/if}{#if talker.place}{' · '}<span class="text-muted">{talker.place}</span>{/if}</span>
                 {:else}<span class="text-muted">{isActive ? 'Nobody is talking' : '—'}</span>{/if}
               </div>
             </div>
+            {#if linked && st?.links?.length && sel === 'allstar'}<div class="truncate text-xs text-muted">Links: {st.links.join(', ')}</div>{/if}
+            {#if isActive && st?.link}<p class="break-words font-mono text-[11px] text-muted" data-testid="link-stats" title={linkStatsTitle(st.link)}>{linkStatsText(st.link, app.node?.radio.netDropped)}</p>{/if}
           </div>
-          {#if isActive && st?.link}<p class="break-words font-mono text-xs text-muted" data-testid="link-stats" title={linkStatsTitle(st.link)}>{linkStatsText(st.link, app.node?.radio.netDropped)}</p>{/if}
           {#if isActive && st?.registration && !st.registration.registered}<p class="text-xs text-warn">Not registered yet{st.registration.lastError ? `: ${st.registration.lastError}` : ''}</p>{/if}
           {#if sel === 'echotest'}
             <p class="text-sm text-muted">{isActive ? 'Key the radio and talk, then unkey: the node plays your recording back.' : 'Start it, key the radio, talk and unkey: the node plays your recording back.'}</p>
@@ -317,36 +321,39 @@
             {/if}
           {/if}
 
-          <!-- The connect box. -->
+          <!-- The picker card: where a target is chosen. -->
           {#if op && hasTarget(info)}
-            <form class="space-y-1" onsubmit={(e) => { e.preventDefault(); void connect(); }} data-testid="connect-form">
-              <label class="label" for="mtarget">{targetLabel(info)}</label>
-              <div class="flex flex-wrap items-stretch gap-1.5 md:flex-nowrap">
-                <div class="relative min-w-0 flex-1 basis-full md:basis-0">
-                  <Search size={16} class="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-muted" aria-hidden="true" />
-                  {#if kind === 'nodes'}
-                    <NodePicker id="mtarget" bind:value={text} source={sel === 'echolink' ? 'echolink' : 'allstar'} testid="target-search" placeholder={targetPlaceholder(info)} onenter={() => connect()} onpick={pickNode} onpickecho={pickEcho} inputmode="text" inputClass="!min-h-10 !pl-9" />
-                  {:else if kind === 'hosts'}
-                    <NodePicker id="mtarget" bind:value={text} options={hosts} placeholder={targetPlaceholder(info)} label={(o) => `${o.value} ${o.name}`.trim()} onpickoption={pickHost} onenter={() => connect()} inputmode="text" inputClass="!min-h-10 !pl-9" />
-                  {:else}
-                    <input id="mtarget" class="input font-mono !min-h-10 !pl-9" bind:value={text} autocomplete="off" inputmode="text" placeholder={targetPlaceholder(info)} />
+            <div class="rounded-md border border-accent/40 bg-surface p-3 sm:p-4" data-testid="connect-card">
+              <h3 class="mb-2 text-base font-semibold">Connect to a {pickNoun}</h3>
+              <form class="space-y-1" onsubmit={(e) => { e.preventDefault(); void connect(); }} data-testid="connect-form">
+                <label class="sr-only" for="mtarget">{targetLabel(info)}</label>
+                <div class="flex flex-wrap items-stretch gap-1.5 md:flex-nowrap">
+                  <div class="relative min-w-0 flex-1 basis-full md:basis-0">
+                    <Search size={18} class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted" aria-hidden="true" />
+                    {#if kind === 'nodes'}
+                      <NodePicker id="mtarget" bind:value={text} source={sel === 'echolink' ? 'echolink' : 'allstar'} testid="target-search" placeholder={targetPlaceholder(info)} onenter={() => connect()} onpick={pickNode} onpickecho={pickEcho} inputmode="text" inputClass="!min-h-12 !pl-10 !text-base" />
+                    {:else if kind === 'hosts'}
+                      <NodePicker id="mtarget" bind:value={text} options={hosts} placeholder={targetPlaceholder(info)} label={(o) => `${o.value} ${o.name}`.trim()} onpickoption={pickHost} onenter={() => connect()} inputmode="text" inputClass="!min-h-12 !pl-10 !text-base" />
+                    {:else}
+                      <input id="mtarget" class="input font-mono !min-h-12 !pl-10 !text-base" bind:value={text} autocomplete="off" inputmode="text" placeholder={targetPlaceholder(info)} />
+                    {/if}
+                  </div>
+                  {#if sel === 'm17'}
+                    <select class="input !min-h-12 !w-auto" bind:value={module} disabled={busy} aria-label="Module" title="The module (room) of the reflector" data-testid="m17-module">
+                      {#each M17_MODULES as x (x)}<option value={x}>Module {x}</option>{/each}
+                    </select>
                   {/if}
+                  <button class="btn btn-primary !min-h-12 grow !px-5 !text-base sm:grow-0" disabled={busy || !value}><Plug size={16} aria-hidden="true" />Connect</button>
+                  <button type="button" class="btn btn-icon !min-h-12 !w-12 !px-0 {starred ? 'border-accent' : ''}" disabled={busy || !!block} aria-pressed={!!starred} data-testid="star"
+                    aria-label={starred ? 'Already a favorite' : 'Save the target as a favorite'} title={block || 'Save the target as a favorite'} onclick={openStar}>
+                    <Star size={18} class={starred ? 'fill-accent text-accent' : 'text-muted'} aria-hidden="true" /></button>
                 </div>
-                {#if sel === 'm17'}
-                  <select class="input !min-h-10 !w-auto" bind:value={module} disabled={busy} aria-label="Module" title="The module (room) of the reflector" data-testid="m17-module">
-                    {#each M17_MODULES as x (x)}<option value={x}>Module {x}</option>{/each}
-                  </select>
+                {#if kind === 'hosts' && hostLists[sel] && !hostLists[sel].items.length}
+                  <p class="text-xs text-warn" role="status" data-testid="hosts-empty">{emptyListNote(sel, sel.toUpperCase())}{#if admin}{' '}<a class="underline" href="#/settings/station/hostlists">Open it</a>{/if}</p>
                 {/if}
-                <button class="btn btn-primary !min-h-10" disabled={busy || !value}><Plug size={14} aria-hidden="true" />Connect</button>
-                <button type="button" class="btn btn-icon !min-h-10 !w-10 !px-0 {starred ? 'border-accent' : ''}" disabled={busy || !!block} aria-pressed={!!starred} data-testid="star"
-                  aria-label={starred ? 'Already a favorite' : 'Save the target as a favorite'} title={block || 'Save the target as a favorite'} onclick={openStar}>
-                  <Star size={16} class={starred ? 'fill-accent text-accent' : 'text-muted'} aria-hidden="true" /></button>
-              </div>
-              {#if kind === 'hosts' && hostLists[sel] && !hostLists[sel].items.length}
-                <p class="text-xs text-warn" role="status" data-testid="hosts-empty">{emptyListNote(sel, sel.toUpperCase())}{#if admin}{' '}<a class="underline" href="#/settings/station/hostlists">Open it</a>{/if}</p>
-              {/if}
-              {#if info.targetHelp}<p class="text-xs text-muted">{info.targetHelp}{#if !isActive}{' '}Connecting makes {title} the active mode.{/if}</p>{/if}
-            </form>
+                {#if info.targetHelp}<p class="text-xs text-muted">{info.targetHelp}{#if !isActive}{' '}Connecting makes {title} the active mode.{/if}</p>{/if}
+              </form>
+            </div>
           {/if}
 
           <!-- Favorites of this mode. -->
