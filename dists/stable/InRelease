@@ -1,0 +1,55 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: arm64 amd64 armhf
+Codename: stable
+Components: main
+Date: Fri, 27 Nov 2026 05:27:25 +0000
+Description: nodespot packages for Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS (stable)
+Label: nodespot
+Origin: nodespot
+Suite: stable
+MD5Sum:
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-amd64/Packages
+ 4a4dd3598707603b3f76a2378a4504aa               20 main/binary-amd64/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-arm64/Packages
+ 4a4dd3598707603b3f76a2378a4504aa               20 main/binary-arm64/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-armhf/Packages
+ 4a4dd3598707603b3f76a2378a4504aa               20 main/binary-armhf/Packages.gz
+SHA1:
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-amd64/Packages
+ a0fddd5458378c1bf3c10dd2f5c060d1347741ed               20 main/binary-amd64/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-arm64/Packages
+ a0fddd5458378c1bf3c10dd2f5c060d1347741ed               20 main/binary-arm64/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-armhf/Packages
+ a0fddd5458378c1bf3c10dd2f5c060d1347741ed               20 main/binary-armhf/Packages.gz
+SHA256:
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-amd64/Packages
+ f61f27bd17de546264aa58f40f3aafaac7021e0ef69c17f6b1b4cd7664a037ec               20 main/binary-amd64/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-arm64/Packages
+ f61f27bd17de546264aa58f40f3aafaac7021e0ef69c17f6b1b4cd7664a037ec               20 main/binary-arm64/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-armhf/Packages
+ f61f27bd17de546264aa58f40f3aafaac7021e0ef69c17f6b1b4cd7664a037ec               20 main/binary-armhf/Packages.gz
+SHA512:
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-amd64/Packages
+ 1b46b9b08d5b338be9d732a1724795b2eab63daffde377218727c90857b79fe6a47bceed495117fcde60f7339812ef75ef4c69f82dd79fb69b6cbf8006b521f2               20 main/binary-amd64/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-arm64/Packages
+ 1b46b9b08d5b338be9d732a1724795b2eab63daffde377218727c90857b79fe6a47bceed495117fcde60f7339812ef75ef4c69f82dd79fb69b6cbf8006b521f2               20 main/binary-arm64/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-armhf/Packages
+ 1b46b9b08d5b338be9d732a1724795b2eab63daffde377218727c90857b79fe6a47bceed495117fcde60f7339812ef75ef4c69f82dd79fb69b6cbf8006b521f2               20 main/binary-armhf/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEyoHafOo3lhfNC43vMvfQfHNDMYIFAmsJFL0ACgkQMvfQfHND
+MYLTthAA6dYZH2G39b1XEpYzzzMQhD55JWGSRkAZysci8DNpS5SbVxRD7/tmy51s
+wK8z8bDhk6+o7xNOnNTGRUL7b81uPfE0M1MT9z37QrDf4OyxG8OToPUjEy+lCF1S
+FQ4dvkv8AqHg5LAZUMy+MjDHRDMtrFnivWbt0egV2bQcclZ5efsc5+HBwDqbwgTH
+M1zkuZv8+J15kyCbD7+2uVebr4zYJUrvmT3EdL9+rV52x9jVUM8HSj4yAHMbelEo
+Z+N6bHr/Dp/H0m30kf0NVN1gDQMBQBN7/BNA6qJj8H+Vle16SmMF/dCM1AXHAMd8
+uie8Alm0DjlWemreN9kg845MjE9ZTh1ecxzX9CSp0y1mIEa4LwvEfcfWJW2KWqbm
+43KPoY+7mjqAECFP1z9yOp6OY8GnxqyzkAFLHiMRRA4e8/cuYqNW4ttlSJNUzvRm
+tR79OgRmEr1qcpbwUvlNP74vusAQXCW0F0IB9YDeICDjRjCP71kOkxbHYfYSBS+e
+nztPBNFHeWNVrqPdKzexL9jBi4/Mdw30vIQs0AE4v0J1Ta2JP7RzhSad191MZP1p
+VfSKtEzYmaP5unbiH+IxBfgZJ7t5uKGDjWn7UIg1txd299AOpFL5tlHFFuj72wRf
+wrX8wW/gBSiSDMPB7CEtkPDH4MD2JpsEeCbDS5ndjCnSNiJS5Y4=
+=suD5
+-----END PGP SIGNATURE-----

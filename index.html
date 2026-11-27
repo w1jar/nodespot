@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>nodespot - native radio node and web control panel</title>
+<meta name="description" content="Install nodespot, a native radio node (AllStarLink, EchoLink and digital modes, no Asterisk) with a web control panel, from the signed apt repository.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230ea5e9'/%3E%3Cpath d='M8 22a11 11 0 0 1 16 0M11.5 18.5a6 6 0 0 1 9 0' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='23' r='2' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#f3f5f8;--surface:#fff;--surface-2:#e9edf2;--line:#cfd6df;--fg:#0f172a;--muted:#566274;--accent:#0369a1;--accent-fg:#fff;--ok:#15803d;--warn:#a16207;--danger:#b91c1c;
+--sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0a0e14;--surface:#111821;--surface-2:#19222e;--line:#273344;--fg:#e6edf6;--muted:#93a1b5;--accent:#38bdf8;--accent-fg:#04121c;--ok:#4ade80;--warn:#facc15;--danger:#f87171;color-scheme:dark}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+header.top{background:var(--surface);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:10px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:6px;font-weight:700;font-size:16px;letter-spacing:-.025em;color:var(--fg);text-decoration:none}
+.brand svg{width:18px;height:18px;flex:none;color:var(--accent)}
+header.top .gh{margin-left:auto}
+.hero{padding:28px 0 4px}
+h1{font-size:24px;line-height:1.25;margin:0 0 8px;letter-spacing:-.015em}
+h2{font-size:17px;margin:0 0 8px;letter-spacing:-.01em}
+h3{font-size:14px;margin:18px 0 6px}
+p{margin:0 0 10px}
+.lead{color:var(--muted);font-size:16px;margin-bottom:12px}
+.muted{color:var(--muted)}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px;padding:0;list-style:none}
+.badge{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:1px 10px;font-size:12px;font-weight:500;color:var(--muted)}
+.badge b{color:var(--fg);font-weight:600}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;margin:16px 0}
+.card>:last-child{margin-bottom:0}
+.note{border-left:3px solid var(--accent);background:var(--surface-2);border-radius:0 6px 6px 0;padding:8px 12px;margin:0 0 10px;font-size:14px}
+.note.warn{border-left-color:var(--warn)}
+code{font-family:var(--mono);font-size:.9em}
+p code,li code,label code,.hint code{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 4px;word-break:break-word}
+.cmd{position:relative;margin:0 0 10px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.cmd pre{margin:0 2.75rem 0 0;background:none;border:0;border-radius:6px;padding:10px 12px;overflow-x:auto;max-width:100%;font-family:var(--mono);font-size:13px;line-height:1.5}
+.cmd pre code{font-size:inherit;background:none;border:0;padding:0;word-break:normal;white-space:pre}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-height:32px;border-radius:4px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:2px 12px;font:500 13px var(--sans);cursor:pointer;text-decoration:none;transition:background .15s}
+.btn:hover{background:var(--surface-2)}
+.cmd pre:focus-visible{outline-offset:-2px}
+.copy{position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.copy:hover{background:var(--surface-2);color:var(--fg)}
+.copy[disabled]{opacity:.4;cursor:not-allowed;background:transparent;color:var(--muted)}
+.copy[disabled]:hover{background:transparent;color:var(--muted)}
+.copy .i-check{display:none}
+.copy.done{color:var(--ok);border-color:var(--ok)}
+.copy.done .i-copy{display:none}
+.copy.done .i-check{display:block}
+.copy.fail{color:var(--warn);border-color:var(--warn)}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+fieldset{border:0;margin:0 0 16px;padding:0;min-width:0}
+legend,.label{display:block;padding:0;margin:0 0 4px;font-size:12px;font-weight:600;color:var(--muted)}
+.opt{display:flex;align-items:flex-start;gap:8px;padding:2px 0}
+.opt input{margin:4px 0 0;width:16px;height:16px;accent-color:var(--accent);flex:none}
+.opt label{font-size:14px;color:var(--fg)}
+.opt small{display:block;color:var(--muted);font-size:13px}
+.input{display:block;width:9rem;min-height:32px;border-radius:4px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:2px 10px;font:14px var(--sans)}
+.input::placeholder{color:var(--muted)}
+.input[aria-invalid=true]{border-color:var(--danger)}
+.hint{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.err{margin:4px 0 0;font-size:13px;color:var(--danger);font-weight:500}
+.warnmsg{margin:4px 0 0;font-size:13px;color:var(--warn)}
+ul.plain{margin:0 0 10px;padding-left:20px}
+ul.plain li{margin:0 0 4px}
+dl.params{margin:0}
+dl.params dt{font-weight:600;margin-top:10px}
+dl.params dd{margin:2px 0 0;color:var(--muted)}
+footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head><body>
+<header class="top"><div class="wrap">
+<a class="brand" href="#top" aria-label="nodespot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></svg>nodespot</a>
+<a class="btn gh" href="https://github.com/w1jar/nodespot">GitHub</a>
+</div></header>
+<main class="wrap" id="top">
+<section class="hero">
+<h1>A native radio node with a web control panel</h1>
+<p class="lead">nodespot lets you connect, monitor and manage favorites with live status from any browser, and it can set up digital modes for you. It runs on Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS (arm64 and amd64; 64-bit only).</p>
+<ul class="badges">
+<li class="badge">Latest release <b>none yet</b></li>
+<li class="badge">Latest beta <b>1.0.0</b></li>
+</ul>
+<p class="muted">Docs, screenshots and bug reports are on <a href="https://github.com/w1jar/nodespot">GitHub</a>.</p>
+</section>
+
+<section class="card" aria-labelledby="h-quick">
+<h2 id="h-quick">Quick install</h2>
+<p>Run this on the node (over SSH or in a terminal):</p>
+<div class="cmd">
+<pre tabindex="0"><code id="cmd-default">curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo sh</code></pre><button type="button" class="copy" data-copy="cmd-default" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+</div>
+<p class="note">Run this on the node (over SSH or in a terminal). It works on plain Debian 12/13 or Raspberry Pi OS Lite 64-bit. nodespot runs its own node: it does not need AllStarLink 3 or Asterisk.</p>
+<p class="note warn">On a freshly flashed card, wait for its first-boot setup to finish before you install. The installer checks this.</p>
+<p class="note">At the end the installer prints a one-time setup link. Open it to create the administrator or to restore a backup from an existing node. <code>sudo nodespot admin setup-code</code> shows the code again.</p>
+</section>
+
+<section class="card" aria-labelledby="h-opts">
+<h2 id="h-opts">Install options</h2>
+<div id="wizard" hidden>
+<p class="muted">Pick what you need and copy the command. Everything is optional.</p>
+<form id="opts" onsubmit="return false" novalidate>
+<fieldset>
+<legend>Port 80 and other web services</legend>
+<div class="opt"><input type="checkbox" id="o-take"><label for="o-take">Run nodespot on port 80 and turn off web services an earlier ASL install left<small>Stops and disables Allmon3, the web server of the ASL web UIs (Apache, lighttpd or nginx), asl-web-ui and Supermon, if they are there. The panel is then at <code>http://your-node/</code>. You can undo it (see below).</small></label></div>
+</fieldset>
+<fieldset>
+<legend>Web port</legend>
+<label class="label" for="o-port">Port (1024-65535, or 80)</label>
+<input class="input" id="o-port" type="number" inputmode="numeric" min="80" max="65535" step="1" placeholder="8181" aria-describedby="o-port-hint o-port-err" autocomplete="off">
+<p class="hint" id="o-port-hint">1024-65535, or 80; 8080 is the default. Avoid 9090 (Cockpit). Port 80 is set for you by the option above.</p>
+<p class="err" id="o-port-err" role="alert" hidden></p>
+<p class="warnmsg" id="o-port-warn" hidden></p>
+</fieldset>
+<fieldset>
+<legend>Channel</legend>
+<div class="opt"><input type="radio" name="chan" id="o-stable" value="stable" checked><label for="o-stable">Stable<small>Tested releases. This is the default.</small></label></div>
+<div class="opt"><input type="radio" name="chan" id="o-beta" value="beta"><label for="o-beta">Beta<small>New builds before they are promoted to stable. You get fixes sooner, but they may be less stable.</small></label></div>
+</fieldset>
+</form>
+<h3>Your command</h3>
+<div class="cmd">
+<pre tabindex="0"><code id="cmd-gen">curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo sh</code></pre><button type="button" class="copy" id="copy-gen" data-copy="cmd-gen" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+</div>
+</div>
+<div id="params-static">
+<p>Add these before <code>sh</code>, after <code>sudo</code>, separated by spaces. All are optional:</p>
+<dl class="params">
+<dt><code>NODESPOT_PORT=8181</code></dt><dd>Web port, 1024-65535, or 80. The default is 8080. Avoid 9090 (Cockpit).</dd>
+<dt><code>NODESPOT_TAKEOVER=1</code></dt><dd>Run nodespot on port 80 and turn off web services an earlier ASL install left (<code>yes</code> and <code>true</code> work too). See below.</dd>
+<dt><code>NODESPOT_CHANNEL=beta</code></dt><dd>Use the beta channel (new builds before they are promoted to stable). The default is <code>stable</code>.</dd>
+</dl>
+<p style="margin-top:10px">Example with several options:</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-example">curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_PORT=8181 NODESPOT_CHANNEL=beta sh</code></pre><button type="button" class="copy" data-copy="cmd-example" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+</div>
+</section>
+
+<section class="card" aria-labelledby="h-take">
+<h2 id="h-take">nodespot on port 80, no other web UI</h2>
+<p>A card that ran ASL3 before may still run Apache, Allmon3 and the ASL web UI. To make nodespot the only web UI, on port 80:</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-take">curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_TAKEOVER=1 sh</code></pre><button type="button" class="copy" data-copy="cmd-take" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<p>The installer stops and disables Allmon3, the web server of the ASL web UIs (Apache, lighttpd or nginx), asl-web-ui and Supermon, but only those that exist and are on, and lists each one. <strong>The node keeps running.</strong> Nothing is uninstalled. Then nodespot moves to port 80 and the panel is at <code>http://your-node/</code>. If something else still holds port 80, the installer names it and leaves nodespot on its old port.</p>
+<p>To undo it (nodespot goes back to its old port and the units it turned off are enabled and started again):</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-untake">curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_TAKEOVER=undo sh</code></pre><button type="button" class="copy" data-copy="cmd-untake" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+</section>
+
+<section class="card" aria-labelledby="h-later">
+<h2 id="h-later">Changing things later</h2>
+<h3>Web port</h3>
+<p>The web interface listens on port <strong>8080</strong> by default. To change it, run the installer again with <code>NODESPOT_PORT</code> (1024-65535, or 80), or edit <code>listen</code> in <code>/etc/nodespot/nodespot.conf</code> (for example <code>listen = :8181</code>) and run <code>sudo systemctl restart nodespot</code>. The installer warns if another program already uses the port.</p>
+<p>If firewalld is running, the installer and the package open the configured port for you. With another firewall (ufw, nftables, a router) open the TCP port yourself. If you edit <code>listen</code> by hand while firewalld is running, open the new port too.</p>
+<h3>Update</h3>
+<p>Use Settings &rarr; Updates in the web UI, or:</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-update">sudo apt update &amp;&amp; sudo apt upgrade</code></pre><button type="button" class="copy" data-copy="cmd-update" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<h3>Uninstall</h3>
+<div class="cmd"><pre tabindex="0"><code id="cmd-remove">sudo apt remove nodespot   # keeps users and favorites
+sudo apt purge nodespot    # also deletes them</code></pre><button type="button" class="copy" data-copy="cmd-remove" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<p><code>apt purge</code> also deletes the node config (which holds network passwords).</p>
+</section>
+
+<section class="card" aria-labelledby="h-manual">
+<h2 id="h-manual">Manual apt setup</h2>
+<p>Prefer not to pipe a script? Add the signed repository yourself:</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-manual">sudo curl -fsSL -o /usr/share/keyrings/nodespot-archive-keyring.gpg https://w1jar.github.io/nodespot/nodespot-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/nodespot-archive-keyring.gpg] https://w1jar.github.io/nodespot stable main" | sudo tee /etc/apt/sources.list.d/nodespot.list
+sudo apt update &amp;&amp; sudo apt install nodespot</code></pre><button type="button" class="copy" data-copy="cmd-manual" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<p>Signing key fingerprint: <code>CA81DA7CEA379617CD0B8DEF32F7D07C73433182</code> (<a href="nodespot-archive-keyring.asc">armored key</a>)</p>
+<h3>Beta channel</h3>
+<p>Every new version goes to the <code>beta</code> suite as soon as it is built. It becomes a release (suite <code>stable</code>) when it is promoted after testing: the same package, not a rebuild. The <code>beta</code> suite also carries every release, so beta users are never behind. Betas may be less stable.</p>
+<p>To use it, put <code>beta</code> instead of <code>stable</code> in the line above:</p>
+<div class="cmd"><pre tabindex="0"><code id="cmd-beta">echo "deb [signed-by=/usr/share/keyrings/nodespot-archive-keyring.gpg] https://w1jar.github.io/nodespot beta main" | sudo tee /etc/apt/sources.list.d/nodespot.list</code></pre><button type="button" class="copy" data-copy="cmd-beta" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></div>
+<p>Or install with <code>NODESPOT_CHANNEL=beta</code> (see the options above), or switch in Settings &rarr; Updates in the web UI. It is the same setting: it changes the suite in <code>/etc/apt/sources.list.d/nodespot.list</code>. Going back to <code>stable</code> does not downgrade: the node stays on the installed version until a release newer than it is promoted.</p>
+</section>
+</main>
+<footer><div class="wrap">nodespot &middot; <a href="https://github.com/w1jar/nodespot">GitHub</a> &middot; <a href="https://github.com/w1jar/nodespot/issues">Report a bug</a></div></footer>
+<div class="sr" id="live" aria-live="polite" role="status"></div>
+<script>
+(function () {
+  var BASE = "https://w1jar.github.io/nodespot";
+  var live = document.getElementById("live");
+  function copyText(el) {
+    var text = el.textContent;
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).catch(function () { return fallback(el); });
+    }
+    return fallback(el);
+  }
+  function fallback(el) {
+    return new Promise(function (ok, fail) {
+      try {
+        var sel = window.getSelection(), r = document.createRange();
+        r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r);
+        if (document.execCommand("copy")) ok(); else fail(new Error("copy failed"));
+      } catch (e) { fail(e); }
+    });
+  }
+  var btns = document.querySelectorAll("[data-copy]");
+  Array.prototype.forEach.call(btns, function (b) {
+    b.hidden = false;
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.getAttribute("data-copy"));
+      if (!el) return;
+      copyText(el).then(function () { flash(b, "done", "Copied to clipboard"); },
+        function () { flash(b, "fail", "Copy failed, the command is selected: press Ctrl+C"); });
+    });
+  });
+  function flash(b, cls, say) {
+    b.classList.remove("done", "fail");
+    b.classList.add(cls);
+    b.title = cls === "done" ? "Copied" : "Press Ctrl+C";
+    live.textContent = "";
+    setTimeout(function () { live.textContent = say; }, 30);
+    clearTimeout(b._t);
+    b._t = setTimeout(function () { b.classList.remove("done", "fail"); b.title = "Copy"; }, 2000);
+  }
+
+  var wiz = document.getElementById("wizard"), stat = document.getElementById("params-static");
+  var port = document.getElementById("o-port"),
+    beta = document.getElementById("o-beta"), take = document.getElementById("o-take"), out = document.getElementById("cmd-gen"),
+    err = document.getElementById("o-port-err"), warn = document.getElementById("o-port-warn"),
+    copyGen = document.getElementById("copy-gen");
+  wiz.hidden = false; stat.hidden = true;
+  function build() {
+    var raw = port.value.trim(), bad = port.validity && port.validity.badInput;
+    var valid = !bad && (raw === "" || raw === "80" || (/^[1-9][0-9]{3,4}$/.test(raw) && Number(raw) >= 1024 && Number(raw) <= 65535));
+    port.setAttribute("aria-invalid", valid ? "false" : "true");
+    err.hidden = valid;
+    err.textContent = valid ? "" : "Enter 80 or a whole number from 1024 to 65535, or leave it empty for 8080.";
+    copyGen.disabled = !valid;
+    var w = "";
+    if (valid && raw === "9090") w = "Port 9090 is used by Cockpit. Pick another port.";
+    warn.textContent = w; warn.hidden = !w;
+    if (!valid) return;
+    var vars = [];
+    if (take.checked) vars.push("NODESPOT_TAKEOVER=1");
+    if (raw !== "" && raw !== "8080" && !(take.checked && raw === "80")) vars.push("NODESPOT_PORT=" + raw);
+    if (beta.checked) vars.push("NODESPOT_CHANNEL=beta");
+    out.textContent = "curl -fsSL " + BASE + "/install.sh | sudo " + (vars.length ? vars.join(" ") + " " : "") + "sh";
+  }
+  document.getElementById("opts").addEventListener("input", build);
+  document.getElementById("opts").addEventListener("change", build);
+  build();
+})();
+</script>
+</body></html>

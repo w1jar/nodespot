@@ -1,0 +1,21 @@
+Package: nodespot
+Architecture: amd64
+Version: 1.0.0
+Priority: optional
+Section: net
+Maintainer: nodespot <noreply@users.noreply.github.com>
+Installed-Size: 30419
+Depends: systemd, adduser, git
+Filename: pool/beta/a/nodespot/nodespot_1.0.0_amd64.deb
+Size: 10398174
+MD5sum: df46e2a6c0571b97ea93d53b6b42ea84
+SHA1: 1aa420e12fed0697fc42167921a7cd4633fb9611
+SHA256: 7af8152818ab759edcf5dac3f005579b2d76d9cd4a618f18874c3122e2cff126
+SHA512: 1aceae25a27bcea1c8b48efa6b895efc731f29982bce722fda853c5f437a1b0d684a27e4fa88c25db5fc3537cb378ea98b87d5a5520f7445c6dfda03f489ccc9
+Homepage: https://w1jar.github.io/nodespot/
+Description: Native radio node with a web control panel.
+ One radio, one network mode at a time (AllStarLink, EchoLink or a digital
+ mode), chosen and watched from a browser. The node (nodespot-node) runs on its
+ own, without Asterisk; the panel talks to it over a local socket. A small
+ root helper performs package updates and backups on request.
+

@@ -1,0 +1,36 @@
+Architectures: arm64 amd64 armhf
+Codename: beta
+Components: main
+Date: Fri, 27 Nov 2026 05:27:25 +0000
+Description: nodespot packages for Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS (beta)
+Label: nodespot
+Origin: nodespot
+Suite: beta
+MD5Sum:
+ bc664b5f3cbefc7cfdba98271373759a              957 main/binary-amd64/Packages
+ 9dd1d0b96a3841919f204e09a62a7bfc              652 main/binary-amd64/Packages.gz
+ 075ba79d4769cd3e98490d1071630ae4              956 main/binary-arm64/Packages
+ 5ec199b2f8b5eec770268502fbac6bf1              654 main/binary-arm64/Packages.gz
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-armhf/Packages
+ 4a4dd3598707603b3f76a2378a4504aa               20 main/binary-armhf/Packages.gz
+SHA1:
+ c630f8306420db27bdc60d8b7b2dc893f291aec7              957 main/binary-amd64/Packages
+ 52c9c3fd7ddfdd7228fff860d93413124a5cc427              652 main/binary-amd64/Packages.gz
+ e19035c4be527a6244c21a8a86996162afc9c816              956 main/binary-arm64/Packages
+ c62fdc38dfa4b813202e2031ce29a5fb17a6f24b              654 main/binary-arm64/Packages.gz
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-armhf/Packages
+ a0fddd5458378c1bf3c10dd2f5c060d1347741ed               20 main/binary-armhf/Packages.gz
+SHA256:
+ d42deb40765901654411b420e50fd610bd5b4f9646d82274c36787d7200e0a56              957 main/binary-amd64/Packages
+ a8a325d6f1e43836d2ecba6117eb5e1c61b815728e5b3c8d85e9d4abfed98115              652 main/binary-amd64/Packages.gz
+ 209116b2bc01dbe098dd1bb9832df9258f2e9eb1b10c656d7365262cd106a33d              956 main/binary-arm64/Packages
+ bb24b3fe7518fdeb9857ae473d16554b6bfd1b70f7ac6c391793449dcc242072              654 main/binary-arm64/Packages.gz
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-armhf/Packages
+ f61f27bd17de546264aa58f40f3aafaac7021e0ef69c17f6b1b4cd7664a037ec               20 main/binary-armhf/Packages.gz
+SHA512:
+ c07caea45828010410b635df6bad7b737d6ebc66944d5fcf078b0eb1b26be90b2a55ff66375902c5d396489ad0345a3f0d87a37f8f0cd67955284eab3626c8cc              957 main/binary-amd64/Packages
+ 25513c9ca26e15a97445e872d78ed88f8327e6f41181289247eccf99e0d42f432f285a1855c86b7d7d02101e490d431c1f2155379ba48bae965c66dfd7e254f5              652 main/binary-amd64/Packages.gz
+ 91345986d30f74350c8384a40c8d24af8493a70da20491f764065b07a575d72c1c4224c58668d815cb11eae1f2a163ab00e5088af8b37ae220f4e35e9752d509              956 main/binary-arm64/Packages
+ 4e990e437dce6c46e601e37c8f990f80fe492964814f5bc8d7bb3de654c8972f8043322305148d4b744828b7885526c1d949e864cd45004e14cb68b9ffec9e1e              654 main/binary-arm64/Packages.gz
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-armhf/Packages
+ 1b46b9b08d5b338be9d732a1724795b2eab63daffde377218727c90857b79fe6a47bceed495117fcde60f7339812ef75ef4c69f82dd79fb69b6cbf8006b521f2               20 main/binary-armhf/Packages.gz
