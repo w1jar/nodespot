@@ -36,10 +36,10 @@ func (n *fakeNet) Run(ctx context.Context, s network.Sink) error {
 	n.mu.Lock()
 	n.sink = s
 	n.mu.Unlock()
+	// No LoginPending here: Start already shows "logging in", and a pending
+	// event pushed after close(ran) could reach the mode after the test's
+	// LoginOK and undo the login (connected never arrives).
 	close(n.ran)
-	if n.login {
-		s.Login(ctl.LoginPending, "")
-	}
 	<-ctx.Done()
 	return nil
 }

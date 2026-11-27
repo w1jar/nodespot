@@ -633,4 +633,6 @@ page=${page//@FPR@/"$fpr"}
 printf '%s
 ' "$page" >index.html
 touch .nojekyll
+# Google Search Console ownership check for the site; keep it on every publish.
+printf 'google-site-verification: googlea00e63412378cd8b.html' >googlea00e63412378cd8b.html
 echo "publish-apt: repository updated (released $released, stable ${newest_stable:-none}, beta channel $newest_all, key $fpr)"

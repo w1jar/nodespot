@@ -48,6 +48,12 @@ func newFakeRef(t *testing.T) *fakeRef {
 			f.peer = from
 			mode, ackD := f.mode, f.ackD
 			f.mu.Unlock()
+			// record before replying: once the client has the reply, a test
+			// may drain got and must find this packet already there
+			select {
+			case f.got <- p:
+			default:
+			}
 			if l == proto.ConnLen && string(p[:4]) == "CONN" {
 				switch mode {
 				case "ack":
@@ -58,10 +64,6 @@ func newFakeRef(t *testing.T) *fakeRef {
 			}
 			if l == proto.AddrLen && string(p[:4]) == "DISC" && ackD {
 				c.WriteToUDP([]byte("DISC"), from)
-			}
-			select {
-			case f.got <- p:
-			default:
 			}
 		}
 	}()
