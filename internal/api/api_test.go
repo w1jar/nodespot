@@ -30,6 +30,7 @@ import (
 	"github.com/w1jar/nodespot/internal/native/node/nodetest"
 	"github.com/w1jar/nodespot/internal/nodelist"
 	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/radioid"
 	"github.com/w1jar/nodespot/internal/schedules"
 	"github.com/w1jar/nodespot/internal/store"
 	"github.com/w1jar/nodespot/internal/system"
@@ -84,6 +85,8 @@ type opts struct {
 	// noNode leaves Deps.Node nil; nodeCfg replaces the default node config.
 	noNode  bool
 	nodeCfg *node.Config
+	// radioid is the radioid.net list (nil: none).
+	radioid *radioid.Manager
 }
 
 // testNodeConfig is a station with AllStar and BrandMeister set up, the ID
@@ -213,6 +216,9 @@ func newEnv(t *testing.T, o opts) *env {
 		AllowedOrigins: origins, Logger: quiet,
 		Log: o.log, PlatformPaths: &diag.PlatformPaths{DeviceModel: "/nonexistent"},
 		Power: o.power, SysHost: o.sysHost, HostLists: o.hostlists, FavStats: o.favstats,
+	}
+	if o.radioid != nil {
+		deps.RadioID = o.radioid
 	}
 	if o.updatesFn != nil {
 		deps.Updates = o.updatesFn(st)

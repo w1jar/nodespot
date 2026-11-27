@@ -131,6 +131,7 @@ export function startEvents() {
     app.events = [ev, ...app.events].slice(0, 50);
     if (ev.kind === 'talk_end') refreshHeard();
   });
+  es.addEventListener('settings', (e) => { applySettings(parse<Settings>(e)); });
   es.addEventListener('updates', (e) => { app.updates = parse<UpdatesBadge>(e); });
   es.addEventListener('system', (e) => { app.system = parse<SystemInfo>(e); });
   es.addEventListener('favorites', (e) => { app.favorites = parse<Favorite[]>(e); app.haveFavorites = true; });

@@ -48,7 +48,7 @@ const defOf = (n: string) => MODES.find((m) => m.name === n);
 const values: Record<string, Record<string, string>> = {
   allstar: { node: '1999', server: 'register.example.net' }, bm: { id: '1234567', address: 'bm-master2.example.net' },
 };
-const secrets: Record<string, Record<string, boolean>> = { allstar: { password: true }, bm: { password: true } };
+const secrets: Record<string, Record<string, boolean>> = { allstar: { password: true }, bm: { password: true }, echolink: { password: true } };
 // The station value a field falls back to ("" when the station has none).
 const stationVal = (f: Field) => (f.stationDefault && station[f.stationDefault] ? String(station[f.stationDefault]) : '');
 // The required fields with no value of their own, no default and no station fallback.
@@ -121,7 +121,40 @@ const CALLERS: Call[] = [
   { callsign: 'N1CALL', name: 'Sam Example', place: 'Shelbyville, XX', mode: 'ysf', target: 'YSF-TEST' },
   { callsign: 'N0CALL', name: 'Pat Example', place: 'Springfield, XX', mode: 'm17', target: 'M17-XXX C' },
   { callsign: 'N1CALL-L', name: 'Sam Example', place: 'Shelbyville, XX', mode: 'echolink', target: 'N1CALL-L' },
+  // A BrandMeister talker the network sends with only its DMR ID; the server's lookup (RADIOID below) fills the rest.
+  { callsign: '', name: '', place: '', id: 1234567, mode: 'bm', target: '91' },
 ];
+// What the server's talker lookup (radioid by DMR ID, then hamdb) answers. Fills only empty fields; AllStar is untouched.
+const RADIOID: Record<number, { callsign: string; name: string; place: string }> = { 1234567: { callsign: 'N0CALL', name: 'Pat Example', place: 'Springfield, XX' }, 1234568: { callsign: 'N1CALL', name: 'Sam Example', place: 'Shelbyville, XX' } };
+const enrich = <T extends { callsign: string; name: string; place: string; id?: number }>(t: T, mode: string): T => {
+  const r = mode !== 'allstar' && mode !== 'echotest' && t.id ? RADIOID[t.id] : undefined;
+  return r ? { ...t, callsign: t.callsign || r.callsign, name: t.name || r.name, place: t.place || r.place } : t;
+};
+// MOCK_TALKER=remote keeps a talker on the active mode (the ID-only one on BrandMeister); MOCK_TALKER=local keys the
+// local station (radio.rxActive). Unset: a talker for 8 s of every 30 s.
+const mockTalker = process.env.MOCK_TALKER ?? '';
+
+// The EchoLink directory: loaded while EchoLink is the active mode (it logs in then), or always with MOCK_ECHO_DIR=1.
+const ECHO_DIR = [
+  { node: 1997, callsign: 'N0CALL-L', location: 'Exampleton, ST', status: 'online', kind: 'link' },
+  { node: 9999, callsign: '*ECHOTEST*', location: 'Test server', status: 'online', kind: 'conference' },
+  { node: 2001, callsign: 'N1CALL-R', location: 'Sampleburg, ST 146.520', status: 'busy', kind: 'repeater' },
+  { node: 2002, callsign: '*TEST*', location: 'Test conference', status: 'online', kind: 'conference' },
+  { node: 1998, callsign: 'N1CALL', location: 'Testville, ST', status: 'online', kind: 'user' },
+];
+const echoSearch = (q: string, limit: number) => {
+  if (active !== 'echolink' && process.env.MOCK_ECHO_DIR !== '1') return { loaded: false, results: [] };
+  const t = q.trim().toUpperCase().replace(/^\*+|\*+$/g, ''), digits = /^\d+$/.test(t);
+  if (!t) return { loaded: true, updated: '2026-11-27T06:00:00Z', results: [] };
+  const rank = (e: (typeof ECHO_DIR)[number]) => { const c = e.callsign.replace(/^\*+|\*+$/g, ''), n = String(e.node);
+    return c === t || (digits && n === t) ? 0 : c.startsWith(t) ? 1 : digits && n.startsWith(t) ? 2 : c.includes(t) ? 3 : t.length >= 3 && e.location.toUpperCase().includes(t) ? 4 : -1; };
+  const results = ECHO_DIR.map((e) => [rank(e), e] as const).filter(([r]) => r >= 0).sort((a, b) => a[0] - b[0] || a[1].callsign.localeCompare(b[1].callsign)).slice(0, limit).map(([, e]) => e);
+  return { loaded: true, updated: '2026-11-27T06:00:00Z', results };
+};
+
+// Hidden modes (an app setting, admin only to change). MOCK_HIDDEN=p25,nxdn starts with some hidden.
+let hiddenModes: string[] = (process.env.MOCK_HIDDEN ?? '').split(',').map((x) => x.trim()).filter(Boolean).sort();
+const settingsJSON = () => ({ hiddenModes });
 interface HeardRow { mode: string; callsign: string; name: string; place: string; id?: number; target: string; start: number; end?: number }
 const heard: HeardRow[] = CALLERS.slice(0, 6).map((c, i) => ({ mode: c.mode, callsign: c.callsign, name: c.name, place: c.place, id: c.id, target: c.target, start: Date.now() - (i + 1) * 420e3, end: Date.now() - (i + 1) * 420e3 + (4 + i) * 1000 }));
 const now = () => Date.now();
@@ -167,7 +200,7 @@ const autoStatus = () => {
 const nodeJSON = () => ({
   callsign: station.callsign || undefined, started,
   echoTest: { at: iso(now() - 30e3), frames: 160, durationMs: 3200, peakDb: -9.4, rmsDb: -21.8, voicedFrames: 142, clipped: 0 },
-  radio: { present: radioPresent && resolved().audio, level: (({ lastRx: _l, ...l }) => l)(inputLevel() as any), ...(radioPresent ? { lastRx: lastRx() } : {}), ptt, cos, needsTuning: radioPresent && resolved().audio && !audioTuned, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818, ...(testTone ? { testTone: true } : {}) },
+  radio: { present: radioPresent && resolved().audio, level: (({ lastRx: _l, ...l }) => l)(inputLevel() as any), ...(radioPresent ? { lastRx: lastRx() } : {}), ptt, cos, needsTuning: radioPresent && resolved().audio && !audioTuned, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818, ...(testTone ? { testTone: true } : {}), ...(mockTalker === 'local' && active ? { rxActive: true } : {}) },
   active: active || undefined, since: active ? since : undefined,
   mode: active ? modeStatus(active) : undefined,
   id: { enabled: station.id.enabled, owed: false, last: iso(now() - 240e3) },
@@ -179,7 +212,7 @@ function modeStatus(name: string) {
   return {
     mode: name, title: d.title, active: on, state: !on ? 'idle' : state === 'idle' ? 'ready' : state,
     ...(on && target ? { target: { id: target, ...(name === 'allstar' ? { name: allstarInfo(target)?.callsign } : {}) } } : {}), ...(on ? { since } : {}),
-    ...(on && talker ? { talker: { callsign: talker.callsign, name: talker.name, place: talker.place, id: talker.id, since: talker.since } } : {}),
+    ...(on && talker ? { talker: enrich({ callsign: talker.callsign, name: talker.name, place: talker.place, id: talker.id, since: talker.since }, name) } : {}),
     ...(on && name === 'allstar' && target ? { link: { rxVoiceFull: 4, rxVoiceMini: 1250, txVoice: 0, vnakSent: 0, vnakRecv: 0, retransmits: 0, parseErrors: 0, dropped: 0, gaps: 0 } } : {}),
     ...(name === 'allstar' || name === 'echolink' ? { registration: { registered: isConfigured(d), ready: isConfigured(d), dnsOk: true, publicIp: '203.0.113.7', lastSuccess: iso(now() - 600e3) } } : {}),
   };
@@ -208,12 +241,12 @@ const sortedFavs = () => [...favs].sort((a, b) => a.mode.localeCompare(b.mode) |
 
 // ---- Now calling (the lookup strip) and the public view.
 const callOf = (c: Call, active_: boolean, start: number, end?: number) => ({ id: `${c.mode}-${c.callsign}-${start}`, kind: c.mode, call: c.callsign, name: c.name, location: c.place, ...(c.id ? { dmrId: String(c.id) } : {}), ...(c.node ? { node: c.node, desc: c.desc } : {}), target: c.target, start: iso(start), ...(end ? { end: iso(end) } : {}), active: active_ });
-const callFor = (h: HeardRow): Call => ({ callsign: h.callsign, name: h.name, place: h.place, id: h.id, mode: h.mode, target: h.target });
+const callFor = (h: HeardRow): Call => enrich({ callsign: h.callsign, name: h.name, place: h.place, id: h.id, mode: h.mode, target: h.target }, h.mode);
 const nowCalling = () => ({
-  current: talker ? callOf({ callsign: talker.callsign, name: talker.name, place: talker.place, id: talker.id, mode: active, target }, true, Date.parse(talker.since)) : null,
+  current: talker ? callOf(enrich({ callsign: talker.callsign, name: talker.name, place: talker.place, id: talker.id, mode: active, target }, active), true, Date.parse(talker.since)) : null,
   recent: heard.filter((h) => h.end).sort((a, b) => b.start - a.start).slice(0, 10).map((h) => callOf(callFor(h), false, h.start, h.end)),
 });
-const heardJSON = () => [...heard].sort((a, b) => b.start - a.start).map((h) => ({ mode: h.mode, callsign: h.callsign, name: h.name, place: h.place, ...(h.id ? { id: h.id } : {}), target: h.target, start: iso(h.start), ...(h.end ? { end: iso(h.end), durationNs: (h.end - h.start) * 1e6 } : {}) }));
+const heardJSON = () => [...heard].sort((a, b) => b.start - a.start).map((h) => enrich(h, h.mode)).map((h) => ({ mode: h.mode, callsign: h.callsign, name: h.name, place: h.place, ...(h.id ? { id: h.id } : {}), target: h.target, start: iso(h.start), ...(h.end ? { end: iso(h.end), durationNs: (h.end - h.start) * 1e6 } : {}) }));
 
 const pubCfg = { enabled: true, title: '', showCallsigns: true, showHeard: true, allowEmbedding: false, trustProxy: false };
 const pubDefaultTitle = () => `${station.callsign || 'Station'} node`;
@@ -312,9 +345,9 @@ export function mockApi(): Plugin {
       setInterval(() => {
         tick++;
         // A talker on the active mode for 8 s of every 30 s, once it is connected.
-        const want = active && state === 'connected' && nodeRunning && tick % 30 < 8;
+        const want = active && state === 'connected' && nodeRunning && mockTalker !== 'local' && (mockTalker === 'remote' || tick % 30 < 8);
         if (want && !talker) {
-          const pool = CALLERS.filter((c) => c.mode === active); const c = pool[tick % Math.max(1, pool.length)] ?? CALLERS[0];
+          const pool = CALLERS.filter((c) => c.mode === active); const c = (mockTalker === 'remote' ? pool[pool.length - 1] : pool[tick % Math.max(1, pool.length)]) ?? CALLERS[0];
           talker = { callsign: c.callsign, name: c.name, place: c.place, id: c.id, since: iso(now()) }; cos = true;
           heard.push({ mode: active, callsign: c.callsign, name: c.name, place: c.place, id: c.id, target, start: now() });
           event('talk_start', { talker });
@@ -379,7 +412,7 @@ export function mockApi(): Plugin {
           res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
           const c = { res, role: user.role };
           clients.add(c); req.on('close', () => clients.delete(c));
-          sse(c, 'hello', { user, version: mockVersion, instance: mockInstance, settings: {}, setupNeeded: !stationSet });
+          sse(c, 'hello', { user, version: mockVersion, instance: mockInstance, settings: settingsJSON(), setupNeeded: !stationSet });
           sse(c, 'node', nodeJSON());
           sse(c, 'nowcalling', nowCalling());
           if (user.role === 'admin') sse(c, 'updates', osBadge());
@@ -557,7 +590,20 @@ export function mockApi(): Plugin {
           }
           return json(res, 200, { ...pubCfg, defaultTitle: pubDefaultTitle(), clients: pubClients.size });
         }
-        if (p === '/settings' && m === 'GET') return json(res, 200, {});
+        if (p === '/settings' && m === 'GET') return json(res, 200, settingsJSON());
+        if (p === '/settings/hidden-modes' && m === 'PUT') {
+          if (!isAdmin) return forbid();
+          if (!Array.isArray(body.hiddenModes)) return err(res, 400, 'hiddenModes: a list of mode names is required', 'bad_request');
+          const list = [...new Set((body.hiddenModes as unknown[]).map((x) => String(x).toLowerCase()))].sort();
+          if (list.some((x) => !/^[a-z0-9]{1,32}$/.test(x)) || list.length > 32) return err(res, 400, 'hiddenModes: bad mode name', 'bad_request');
+          hiddenModes = list; broadcast('settings', () => settingsJSON());
+          return json(res, 200, settingsJSON());
+        }
+        if (p === '/echolink/search' && m === 'GET') {
+          const lim = url.searchParams.has('limit') ? Number(url.searchParams.get('limit')) : 50;
+          if (!Number.isInteger(lim) || lim < 1) return err(res, 400, 'limit: a positive whole number is required', 'bad_request');
+          return json(res, 200, echoSearch(url.searchParams.get('q') ?? '', Math.min(lim, 200)));
+        }
         if (p === '/updates' || p.startsWith('/updates/')) {
           if (!isAdmin) return forbid();
           if (p === '/updates' && m === 'GET') return json(res, 200, updInfo());

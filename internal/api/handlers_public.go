@@ -103,7 +103,7 @@ func (s *Server) publicInput() public.Input {
 }
 
 func callIn(c nowcalling.Call) public.CallIn {
-	out := public.CallIn{Mode: c.Kind, Call: c.Call, Node: c.Node, Target: c.Target, Name: c.Name, Place: joinPlace(c.City, c.State)}
+	out := public.CallIn{Mode: c.Kind, Call: c.Call, Node: c.Node, Target: c.Target, Name: c.Name, Place: placeText(c.City, c.State, c.Country)}
 	if out.Place == "" {
 		out.Place = c.Location
 	}

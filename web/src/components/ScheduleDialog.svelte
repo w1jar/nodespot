@@ -3,7 +3,8 @@
   import { app, refreshSchedules } from '../lib/store.svelte';
   import { toast, toastError } from '../lib/toast.svelte';
   import { DAY_NAMES, DAY_ORDER, conflictMessage, emptyInput, findConflicts, validateSchedule } from '../lib/schedules';
-  import { modeTitle, sortModes, targetLabel } from '../lib/modes';
+  import { modeTitle, pickerModes, targetLabel } from '../lib/modes';
+  import { settings } from '../lib/settings.svelte';
   import type { Schedule, ScheduleInput } from '../lib/types';
   import Dialog from './Dialog.svelte';
 
@@ -11,7 +12,8 @@
   let f = $state<ScheduleInput>(emptyInput(''));
   let repeat = $state<'weekly' | 'once'>('weekly');
   let busy = $state(false), error = $state('');
-  const modes = $derived(sortModes(app.modes.filter((m) => m.configured)));
+  // Hidden modes are not offered, except the one an edited schedule already uses (and the active mode, the default).
+  const modes = $derived(pickerModes(app.modes, settings.hiddenModes, [schedule?.mode ?? '', ...[app.node?.active ?? ''].filter((n) => app.modes.some((m) => m.name === n && m.configured))].filter(Boolean)));
   const info = $derived(app.modes.find((m) => m.name === f.mode));
   const connect = $derived(f.action === 'connect');
   let wasOpen = false;

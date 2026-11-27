@@ -233,10 +233,13 @@ export function targetPlaceholder(m: ModeInfo | undefined): string {
   return m.targetHelp?.replace(/\.$/, '') ?? '';
 }
 
-/** A short status for a mode button: a dot tone and one word. A mode that is not ready is marked; the active one shows its link state. */
-export interface Chip { tone: 'ok' | 'warn' | 'err' | 'off'; text: string }
+/**
+ * A short status for a mode button: a dot tone and one word. A mode that is not set up is neutral ("unset": a grey dot and
+ * "Set up"); yellow and red are kept for real problems. The active one shows its link state.
+ */
+export interface Chip { tone: 'ok' | 'warn' | 'err' | 'off' | 'unset'; text: string }
 export function modeChip(m: ModeInfo, active: string, state: string | undefined): Chip {
-  if (!m.configured) return { tone: 'warn', text: 'Not set up' };
+  if (!m.configured) return { tone: 'unset', text: 'Set up' };
   if (m.name === active) {
     if (state === 'connected') return { tone: 'ok', text: m.name === 'echotest' ? 'Running' : 'Connected' };
     if (state === 'error') return { tone: 'err', text: 'Error' };
@@ -313,4 +316,57 @@ export function echoCodec(m: ModeInfo | undefined): string {
 /** The values to save for a new echo test codec. The server replaces a mode's values, so the stored ones (the playback delay) go along. */
 export function echoCodecValues(m: ModeInfo | undefined, codec: string): Record<string, string> {
   return { ...(m?.settings?.values ?? {}), codec };
+}
+
+// ---- Hidden modes (Settings.hiddenModes): an admin hides modes nobody here uses. Hiding never touches a mode's settings,
+// favorites or schedules.
+
+/** The modes the Modes row shows: all but the hidden ones; the active mode always shows, so it can be seen and stopped. */
+export function visibleModes<T extends { name: string }>(list: T[], hidden: readonly string[] | undefined, active: string): T[] {
+  const h = new Set(hidden ?? []);
+  return list.filter((m) => !h.has(m.name) || m.name === active);
+}
+
+/** The hidden modes the "+N hidden" chip lists: hidden and not shown anyway because they are active. */
+export function hiddenModes<T extends { name: string }>(list: T[], hidden: readonly string[] | undefined, active: string): T[] {
+  const h = new Set(hidden ?? []);
+  return list.filter((m) => h.has(m.name) && m.name !== active);
+}
+
+/**
+ * The modes a favorite or schedule picker offers: the ready ones that are not hidden, plus the modes in `keep` (the one an
+ * existing favorite or schedule already uses), so editing it never loses its mode.
+ */
+export function pickerModes<T extends { name: string; configured: boolean }>(list: T[], hidden: readonly string[] | undefined, keep: readonly string[] = []): T[] {
+  const h = new Set(hidden ?? []);
+  return sortModes(list.filter((m) => keep.includes(m.name) || (m.configured && !h.has(m.name))));
+}
+
+/** The hidden-modes list after showing (hide false) or hiding (hide true) one mode: sorted, without duplicates. */
+export function toggleHidden(hidden: readonly string[] | undefined, name: string, hide: boolean): string[] {
+  const s = new Set(hidden ?? []);
+  if (hide) s.add(name); else s.delete(name);
+  return [...s].sort();
+}
+
+// ---- The EchoLink directory search (GET /api/echolink/search).
+
+/** The note the EchoLink picker shows while the directory is not loaded. */
+export const ECHO_NOT_LOADED = 'EchoLink directory not loaded: log in to EchoLink first (make it the active mode).';
+
+const ECHO_KINDS: Record<string, string> = { conference: 'Conference', link: 'Link', repeater: 'Repeater', user: 'User' };
+/** A station kind for people: Conference, Link, Repeater or User. */
+export const echoKindLabel = (k: string | undefined): string => ECHO_KINDS[k ?? ''] ?? 'User';
+
+/** A station status for people: Online, Busy, the directory's own word, or '' when it gave none. */
+export function echoStatusLabel(s: string | undefined): string {
+  if (!s) return '';
+  if (s === 'online') return 'Online';
+  if (s === 'busy') return 'Busy';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** The second line of an EchoLink result: location, kind and status. */
+export function echoDetail(e: { location?: string; status?: string; kind?: string }): string {
+  return [e.location, echoKindLabel(e.kind), echoStatusLabel(e.status)].filter(Boolean).join(' · ');
 }

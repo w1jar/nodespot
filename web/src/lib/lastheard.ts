@@ -1,7 +1,7 @@
 // The rows of the Last heard table (LastHeardTable.svelte), shared by the Dashboard and the public page.
 // A call of any mode ends up in the same shape: callsign, mode, target, when, and the lookup links the callsign opens.
 import { modeTitle } from './modes.ts';
-import { qrzUrl, radioidUrl } from './nowcalling.ts';
+import { placeText, qrzUrl, radioidUrl } from './nowcalling.ts';
 import type { Heard, NowCall, PubSnapshot } from './types';
 
 export interface HeardItem {
@@ -71,7 +71,7 @@ export function callItems(recent: NowCall[] | undefined): HeardItem[] {
       mode: modeTitle(c.kind),
       target: targetCell(c.kind, c.target),
       at: parseAt(c.end || c.start),
-      person: c.kind === 'allstar' ? (c.desc ?? '').trim() : personLine(c.first || c.name, c.location || c.city),
+      person: c.kind === 'allstar' ? (c.desc ?? '').trim() : personLine(c.first || c.name, placeText(c)),
       title: (c.targetName ?? '').trim() || undefined,
       qrz: lookupCall(call),
       radioid: radioidUrl(c),

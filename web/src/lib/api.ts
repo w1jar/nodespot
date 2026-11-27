@@ -2,7 +2,7 @@ import type {
   About, BackupInfo, BackupSelection, Favorite, HostList, HostListsStatus, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
   AutosetStatus, InputLevel, NowCalling, PublicInfo, PublicSettings, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
   Settings, Station, SysLogs, SysNetwork, SysServices, SystemInfo, Target, TerminalSessionInfo, TerminalStatus, TerminalTicket, UpdateInfo, User,
-  UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo,
+  UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo, EchoSearch,
 } from './types';
 import type { WebPortStatus } from './svcweb';
 
@@ -173,7 +173,9 @@ export const api = {
 
   lookup: (node: string) => req<NodeInfo>('GET', `/lookup/${q(node)}`),
   search: (text: string, limit = 50) => req<NodeInfo[]>('GET', `/lookup?q=${q(text)}&limit=${limit}`),
+  echolinkSearch: (text: string, limit = 50) => req<EchoSearch>('GET', `/echolink/search?q=${q(text)}&limit=${limit}`),
   settings: () => req<Settings>('GET', '/settings'),
+  setHiddenModes: (hiddenModes: string[]) => req<Settings>('PUT', '/settings/hidden-modes', { hiddenModes }),
   system: () => req<SystemInfo>('GET', '/system'),
   about: () => req<About>('GET', '/about'),
   updates: () => req<UpdateInfo>('GET', '/updates'),

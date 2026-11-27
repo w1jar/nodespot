@@ -285,6 +285,16 @@ func (c *Client) Reload(ctx context.Context) (Status, error) {
 	return out, err
 }
 
+// SearchDirectory searches the station directory of mode name (EchoLink).
+func (c *Client) SearchDirectory(ctx context.Context, name, q string, limit int) (mode.DirResult, error) {
+	var out mode.DirResult
+	err := c.Call(ctx, OpDirSearch, map[string]any{"mode": name, "q": q, "limit": limit}, &out)
+	if out.Results == nil {
+		out.Results = []mode.DirEntry{}
+	}
+	return out, err
+}
+
 // Subscribe opens an event stream. It returns the status at the time of
 // subscribing and a channel of events that is closed when the stream ends
 // (ctx done, or the node went away).

@@ -299,9 +299,11 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /api/schedules/{id}", s.authed(store.RoleOperator, s.handleSchedDelete))
 	// settings
 	m.HandleFunc("GET /api/settings", s.authed(store.RoleViewer, s.handleSettingsGet))
+	m.HandleFunc("PUT /api/settings/hidden-modes", s.authed(store.RoleAdmin, s.handleHiddenModesPut))
 	// lookup, nodelist, system, events
 	m.HandleFunc("GET /api/lookup/{node}", s.authed(store.RoleViewer, s.handleLookup))
 	m.HandleFunc("GET /api/lookup", s.authed(store.RoleViewer, s.handleSearch))
+	m.HandleFunc("GET /api/echolink/search", s.authed(store.RoleViewer, s.handleEchoLinkSearch))
 	m.HandleFunc("GET /api/nodelist", s.authed(store.RoleViewer, s.handleNodelist))
 	m.HandleFunc("POST /api/nodelist/refresh", s.authed(store.RoleAdmin, s.handleNodelistRefresh))
 	m.HandleFunc("GET /api/system", s.authed(store.RoleViewer, s.handleSystem))

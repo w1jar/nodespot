@@ -25,6 +25,28 @@ type Fake struct {
 	discs     int
 	keyed     bool
 	ConnectFn func(mode.Target) error // optional: Connect's result
+	dir       []mode.DirEntry         // the station directory (SetDirectory)
+	dirLoaded bool
+}
+
+var _ mode.Searcher = (*Fake)(nil)
+
+// SetDirectory gives the fake a station directory to search; nil makes it
+// not loaded again.
+func (f *Fake) SetDirectory(list []mode.DirEntry) {
+	f.mu.Lock()
+	f.dir, f.dirLoaded = list, list != nil
+	f.mu.Unlock()
+}
+
+// SearchDirectory implements mode.Searcher with mode.SearchEntries.
+func (f *Fake) SearchDirectory(_ context.Context, q string, limit int) (mode.DirResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.dirLoaded {
+		return mode.DirResult{Results: []mode.DirEntry{}}, nil
+	}
+	return mode.DirResult{Loaded: true, Results: mode.SearchEntries(f.dir, q, limit)}, nil
 }
 
 // New returns a Fake named name.
@@ -115,6 +137,14 @@ func (f *Fake) Key(callsign string, frames ...audio.Frame) {
 	for _, fr := range frames {
 		f.Deliver(fr)
 	}
+}
+
+// KeyTalker is Key with every detail of the talker (a DMR ID, a name).
+func (f *Fake) KeyTalker(t mode.Talker) {
+	f.mu.Lock()
+	f.keyed = true
+	f.mu.Unlock()
+	f.TalkStart(t)
 }
 
 // Unkey marks the network as quiet.

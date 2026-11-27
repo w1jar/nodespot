@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { masterOptions, masterSearch, masterHint } from './hostlists.ts';
 import { MASTER_OTHER, splitAddress, masterChoice, masterAddress, masterPick, masterLabel, emptyListNote, masterListNote, listRows, whenText, refreshWait } from './hostlists.ts';
 import type { HostItem, HostListsStatus } from './types';
 
@@ -85,4 +86,28 @@ test('update time and the wait for the next manual refresh', () => {
   assert.equal(refreshWait(undefined, now), 0);
   assert.equal(refreshWait('2026-11-26T12:10:00Z', now), 600);
   assert.equal(refreshWait('2026-11-26T11:00:00Z', now), 0);
+});
+
+test('master combobox entries write the saved address format and filter by name, host or country', () => {
+  const ob = masterOptions('bm', bm);
+  assert.deepEqual(ob.map((o) => o.value), ['bm1.example.net', 'bm2.example.net']);
+  assert.equal(ob[0].name, '2001 – Test Land');
+  assert.equal(ob[0].detail, 'bm1.example.net');
+  const od = masterOptions('dmr-other', other);
+  assert.deepEqual(od.map((o) => o.value), ['192.0.2.10:62031', 'dmr2.example.net:55555']);
+  assert.equal(od[0].detail, undefined, 'the label already shows the host');
+  assert.deepEqual(masterSearch(ob, 'united').map((o) => o.value), ['bm2.example.net'], 'country');
+  assert.deepEqual(masterSearch(ob, 'BM1').map((o) => o.value), ['bm1.example.net'], 'host');
+  assert.deepEqual(masterSearch(ob, '3104 states').map((o) => o.value), ['bm2.example.net'], 'every word');
+  assert.deepEqual(masterSearch(ob, '').length, 2);
+  assert.deepEqual(masterSearch(od, 'second').map((o) => o.value), ['dmr2.example.net:55555']);
+  assert.deepEqual(masterSearch(ob, 'nowhere'), []);
+  assert.deepEqual(masterSearch(ob, '', 1).length, 1);
+});
+
+test('the master hint names the list entry, or says a typed address is used as is', () => {
+  assert.equal(masterHint('bm', '', bm), '');
+  assert.equal(masterHint('bm', 'bm2.example.net', bm), 'From the list: 3104 – United States');
+  assert.equal(masterHint('bm', 'any.example.net:54007', bm), 'Not in the list: used as typed.');
+  assert.equal(masterHint('dmr-other', 'dmr2.example.net:55555', other), 'From the list: Second master (dmr2.example.net:55555)');
 });

@@ -84,7 +84,7 @@ func (s *Server) nodeErr(w http.ResponseWriter, err error) {
 
 // handleNodeGet serves the cached status.
 func (s *Server) handleNodeGet(w http.ResponseWriter, _ *http.Request, _ store.User) {
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 func (s *Server) handleNodeReload(w http.ResponseWriter, r *http.Request, u store.User) {
@@ -101,7 +101,7 @@ func (s *Server) handleNodeReload(w http.ResponseWriter, r *http.Request, u stor
 	s.audit(u, "node.reload", nil)
 	s.adopt(st)
 	s.refreshModes(r.Context())
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleModesGet lists the modes. Viewers and operators get what the Modes
@@ -125,12 +125,12 @@ func (s *Server) modesJSON(l []node.ModeInfo, admin bool) []node.ModeInfo {
 	if l == nil {
 		l = []node.ModeInfo{}
 	}
-	if admin {
-		return l
-	}
 	out := make([]node.ModeInfo, len(l))
 	for i, m := range l {
-		m.Fields, m.Settings, m.SecretsSet = nil, mode.Settings{}, nil
+		m.Status = s.enrichStatus(m.Status)
+		if !admin {
+			m.Fields, m.Settings, m.SecretsSet = nil, mode.Settings{}, nil
+		}
 		out[i] = m
 	}
 	return out
@@ -226,7 +226,7 @@ func (s *Server) handleStationPut(w http.ResponseWriter, r *http.Request, u stor
 	}
 	s.audit(u, "station.save", map[string]any{"callsign": in.Callsign})
 	s.adopt(st)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // targetInput is the target of POST /api/select and /api/connect: an ID
@@ -330,7 +330,7 @@ func (s *Server) handleSelect(w http.ResponseWriter, r *http.Request, u store.Us
 	s.audit(u, "node.select", detail)
 	s.adopt(st)
 	s.manualSchedules(m, "select by "+u.Username)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleConnect links the active mode to a target.
@@ -358,7 +358,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request, u store.U
 	s.audit(u, "node.connect", map[string]any{"mode": st.Active, "target": t.ID})
 	s.adopt(st)
 	s.manualSchedules(st.Active, "connect by "+u.Username)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleDisconnect drops the active mode's link (the mode stays active).
@@ -376,7 +376,7 @@ func (s *Server) handleDisconnect(w http.ResponseWriter, r *http.Request, u stor
 	s.audit(u, "node.disconnect", map[string]any{"mode": st.Active})
 	s.adopt(st)
 	s.manualSchedules(st.Active, "disconnect by "+u.Username)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleHeard serves the node's last heard list across modes, newest first
@@ -404,6 +404,7 @@ func (s *Server) handleHeard(w http.ResponseWriter, r *http.Request, _ store.Use
 	if l == nil {
 		l = []mode.Heard{}
 	}
+	s.enrichHeard(l)
 	writeJSON(w, 200, l)
 }
 
@@ -505,7 +506,7 @@ func (s *Server) handleRadioProgram(w http.ResponseWriter, r *http.Request, u st
 	}
 	s.audit(u, "radio.program", nil)
 	s.adopt(st)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleTuningDismiss dismisses the "tune your audio" reminder for the radio
@@ -524,7 +525,7 @@ func (s *Server) handleTuningDismiss(w http.ResponseWriter, r *http.Request, u s
 	}
 	s.audit(u, "radio.tuning.dismiss", nil)
 	s.adopt(st)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleAutosetGet answers the state of the receive auto-set.
@@ -603,7 +604,7 @@ func (s *Server) handleTestTone(w http.ResponseWriter, r *http.Request, u store.
 	}
 	s.audit(u, "radio.test_tone", map[string]any{"seconds": in.Seconds})
 	s.adopt(st)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleTestToneStop ends the test tone early (no error when none plays).
@@ -619,7 +620,7 @@ func (s *Server) handleTestToneStop(w http.ResponseWriter, r *http.Request, _ st
 		return
 	}
 	s.adopt(st)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleHostLists serves a host list for the pickers: ?mode=dmr, ysf, p25,

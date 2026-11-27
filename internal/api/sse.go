@@ -189,7 +189,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, u store.Us
 	c.admin.Store(u.Role == store.RoleAdmin)
 	defer s.hub.remove(c)
 
-	nj := s.nw.json()
+	nj := s.nodeJSON()
 	if !write(frame("hello", map[string]any{"user": userJSON(u), "version": s.d.Version, "instance": s.instance,
 		"settings": s.settings(), "setupNeeded": nj.SetupNeeded})) ||
 		!write(frame("node", nj)) {

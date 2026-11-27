@@ -95,11 +95,12 @@ NodeInfo = {"node": "50241", "callsign": "N0CALL", "description": "Hub name", "l
 
 ## Settings (read: all roles; write: admin)
 
-`Settings = {"favoritesScan": bool}` (`favoritesScan` is read-only here; it is changed with `PUT /api/favorites/scan`). The "Disconnect before Connect" (default on) and "Disconnect before Monitor" (default off) checkboxes are not server settings: every page load starts from those fixed defaults; a change in the connect bar lasts only until the page is reloaded (nothing is saved in the browser). The connect endpoint itself is unaffected; the UI sends `exclusive` accordingly (Connect uses the first, Monitor the second, Local Mon never). The former `exclusiveDefault` / `monitorExclusiveDefault` fields and `PUT /api/settings` were removed in 1.1.17; stored `connect.exclusive_default` / `monitor.exclusive_default` values are ignored.
+`Settings = {"favoritesScan": bool, "hiddenModes": [str]}` (`favoritesScan` is read-only here; it is changed with `PUT /api/favorites/scan`). `hiddenModes` lists the modes an admin hid from the Modes row and the favorite and schedule pickers (sorted, lower case; `[]` on a fresh install, never null). Hiding is display only: a hidden mode keeps its settings, can still be the active mode (the UI then shows it anyway), and favorites and schedules that use it keep working. The "Disconnect before Connect" (default on) and "Disconnect before Monitor" (default off) checkboxes are not server settings: every page load starts from those fixed defaults; a change in the connect bar lasts only until the page is reloaded (nothing is saved in the browser). The connect endpoint itself is unaffected; the UI sends `exclusive` accordingly (Connect uses the first, Monitor the second, Local Mon never). The former `exclusiveDefault` / `monitorExclusiveDefault` fields and `PUT /api/settings` were removed in 1.1.17; stored `connect.exclusive_default` / `monitor.exclusive_default` values are ignored.
 
 | Method | Path | Body | Response |
 |---|---|---|---|
 | GET | `/api/settings` | | `200` `Settings` |
+| PUT | `/api/settings/hidden-modes` (admin) | `{"hiddenModes": [str]}` | `200` `Settings`. Names are lower-cased, deduplicated and sorted; a missing list, a name that is not a mode name (`[a-z0-9]`, 1–32 characters) or more than 32 names is `400 bad_request`. Unknown but well-formed names are kept (a mode a later version drops stays hidden harmlessly). `[]` shows every mode. Saved in the app's store (setting `modes.hidden`), not in the node config, so nothing is rebuilt. Audit `modes.hidden`; every client gets the SSE event `settings`. |
 
 ## Favorites (read: all roles; write: operator)
 
@@ -164,6 +165,7 @@ Snapshot = {
 |---|---|---|
 | GET | `/api/lookup/{node}` | `NodeInfo` or `404` |
 | GET | `/api/lookup?q=text&limit=50` | `[NodeInfo]` matching node number prefix, callsign, description or location (case-insensitive) |
+| GET | `/api/echolink/search?q=text&limit=50` | The EchoLink directory (not the AllStar list): `{"loaded": bool, "updated"?: RFC3339, "error"?: str, "results": [{"node": int, "callsign": str, "location"?: str, "status"?: "online"\|"busy", "kind": "user"\|"link"\|"repeater"\|"conference"}]}`. Matches an exact callsign or node number first, then callsigns starting with the text, node numbers starting with it (digits only), callsigns containing it and, for three or more characters, locations containing it; case and a conference's asterisks are ignored, an empty `q` matches nothing. `limit` 1–200 (default 50; anything else is `400 bad_request`). The node only has the directory while EchoLink is the active mode and logged in: otherwise `loaded` is false and `results` is `[]` (`error` says why when the download failed). A search never starts a mode and adds no directory traffic: it uses the list the mode already keeps (downloaded again after 5 minutes when needed). Control op `directory_search` `{mode, q, limit}`. `503` when the node is down. |
 | GET | `/api/nodelist` | `{"count": int, "updated": RFC3339 \| null, "source": str, "error": str \| null}` |
 | POST | `/api/nodelist/refresh` | `202` (admin) |
 
@@ -178,6 +180,8 @@ Snapshot = {
 `PUT /api/modes/{mode}` (admin) saves a mode's settings `{"values": {key: value}, "favorites"?, "reflectors"?, "clear"?: [key]}`. A password that is empty or absent keeps the stored one. `clear` lists password (secret) fields to delete from the stored settings; a request with no `values` and a `clear` list changes nothing else. A key that is not a password field of the mode, or is also set in `values`, is refused with `409 node_refused`. `DELETE /api/modes/{mode}` forgets all saved settings of the mode, also while it is active (the node drops the mode first), and its remembered target.
 
 A mode field with `"hostList": "bm"` or `"dmr-other"` in `GET /api/modes` is a text field the UI offers that list for (docs/NATIVE_NODE.md "Host lists and master pickers").
+
+**Talker and last-heard lookup.** The node reports a talker (`mode.talker` in `GET /api/node`, the SSE event `node` and each mode's `status` in `GET /api/modes`) and the rows of `GET /api/heard` with only what the network sent; a BrandMeister call often has only `id`. The API fills the empty `callsign`, `name` and `place` from the radioid.net list (by DMR ID, then by callsign) and then the cache of hamdb.org, the same lookup as Now calling. It never waits (the radioid.net index caches the IDs it read; a callsign hamdb.org has not answered yet is only queued), never overwrites what the network sent, and skips AllStar and the echo test. `place` is "City, ST" for a US caller and "City, State, Country" otherwise. A talker nobody knows stays as sent (the UI shows "ID …"). The public view's place uses the same rule.
 
 ## System (all roles)
 
@@ -624,6 +628,7 @@ Requires a session. Each message has an `event:` name and a JSON `data:` line. O
 | event | data |
 |---|---|
 | `hello` | `{"user": User, "version": str, "instance": str, "settings": Settings}` |
+| `settings` | `Settings`: the app settings changed (for now, hidden modes); all roles |
 | `nodes` | `[NodeStatus]`: full state (sent on connect and after AMI reconnects) |
 | `node` | `NodeStatus`: one node changed |
 | `system` | `System` (including `updateAvailable` / `updateVersion`) |

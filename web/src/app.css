@@ -40,6 +40,14 @@ body { background: var(--bg); color: var(--fg); font-family: var(--font-sans); -
 .pulse { animation: pulse-ring 1.2s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
 
+/* The Now calling box while someone talks: a danger border and tint for a remote talker, the accent for the local
+   station sending. The tint mixes into the surface so it reads in both themes; the mic breathes gently. */
+.talk-live { border-color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, var(--surface-2)); }
+.talk-live.talk-local { border-color: var(--accent) !important; background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+@keyframes talk-mic { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(1.15); } }
+.talk-mic { animation: talk-mic 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .talk-mic { animation: none; } }
+
 /* Secondary text on keyed (red) / local-RX (green) rows. Unlayered so it beats the
    .text-muted utility (which otherwise leaves gray text on red). White at 94% is
    >= 4.6:1 on every row background in both themes (5.9 / 7.0 red, 6.5 / 6.1 green). */

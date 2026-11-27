@@ -9,10 +9,13 @@
   import {
     CONFIRM_MS, defaultFavName, favoriteActive, favoriteBlock, favoritesInOrder, findFavorite, hasTarget, linkStatsText, linkStatsTitle, m17Split, modeChip, modeTitle, movedIds,
     needsVocoder, notReadyShort, pendingOutcome, pickerKind, recentTargets, M17_MODULES, sortModes, stateText, targetBody, targetPlaceholder, targetText, targetValue,
-    validFavName, vocoderBusy, targetLabel, ECHO_CODECS, echoCodec, echoCodecValues,
+    validFavName, vocoderBusy, targetLabel, ECHO_CODECS, echoCodec, echoCodecValues, visibleModes, hiddenModes, toggleHidden,
   } from '../lib/modes';
+  import { settings } from '../lib/settings.svelte';
+  import Toggle from './Toggle.svelte';
+  import EyeOff from '@lucide/svelte/icons/eye-off';
   import type { Pending } from '../lib/modes';
-  import type { Favorite, HostItem, HostList, NodeInfo, Vocoder } from '../lib/types';
+  import type { EchoStation, Favorite, HostItem, HostList, NodeInfo, Vocoder } from '../lib/types';
   import FavoriteDialog from './FavoriteDialog.svelte';
   import Confirm from './Confirm.svelte';
   import Dialog from './Dialog.svelte';
@@ -39,10 +42,25 @@
   const admin = $derived(isAdmin());
   const list = $derived(sortModes(app.modes));
   const active = $derived(app.node?.active ?? '');
+  // Hidden modes (Settings.hiddenModes) leave the row unless active; "Edit" shows them all with a show/hide checkbox.
+  const hidden = $derived(settings.hiddenModes ?? []);
+  const shown = $derived(visibleModes(list, hidden, active));
+  const hiddenList = $derived(hiddenModes(list, hidden, active));
+  let editRow = $state(false), hideBusy = $state(false);
+  async function setHidden(name: string, hide: boolean) {
+    if (hideBusy) return;
+    hideBusy = true;
+    try {
+      const s = await api.setHiddenModes(toggleHidden(hidden, name, hide));
+      settings.hiddenModes = s.hiddenModes ?? [];
+      toast(`${modeTitle(name, app.modes)} ${hide ? 'hidden' : 'shown'}`);
+    } catch (e) { toastError(e); } finally { hideBusy = false; }
+  }
+  const rowModes = $derived(editRow ? list : shown);
   // The mode being looked at: #/modes?mode=ysf, else the active one, else the first ready one, until a button is pressed.
   let picked = $state('');
   $effect(() => { const m = new URLSearchParams(router.query).get('mode'); if (m && router.path === '/modes') picked = m; });
-  const sel = $derived(picked && list.some((m) => m.name === picked) ? picked : active || list.find((m) => m.configured)?.name || list[0]?.name || '');
+  const sel = $derived(picked && list.some((m) => m.name === picked) ? picked : active || shown.find((m) => m.configured)?.name || shown[0]?.name || list[0]?.name || '');
   const info = $derived(list.find((m) => m.name === sel));
   const isActive = $derived(!!sel && sel === active);
   const st = $derived(isActive ? app.node?.mode : info?.status);
@@ -89,6 +107,7 @@
     if (s) { text = s.reflector; module = s.module; }
   }
   function pickNode(i: NodeInfo) { pickedName = i.callsign || ''; }
+  function pickEcho(e: EchoStation) { pickedName = e.location || ''; }
   const connect = (t = value, name = pickedName) => {
     if (!t) { toast(sel === 'm17' ? 'Enter a reflector such as M17-XXX' : 'Enter a target', 'error'); return; }
     return run(async () => { await api.select(sel, targetBody(t, name ? { name } : {})); text = ''; }, `${title}: connecting to ${t}`, sel);
@@ -164,8 +183,8 @@
     return () => clearInterval(t);
   });
 
-  const DOT = { ok: 'bg-ok', err: 'bg-danger', warn: 'bg-warn', off: 'bg-muted' } as const;
-  const TXT = { ok: 'text-ok', err: 'text-danger', warn: 'text-warn', off: 'text-muted' } as const;
+  const DOT = { ok: 'bg-ok', err: 'bg-danger', warn: 'bg-warn', off: 'bg-muted', unset: 'bg-muted/40' } as const;
+  const TXT = { ok: 'text-ok', err: 'text-danger', warn: 'text-warn', off: 'text-muted', unset: 'text-muted' } as const;
   const talker = $derived(isActive ? st?.talker : undefined);
   /** A local station is transmitting into the receiver and the node sends its audio to this (active) mode. */
   const localTx = $derived(isActive && !!app.node?.radio.rxActive);
@@ -180,11 +199,23 @@
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
         <h2 class="text-base font-semibold">Modes</h2>
         <span class="min-w-0 text-xs text-muted" data-testid="active-line">{active ? `Active: ${modeTitle(active, app.modes)}` : 'No mode is active. The radio is idle.'}</span>
+        {#if admin}
+          <button type="button" class="btn btn-sm ml-auto {editRow ? 'btn-accent-outline' : ''}" aria-pressed={editRow} data-testid="modes-edit" title="Show or hide modes in this row" onclick={() => (editRow = !editRow)}>{editRow ? 'Done' : 'Edit'}</button>
+        {/if}
       </div>
+      {#if editRow}<p class="text-xs text-muted" data-testid="modes-edit-help">Untick a mode to hide it from this row and the favorite and schedule pickers. Its settings, favorites and schedules stay.</p>{/if}
       <div class="flex flex-wrap gap-1.5" role="group" aria-label="Choose a mode" data-testid="mode-buttons">
-        {#each list as m (m.name)}
+        {#each rowModes as m (m.name)}
           {@const c = modeChip(m, active, app.node.mode?.state)}
           {@const on = m.name === sel}
+          {#if editRow}
+            {@const vis = !hidden.includes(m.name)}
+            <label class="btn !min-h-10 min-w-0 grow cursor-pointer gap-1.5 !px-2.5 sm:grow-0 {vis ? '' : 'opacity-60'}" data-mode={m.name} data-testid="mode-edit-item">
+              <input type="checkbox" class="size-4 accent-[var(--accent)]" checked={vis} disabled={hideBusy} aria-label="Show {m.title || modeTitle(m.name)}" onchange={(e) => setHidden(m.name, !e.currentTarget.checked)} />
+              <span class="font-medium">{m.title || modeTitle(m.name)}</span>
+              {#if !vis}<span class="text-xs text-muted">Hidden</span>{/if}
+            </label>
+          {:else}
           <button type="button" class="btn !min-h-10 min-w-0 grow gap-1.5 !px-2.5 sm:grow-0 {on ? 'border-accent bg-accent/10 ring-1 ring-accent' : ''}" aria-pressed={on} data-mode={m.name} data-active={m.name === active}
             title={m.configured ? '' : notReadyShort(m)} onclick={() => (picked = m.name)}>
             {#if m.name === active}<Check size={14} strokeWidth={3} class="shrink-0 text-ok" aria-hidden="true" />{/if}
@@ -192,7 +223,22 @@
             <span class="font-medium">{m.title || modeTitle(m.name)}</span>
             <span class="text-xs {TXT[c.tone]}">{c.text}</span>
           </button>
+          {/if}
         {/each}
+        {#if !editRow && admin && hiddenList.length}
+          <Menu label="{hiddenList.length} hidden {hiddenList.length === 1 ? 'mode' : 'modes'}" align="auto" btnClass="btn !min-h-10 gap-1 !px-2.5 text-xs text-muted" items={hiddenMenu}>
+            {#snippet trigger()}<EyeOff size={13} aria-hidden="true" /><span data-testid="hidden-chip">+{hiddenList.length} hidden</span>{/snippet}
+          </Menu>
+          {#snippet hiddenMenu(close: () => void)}
+            <div class="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Hidden modes</div>
+            {#each hiddenList as h (h.name)}
+              <div class="flex items-center gap-2 rounded px-2 py-1 text-sm" data-testid="hidden-item" data-mode={h.name}>
+                <span class="min-w-0 flex-1 truncate">{h.title || modeTitle(h.name)}</span>
+                <button type="button" role="menuitem" class="btn btn-sm btn-accent-outline" disabled={hideBusy} onclick={() => { if (hiddenList.length === 1) close(); void setHidden(h.name, false); }}>Show</button>
+              </div>
+            {/each}
+          {/snippet}
+        {/if}
       </div>
       {#if outcome === 'unconfirmed' && pending}
         <p class="flex flex-wrap items-center gap-2 text-sm text-warn" role="status" data-testid="not-confirmed">Not confirmed: the node still reports {active ? modeTitle(active, app.modes) : 'no mode'}, not {pending.mode ? modeTitle(pending.mode, app.modes) : 'idle'}.
@@ -227,6 +273,7 @@
                 {#each ECHO_CODECS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
               </select>
             </div>
+            {@render hideSwitch()}
             {#if ambeNote}
               <p class="text-xs text-warn" role="status" data-testid="echo-ambe-note">The AMBE codec needs the md380-emu vocoder. Until it is installed the playback is not coded. Install it in the <a class="underline hover:no-underline" href="#/modes?mode=dmr">DMR settings</a>.</p>
             {/if}
@@ -255,10 +302,10 @@
                 {#if info.last && !linked}<div class="mt-1 text-xs text-muted" data-testid="last-tune">Last: <button type="button" class="font-mono underline hover:no-underline" onclick={() => { text = info.last?.id ?? ''; }}>{targetText(info.last)}</button></div>{/if}
               </div>
             {/if}
-            <div class="rounded border border-line bg-surface-2 px-3 py-2" aria-live="polite">
+            <div class="rounded border border-line bg-surface-2 px-3 py-2 {localTx ? 'talk-live talk-local' : talker ? 'talk-live' : ''}" aria-live="polite" data-testid="mode-now-calling" data-live={localTx ? 'local' : talker ? 'remote' : undefined}>
               <div class="text-[11px] uppercase tracking-wide text-muted">Now calling</div>
               <div class="flex items-center gap-1.5 text-sm">
-                <Mic size={14} class="shrink-0 {talker || localTx ? 'text-danger' : 'text-muted'}" aria-hidden="true" />
+                <Mic size={14} class="shrink-0 {localTx ? 'talk-mic text-accent' : talker ? 'talk-mic text-danger' : 'text-muted'}" aria-hidden="true" />
                 {#if localTx}<span class="min-w-0 truncate" data-testid="mode-local-tx"><b>Local station</b> · sending to {modeTitle(active, app.modes)}</span>
                 {:else if talker}<span class="min-w-0 truncate" data-testid="mode-talker"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
                 {:else}<span class="text-muted">{isActive ? 'Nobody is talking' : '—'}</span>{/if}
@@ -282,7 +329,7 @@
                 <div class="relative min-w-0 flex-1 basis-full md:basis-0">
                   <Search size={16} class="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-muted" aria-hidden="true" />
                   {#if kind === 'nodes'}
-                    <NodePicker id="mtarget" bind:value={text} placeholder={targetPlaceholder(info)} onenter={() => connect()} onpick={pickNode} inputmode="text" inputClass="!min-h-10 !pl-9" />
+                    <NodePicker id="mtarget" bind:value={text} source={sel === 'echolink' ? 'echolink' : 'allstar'} testid="target-search" placeholder={targetPlaceholder(info)} onenter={() => connect()} onpick={pickNode} onpickecho={pickEcho} inputmode="text" inputClass="!min-h-10 !pl-9" />
                   {:else if kind === 'hosts'}
                     <NodePicker id="mtarget" bind:value={text} options={hosts} placeholder={targetPlaceholder(info)} label={(o) => `${o.value} ${o.name}`.trim()} onpickoption={pickHost} onenter={() => connect()} inputmode="text" inputClass="!min-h-10 !pl-9" />
                   {:else}
@@ -359,10 +406,12 @@
             <button type="button" class="flex min-h-10 w-full items-center gap-2 px-3 text-left text-sm font-medium" aria-expanded={settingsOpen} aria-controls="mode-settings" onclick={() => (openFor[sel] = !settingsOpen)}>
               {#if settingsOpen}<ChevronDown size={16} aria-hidden="true" />{:else}<ChevronRight size={16} aria-hidden="true" />{/if}
               <span>{title} settings</span>
-              {#if !info.configured}<span class="badge border-warn text-warn">Not set up</span>{:else if vocNeeded}<span class="badge border-warn text-warn">Needs vocoder</span>{/if}
+              {#if hidden.includes(sel)}<span class="badge text-muted" data-testid="hidden-badge">Hidden</span>{/if}
+              {#if !info.configured}<span class="badge text-muted">Set up</span>{:else if vocNeeded}<span class="badge border-warn text-warn">Needs vocoder</span>{/if}
             </button>
             {#if settingsOpen}
               <div id="mode-settings" class="border-t border-line p-3">
+                {@render hideSwitch()}
                 {#key sel}<ModeSettings {info} vocoder={voc} onvocoder={(v) => (voc = v)} />{/key}
               </div>
             {/if}
@@ -373,6 +422,13 @@
   {/if}
   <Footer />
 </div>
+
+{#snippet hideSwitch()}
+  <div class="mb-3 flex items-center gap-2 text-sm" data-testid="hide-switch">
+    <Toggle checked={hidden.includes(sel)} disabled={hideBusy} label="Hide {title}" onchange={(v) => setHidden(sel, v)} />
+    <span>Hide this mode<span class="block text-xs text-muted">{hidden.includes(sel) ? `${title} is hidden from the Modes row and the pickers${isActive ? ' (it shows while active)' : ''}.` : 'Remove it from the Modes row and the pickers. Settings, favorites and schedules stay.'}</span></span>
+  </div>
+{/snippet}
 
 <FavoriteDialog bind:open={dlg} fav={editing} initialMode={sel} initialTarget={value} />
 <Confirm bind:open={delOpen} title="Remove favorite" message="Remove {delFav?.label || delFav?.target || ''} from the favorites?" confirmLabel="Remove" onconfirm={remove} />

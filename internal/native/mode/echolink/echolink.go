@@ -18,6 +18,9 @@ type Directory interface {
 	Connect(ctx context.Context, target string) (Conn, error)
 	Close() error
 	Status() el.Status
+	// Stations is the directory's station list, downloaded when the
+	// cached copy is older than el.Config.ListMaxAge.
+	Stations(ctx context.Context) ([]el.Station, error)
 }
 
 // Conn is the part of *echolink.Conn the mode uses.
@@ -72,7 +75,10 @@ type Mode struct {
 	over0    uint64 // the receive queue's overflow when conn connected
 }
 
-var _ mode.Mode = (*Mode)(nil)
+var (
+	_ mode.Mode     = (*Mode)(nil)
+	_ mode.Searcher = (*Mode)(nil)
+)
 
 // New builds the mode from its settings.
 func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
@@ -359,6 +365,44 @@ func (m *Mode) Disconnect(context.Context) error {
 		m.SetState(mode.StateStarting, "logging in to the directory", "")
 	}
 	return nil
+}
+
+// SearchDirectory searches the directory's station list for the UI's
+// target picker. Before the login it reports Loaded false. The list is the
+// one Connect resolves targets with: it is downloaded on the first search
+// and then reused for el.Config.ListMaxAge.
+func (m *Mode) SearchDirectory(ctx context.Context, q string, limit int) (mode.DirResult, error) {
+	m.mu.Lock()
+	d := m.dir
+	m.mu.Unlock()
+	if d == nil {
+		return mode.DirResult{Results: []mode.DirEntry{}}, nil
+	}
+	list, err := d.Stations(ctx)
+	if err != nil {
+		return mode.DirResult{Results: []mode.DirEntry{}, Error: err.Error()}, nil
+	}
+	return mode.DirResult{
+		Loaded:  true,
+		Updated: d.Status().ListUpdated,
+		Results: mode.SearchEntries(DirEntries(list), q, limit),
+	}, nil
+}
+
+// DirEntries converts a station list for the UI.
+func DirEntries(list []el.Station) []mode.DirEntry {
+	out := make([]mode.DirEntry, len(list))
+	for i, s := range list {
+		st := strings.ToLower(s.Status)
+		switch st {
+		case "on":
+			st = "online"
+		case "busy":
+			st = "busy"
+		}
+		out[i] = mode.DirEntry{Node: s.ID, Callsign: s.Callsign, Location: s.Location, Status: st, Kind: s.Kind().String()}
+	}
+	return out
 }
 
 // Stop drops the connection and logs off the directory.

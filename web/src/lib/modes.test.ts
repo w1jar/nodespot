@@ -150,6 +150,7 @@ test('linkStatsText shows EchoLink packet counters', () => {
 });
 
 // ---- The Modes page helpers.
+import { visibleModes, hiddenModes, pickerModes, toggleHidden } from './modes.ts';
 import { CONFIRM_MS, pendingOutcome, pickerKind, m17Tune, m17Split, targetValue, modeChip, favoritesInOrder, movedIds, findFavorite, favoriteBlock, defaultFavName, validFavName, favoriteActive, pinnedFavorites, hasTarget, M17_MODULES } from './modes.ts';
 
 const fav = (id: number, mode: string, target: string, over: Partial<Favorite> = {}): Favorite => ({ id, mode, target, label: target, group: '', position: id, pinned: false, info: null, ...over });
@@ -188,7 +189,7 @@ test('the M17 target joins the reflector and the module', () => {
 
 test('a mode button shows not set up, ready, or the link state of the active mode', () => {
   const base = { name: 'bm', title: 'BM', configured: true, active: false } as ModeInfo;
-  assert.deepEqual(modeChip({ ...base, configured: false }, 'bm', 'connected'), { tone: 'warn', text: 'Not set up' });
+  assert.deepEqual(modeChip({ ...base, configured: false }, 'bm', 'connected'), { tone: 'unset', text: 'Set up' });
   assert.deepEqual(modeChip(base, '', undefined), { tone: 'off', text: 'Ready' });
   assert.deepEqual(modeChip(base, 'bm', 'connected'), { tone: 'ok', text: 'Connected' });
   assert.deepEqual(modeChip(base, 'bm', 'connecting'), { tone: 'warn', text: 'Connecting' });
@@ -246,4 +247,30 @@ test('echo test codec: choices, saved value and the values to save', () => {
   assert.equal(echoCodec({ ...m, settings: { values: { codec: 'bogus' } } }), 'plain');
   assert.deepEqual(echoCodecValues(m, 'gsm'), { codec: 'gsm', playback_delay_ms: '1500' });
   assert.deepEqual(echoCodecValues(undefined, 'imbe'), { codec: 'imbe' });
+});
+
+test('hidden modes leave the row unless active; pickers keep the mode a favorite or schedule uses', () => {
+  const l = [{ name: 'allstar', configured: true }, { name: 'bm', configured: true }, { name: 'nxdn', configured: true }, { name: 'm17', configured: false }];
+  const names = (x: { name: string }[]) => x.map((m) => m.name);
+  assert.deepEqual(names(visibleModes(l, undefined, '')), ['allstar', 'bm', 'nxdn', 'm17'], 'a fresh install shows all');
+  assert.deepEqual(names(visibleModes(l, ['bm', 'nxdn'], '')), ['allstar', 'm17']);
+  assert.deepEqual(names(visibleModes(l, ['bm', 'nxdn'], 'bm')), ['allstar', 'bm', 'm17'], 'the active mode stays visible');
+  assert.deepEqual(names(hiddenModes(l, ['bm', 'nxdn'], 'bm')), ['nxdn']);
+  assert.deepEqual(names(hiddenModes(l, [], '')), []);
+  assert.deepEqual(names(pickerModes(l, ['bm'])), ['allstar', 'nxdn'], 'hidden and not-ready modes are not offered');
+  assert.deepEqual(names(pickerModes(l, ['bm'], ['bm'])), ['allstar', 'bm', 'nxdn'], 'an existing favorite keeps its mode');
+  assert.deepEqual(toggleHidden(['nxdn'], 'bm', true), ['bm', 'nxdn']);
+  assert.deepEqual(toggleHidden(['bm', 'nxdn'], 'bm', true), ['bm', 'nxdn']);
+  assert.deepEqual(toggleHidden(['bm', 'nxdn'], 'bm', false), ['nxdn']);
+  assert.deepEqual(toggleHidden(undefined, 'bm', false), []);
+});
+
+test('EchoLink results read as location, kind and status', async () => {
+  const { echoDetail, echoKindLabel, echoStatusLabel } = await import('./modes.ts');
+  assert.equal(echoDetail({ location: 'Springfield, ST', kind: 'link', status: 'online' }), 'Springfield, ST · Link · Online');
+  assert.equal(echoDetail({ kind: 'conference', status: 'busy' }), 'Conference · Busy');
+  assert.equal(echoDetail({ kind: 'repeater' }), 'Repeater');
+  assert.equal(echoKindLabel('nope'), 'User');
+  assert.equal(echoStatusLabel(''), '');
+  assert.equal(echoStatusLabel('away'), 'Away');
 });

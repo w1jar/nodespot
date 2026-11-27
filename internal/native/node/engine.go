@@ -518,6 +518,40 @@ func (e *Engine) Connect(ctx context.Context, t mode.Target) error {
 	return e.Select(ctx, in.name, &t)
 }
 
+// ErrNoDirectory is returned by SearchDirectory for a mode without a
+// station directory.
+var ErrNoDirectory = errors.New("the mode has no station directory")
+
+// SearchDirectory searches the station directory of mode n (EchoLink). A
+// mode that is not built or not running has nothing loaded: the result has
+// Loaded false and no entries. It never starts a mode or a login.
+func (e *Engine) SearchDirectory(ctx context.Context, n, q string, limit int) (mode.DirResult, error) {
+	n = strings.ToLower(strings.TrimSpace(n))
+	if _, ok := mode.Lookup(n); !ok {
+		return mode.DirResult{}, fmt.Errorf("unknown mode %q", n)
+	}
+	e.mu.Lock()
+	in := e.modes[n]
+	running := in != nil && in.running
+	e.mu.Unlock()
+	empty := mode.DirResult{Results: []mode.DirEntry{}}
+	if in == nil {
+		return empty, nil
+	}
+	s, ok := in.m.(mode.Searcher)
+	if !ok {
+		return mode.DirResult{}, ErrNoDirectory
+	}
+	if !running {
+		return empty, nil
+	}
+	r, err := s.SearchDirectory(ctx, q, limit)
+	if r.Results == nil {
+		r.Results = []mode.DirEntry{}
+	}
+	return r, err
+}
+
 // persistActive saves the active selection. Called with opMu.
 func (e *Engine) persistActive(sel *Selection) error {
 	e.mu.Lock()

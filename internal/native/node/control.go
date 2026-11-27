@@ -40,6 +40,9 @@ type Response struct {
 	Data  any    `json:"data,omitempty"`
 }
 
+// MaxDirResults bounds one directory search.
+const MaxDirResults = 200
+
 // Control ops.
 const (
 	OpStatus        = "status"       // -> Status
@@ -63,6 +66,7 @@ const (
 	OpTuningDismiss = "radio_tuning_dismiss" // -> Status (dismisses the "tune your audio" reminder)
 	OpConfig        = "config"               // -> the station settings (no mode passwords)
 	OpReload        = "reload"               // read the config file again
+	OpDirSearch     = "directory_search"     // {mode, q, limit?} -> mode.DirResult (EchoLink's station list)
 	OpSubscribe     = "subscribe"            // the connection then streams Event lines
 )
 
@@ -363,6 +367,19 @@ func (s *Server) do(ctx context.Context, req Request) (any, error) {
 			return nil, err
 		}
 		return e.Status(), nil
+	case OpDirSearch:
+		var a struct {
+			Mode  string `json:"mode"`
+			Q     string `json:"q"`
+			Limit int    `json:"limit"`
+		}
+		if err := args(req.Args, &a); err != nil {
+			return nil, err
+		}
+		if a.Limit <= 0 || a.Limit > MaxDirResults {
+			a.Limit = MaxDirResults
+		}
+		return e.SearchDirectory(ctx, a.Mode, a.Q, a.Limit)
 	case OpReload:
 		if err := e.Reload(ctx); err != nil {
 			return nil, err

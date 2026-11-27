@@ -37,6 +37,7 @@ type Node interface {
 	RadioTuningDismiss(ctx context.Context) (node.Status, error)
 	TestTone(ctx context.Context, seconds float64, stop bool) (node.Status, error)
 	Reload(ctx context.Context) (node.Status, error)
+	SearchDirectory(ctx context.Context, name, q string, limit int) (mode.DirResult, error)
 	Subscribe(ctx context.Context) (node.Status, <-chan node.Event, error)
 }
 
@@ -150,7 +151,7 @@ func linkedTo(st node.Status, m, target string) bool {
 // broadcastNodeStatus sends the cached status as the SSE event "node" and
 // tells the public view.
 func (s *Server) broadcastNodeStatus() {
-	f := frame("node", s.nw.json())
+	f := frame("node", s.nodeJSON())
 	s.hub.broadcast(sseMsg{priv: f, pub: f})
 	s.pub.Changed()
 }

@@ -293,3 +293,51 @@ func TestControlSocket(t *testing.T) {
 		}
 	}
 }
+
+func TestControlDirectorySearch(t *testing.T) {
+	g, s, _ := ctlRig(t)
+	ctx := context.Background()
+	res := func(r Response) mode.DirResult {
+		t.Helper()
+		if !r.OK {
+			t.Fatal(r.Error)
+		}
+		var d mode.DirResult
+		if err := json.Unmarshal(mustJSON(t, r.Data), &d); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	// Not built yet: nothing loaded, and the search does not start it.
+	if d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0"})); d.Loaded || d.Results == nil || len(d.Results) != 0 {
+		t.Fatalf("not built: %+v", d)
+	}
+	if err := g.e.Select(ctx, mode.EchoLink, nil); err != nil {
+		t.Fatal(err)
+	}
+	f := g.fake(mode.EchoLink)
+	if d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0"})); d.Loaded {
+		t.Fatalf("no list yet: %+v", d)
+	}
+	f.SetDirectory([]mode.DirEntry{
+		{Node: 1997, Callsign: "N0CALL-L", Kind: "link", Status: "online"},
+		{Node: 9999, Callsign: "*ECHOTEST*", Kind: "conference", Status: "online"},
+	})
+	d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0", "limit": 5}))
+	if !d.Loaded || len(d.Results) != 1 || d.Results[0].Node != 1997 {
+		t.Fatalf("search: %+v", d)
+	}
+	// Another mode stops EchoLink: its directory is gone with the login.
+	if err := g.e.Select(ctx, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0"})); d.Loaded {
+		t.Fatalf("stopped: %+v", d)
+	}
+	if r := do(t, s, OpDirSearch, map[string]any{"mode": "nope"}); r.OK {
+		t.Fatal("unknown mode searched")
+	}
+	if r := do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "bogus": 1}); r.OK {
+		t.Fatal("unknown argument accepted")
+	}
+}

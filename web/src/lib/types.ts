@@ -2,6 +2,10 @@ export type Role = 'admin' | 'operator' | 'viewer';
 export interface User { id: number; username: string; role: Role }
 /** An AllStar node list entry (favorites and calls of the AllStar mode). */
 export interface NodeInfo { node: string; callsign: string; description: string; location: string }
+/** One EchoLink station from GET /api/echolink/search. */
+export interface EchoStation { node: number; callsign: string; location?: string; status?: string; kind: 'user' | 'link' | 'repeater' | 'conference' }
+/** GET /api/echolink/search: loaded is false while EchoLink is not logged in (results is then empty). */
+export interface EchoSearch { loaded: boolean; updated?: string; error?: string; results: EchoStation[] }
 export interface UpdateInfo {
   available: boolean; reason: string | null; applyReason: string | null; channel: 'stable' | 'beta'; installed: string; candidate: string; upgradable: boolean;
   job: 'idle' | 'running' | 'succeeded' | 'failed' | 'noop'; jobLog: string; notes: string | null; checked: string | null;
@@ -234,7 +238,8 @@ export interface About {
   version: string; nodeRunning: boolean; nodeStarted: string;
   platform: { os: string; arch: string; model: string; distro: string; kernel: string; hardware: string };
 }
-export type Settings = Record<string, unknown>
+/** GET /api/settings (and the SSE hello and settings events). hiddenModes: the modes an admin hid from the Modes row and the pickers. */
+export interface Settings { favoritesScan?: boolean; hiddenModes?: string[]; [key: string]: unknown }
 
 // ---- The public status view (GET /api/public/status, SSE "snapshot"): no IPs, no system info.
 export interface PubStation { callsign: string; mode: string; modeTitle: string; target: string; state: ModeState | string; txKeyed: boolean; rxKeyed: boolean }

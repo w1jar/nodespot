@@ -59,9 +59,12 @@ func (c *fakeConn) end(err error) {
 }
 
 type fakeDir struct {
-	mu     sync.Mutex
-	conns  []*fakeConn
-	closed bool
+	mu       sync.Mutex
+	conns    []*fakeConn
+	closed   bool
+	stations []el.Station
+	listErr  error
+	fetches  int
 }
 
 func (d *fakeDir) Connect(_ context.Context, target string) (Conn, error) {
@@ -77,6 +80,12 @@ func (d *fakeDir) Connect(_ context.Context, target string) (Conn, error) {
 }
 func (d *fakeDir) Close() error      { d.mu.Lock(); d.closed = true; d.mu.Unlock(); return nil }
 func (d *fakeDir) Status() el.Status { return el.Status{LoggedIn: true, Server: "dir.example.net"} }
+func (d *fakeDir) Stations(context.Context) ([]el.Station, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.fetches++
+	return d.stations, d.listErr
+}
 func (d *fakeDir) conn(t *testing.T, n int) *fakeConn {
 	t.Helper()
 	waitFor(t, "conn", func() bool { d.mu.Lock(); defer d.mu.Unlock(); return len(d.conns) >= n })
@@ -298,5 +307,60 @@ func TestReceivedLogAndOverflow(t *testing.T) {
 	})
 	if l := m.Status().Link; l == nil || l.Dropped != 3+7 {
 		t.Fatalf("link stats %+v, want dropped %d", l, 3+7)
+	}
+}
+
+func TestSearchDirectory(t *testing.T) {
+	dir := &fakeDir{stations: []el.Station{
+		{Callsign: "N0CALL-L", ID: 1997, Location: "Springfield, ST", Status: "ON"},
+		{Callsign: "*ECHOTEST*", ID: 9999, Location: "Test server", Status: "ON"},
+		{Callsign: "N1CALL-R", ID: 2001, Location: "Shelbyville, XX", Status: "BUSY"},
+		{Callsign: "*TEST*", ID: 2002, Location: "Test conference"},
+		{Callsign: "N1CALL", ID: 1998, Location: "Metropolis, ST", Status: "ON"},
+	}}
+	g := &loginGate{dir: dir, open: make(chan struct{})}
+	m := newMode(t, g, nil)
+	ctx := context.Background()
+
+	// Before the login there is nothing to search.
+	r, err := m.SearchDirectory(ctx, "n0", 10)
+	if err != nil || r.Loaded || len(r.Results) != 0 || r.Results == nil {
+		t.Fatalf("before start: %+v %v", r, err)
+	}
+	_ = m.Start(ctx)
+	r, _ = m.SearchDirectory(ctx, "n0", 10)
+	if r.Loaded {
+		t.Fatalf("before login: %+v", r)
+	}
+	close(g.open)
+	waitFor(t, "login", func() bool { return m.Status().State == mode.StateReady })
+	defer m.Stop()
+
+	r, err = m.SearchDirectory(ctx, "n1call", 10)
+	if err != nil || !r.Loaded || len(r.Results) != 2 || r.Results[0].Callsign != "N1CALL" || r.Results[1].Callsign != "N1CALL-R" {
+		t.Fatalf("n1call: %+v %v", r, err)
+	}
+	if e := r.Results[1]; e.Kind != "repeater" || e.Status != "busy" || e.Node != 2001 || e.Location != "Shelbyville, XX" {
+		t.Fatalf("entry %+v", e)
+	}
+	r, _ = m.SearchDirectory(ctx, "199", 10)
+	if len(r.Results) != 2 || r.Results[0].Node != 1997 || r.Results[0].Kind != "link" || r.Results[0].Status != "online" {
+		t.Fatalf("node prefix: %+v", r.Results)
+	}
+	r, _ = m.SearchDirectory(ctx, "*test*", 10)
+	if len(r.Results) != 2 || r.Results[0].Callsign != "*TEST*" || r.Results[0].Kind != "conference" || r.Results[1].Callsign != "*ECHOTEST*" {
+		t.Fatalf("conference: %+v", r.Results)
+	}
+	r, _ = m.SearchDirectory(ctx, "call", 2)
+	if len(r.Results) != 2 {
+		t.Fatalf("limit: %+v", r.Results)
+	}
+
+	dir.mu.Lock()
+	dir.listErr = errors.New("echolink: directory: dial: refused")
+	dir.mu.Unlock()
+	r, err = m.SearchDirectory(ctx, "n0", 10)
+	if err != nil || r.Loaded || r.Error == "" || len(r.Results) != 0 {
+		t.Fatalf("download failure: %+v %v", r, err)
 	}
 }

@@ -3,7 +3,8 @@
   // when a value is saved; leave it empty to keep it.
   import { api } from '../lib/api';
   import { stationHint, stationValue, type StationValues } from '../lib/modes';
-  import { MASTER_OTHER, masterChoice, masterLabel, masterListNote, masterPick } from '../lib/hostlists';
+  import { masterHint, masterListNote, masterOptions, masterPick, masterSearch, type MasterOption } from '../lib/hostlists';
+  import NodePicker from './NodePicker.svelte';
   import type { HostItem, ModeInfo } from '../lib/types';
   import Confirm from './Confirm.svelte';
   let { mode, draft = $bindable(), idPrefix = 'mf', busy = false, onclear }: { mode: ModeInfo; draft: Record<string, string>; idPrefix?: string; busy?: boolean; onclear?: (key: string) => void } = $props();
@@ -14,8 +15,9 @@
   // The station values the empty fields fall back to; shown as placeholders.
   let st = $state<StationValues | undefined>(undefined);
   $effect(() => { if (fields.some((f) => f.stationDefault)) api.station().then((s) => { st = { callsign: s.callsign, dmrId: s.dmrId, nxdnId: s.nxdnId }; }).catch(() => { /* the node checks */ }); });
-  // Fields with a host list (BrandMeister and DMR masters) are a dropdown of the list plus "Other…", which shows a text field.
-  // undefined: not loaded yet; []: the list is not downloaded, so the text field shows with a note.
+  // Fields with a host list (BrandMeister and DMR masters) are a type-to-search combobox: typing filters the list by name,
+  // host or country, arrow keys and Enter pick, and any other text (host or host:port) is kept as typed.
+  // undefined: not loaded yet; []: the list is not downloaded, so the field shows with a note.
   let lists = $state<Record<string, HostItem[] | undefined>>({});
   const asked = new Set<string>();
   $effect(() => {
@@ -26,20 +28,8 @@
       api.hostLists(k).then((h) => { lists[k] = h.items; }).catch(() => { lists[k] = []; });
     }
   });
-  let other = $state<Record<string, boolean>>({});
-  const okey = (key: string) => `${mode.name}.${key}`;
-  const choice = (f: (typeof fields)[number], items: HostItem[]) => (other[okey(f.key)] ? MASTER_OTHER : masterChoice(f.hostList!, draft[f.key] ?? '', items));
-  function pickMaster(f: (typeof fields)[number], items: HostItem[], v: string) {
-    const k = f.hostList!;
-    if (v === MASTER_OTHER) {
-      if (masterChoice(k, draft[f.key] ?? '', items) !== MASTER_OTHER) draft[f.key] = '';
-      other[okey(f.key)] = true;
-      return;
-    }
-    other[okey(f.key)] = false;
-    const it = items.find((x) => x.value === v);
-    if (!it) { draft[f.key] = ''; return; }
-    const ch = masterPick(k, it, draft, !!mode.secretsSet?.password);
+  function pickMaster(f: (typeof fields)[number], o: MasterOption) {
+    const ch = masterPick(f.hostList as 'bm' | 'dmr-other', o.item, draft, !!mode.secretsSet?.password);
     draft[f.key] = ch.address;
     if (ch.password !== undefined) draft.password = ch.password;
   }
@@ -60,16 +50,13 @@
       {:else if (f.kind === 'password' || f.secret)}
         <input id={id(f.key)} class="input" type="password" autocomplete="new-password" bind:value={draft[f.key]} placeholder={mode.secretsSet?.[f.key] ? 'set' : ''} required={f.required && !mode.secretsSet?.[f.key]} />
       {:else if f.hostList && lists[f.hostList]?.length}
+        {@const kind = f.hostList as 'bm' | 'dmr-other'}
         {@const items = lists[f.hostList] ?? []}
-        {@const sel = choice(f, items)}
-        <select id={id(f.key)} class="input" value={sel} required={f.required} onchange={(e) => pickMaster(f, items, e.currentTarget.value)} data-testid="master-select">
-          {#if sel === ''}<option value="">Select a master…</option>{/if}
-          {#each items as it (it.value)}<option value={it.value}>{masterLabel(f.hostList, it)}</option>{/each}
-          <option value={MASTER_OTHER}>Other…</option>
-        </select>
-        {#if sel === MASTER_OTHER}
-          <input class="input mt-2" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="{f.label}: host or host:port" placeholder="host or host:port" bind:value={draft[f.key]} required={f.required} data-testid="master-other" />
-        {/if}
+        {@const opts = masterOptions(kind, items)}
+        {@const hint = masterHint(kind, draft[f.key] ?? '', items)}
+        <NodePicker id={id(f.key)} bind:value={draft[f.key]} options={opts} search={(t) => masterSearch(opts, t)} onpickoption={(o) => pickMaster(f, o)}
+          placeholder="Search name, host or country, or type host:port" inputmode="text" testid="master-combo" describedby="{id(f.key)}-hint" />
+        {#if hint}<p id="{id(f.key)}-hint" class="mt-1 text-xs text-muted" data-testid="master-hint">{hint}</p>{/if}
       {:else}
         <input id={id(f.key)} class="input {f.kind === 'number' ? 'tabular-nums' : ''}" type={f.kind === 'number' ? 'number' : 'text'} autocomplete="off" bind:value={draft[f.key]} placeholder={f.stationDefault ? stationValue(f, st) : f.default ?? ''} required={f.required && !f.stationDefault} />
       {/if}

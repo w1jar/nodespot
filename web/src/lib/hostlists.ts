@@ -48,6 +48,36 @@ export function masterLabel(kind: Kind, it: HostItem): string {
   return it.name && it.name !== it.value ? `${it.name} (${host})` : host;
 }
 
+/** One entry of a master combobox: value is what a pick writes into the field (masterAddress), name the label, item the list entry. */
+export interface MasterOption { value: string; name: string; detail?: string; item: HostItem }
+
+/** The combobox entries of a master list. The second line names the host when the label does not already show it. */
+export function masterOptions(kind: Kind, items: readonly HostItem[]): MasterOption[] {
+  return items.map((it) => {
+    const value = masterAddress(kind, it), name = masterLabel(kind, it);
+    const detail = [name.includes(value) ? '' : value, it.detail ?? ''].filter(Boolean).join(' · ');
+    return { value, name, detail: detail || undefined, item: it };
+  });
+}
+
+/** The entries matching typed text: every word must appear in the name (which carries the country), the host or the detail. */
+export function masterSearch(opts: readonly MasterOption[], text: string, limit = 50): MasterOption[] {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  return opts.filter((o) => {
+    const hay = `${o.name} ${o.value} ${o.item.address} ${o.detail ?? ''}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  }).slice(0, limit);
+}
+
+/** The line under a master combobox: which list entry the saved address is, that it is used as typed, or nothing when empty. */
+export function masterHint(kind: Kind, address: string, items: readonly HostItem[]): string {
+  const c = masterChoice(kind, address, items);
+  if (c === '') return '';
+  if (c === MASTER_OTHER) return 'Not in the list: used as typed.';
+  const it = items.find((x) => x.value === c);
+  return it ? `From the list: ${masterLabel(kind, it)}` : '';
+}
+
 /** The note under a target search whose list is empty: the list has not been downloaded. */
 export function emptyListNote(mode: string, title: string): string {
   const what = mode === 'p25' || mode === 'nxdn' ? 'talkgroup' : 'reflector';

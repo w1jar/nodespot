@@ -112,32 +112,6 @@ func (s *Server) hamdbChanged() {
 	}
 }
 
-// callerPerson is the name and "City, ST" of a callsign-only caller: the
-// radioid.net list first, then the cache of hamdb.org ("" when neither knows).
-func (s *Server) callerPerson(call string) (name, place string) {
-	if s.d.RadioID != nil {
-		if u, ok := s.d.RadioID.ByCallsign(call); ok {
-			return u.Name(), joinPlace(u.City, u.State)
-		}
-	}
-	if s.d.HamDB != nil {
-		if in, ok := s.d.HamDB.Lookup(call); ok {
-			return in.Name, in.Place()
-		}
-	}
-	return "", ""
-}
-
-func joinPlace(city, state string) string {
-	switch {
-	case city != "" && state != "":
-		return city + ", " + state
-	case city != "":
-		return city
-	}
-	return state
-}
-
 // ncTargetName is the label of the favorite of mode m whose target is t
 // ("" when there is none).
 func (s *Server) ncTargetName(m, t string) string {
