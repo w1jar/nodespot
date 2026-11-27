@@ -394,6 +394,16 @@ func TestRefreshIfMissing(t *testing.T) {
 	if _, err := m.Get("ysf"); err != nil {
 		t.Fatal("not downloaded")
 	}
+	// let the background refresh finish the other lists before counting hits
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		busy := m.busy
+		m.mu.Unlock()
+		if !busy && !m.missing() {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	// not a manual refresh: the admin's button is not blocked
 	if st := m.Status(); st.NextManual != "" {
 		t.Fatalf("counted as manual: %+v", st)
