@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -241,6 +242,34 @@ type targetInput struct {
 	Private bool   `json:"private"`
 }
 
+// listEmptyMsg is the text of the hostlist_empty refusal (409).
+func listEmptyMsg(m string) string {
+	return fmt.Sprintf("The %s list hasn't downloaded yet; trying now. Try again in a moment.", strings.ToUpper(m))
+}
+
+// listMissing reports whether a connect to value in mode m needs a host list
+// that has no entries. It then starts a background download (not a manual
+// refresh; a no-op while one runs). A literal YSF host:port needs no list.
+func (s *Server) listMissing(m, value string) bool {
+	if s.d.HostLists == nil || !hostlists.ValidMode(m) || m == "dmr" {
+		return false
+	}
+	if _, ok := s.d.HostLists.Resolve(m, value); ok {
+		return false
+	}
+	return s.d.HostLists.RefreshIfMissing(m)
+}
+
+// writeTargetErr answers a target() failure: 409 hostlist_empty when the
+// message is listEmptyMsg for m, else 400 bad_target.
+func writeTargetErr(w http.ResponseWriter, m, msg string) {
+	if msg == listEmptyMsg(m) {
+		writeErr(w, http.StatusConflict, "hostlist_empty", msg)
+		return
+	}
+	writeErr(w, 400, "bad_target", msg)
+}
+
 func (s *Server) target(m string, in targetInput) (mode.Target, string) {
 	id, ok := cleanText(in.Target, maxTarget)
 	if !ok || id == "" {
@@ -259,6 +288,9 @@ func (s *Server) target(m string, in targetInput) (mode.Target, string) {
 	name, _ := cleanText(in.Name, maxLabel)
 	t := mode.Target{ID: id, Name: name, Host: host, Port: in.Port, Slot: in.Slot, Private: in.Private}
 	if t.Host == "" {
+		if s.listMissing(m, id) {
+			return mode.Target{}, listEmptyMsg(m)
+		}
 		r := s.resolveTarget(m, id)
 		t.ID, t.Host, t.Port = r.ID, r.Host, r.Port
 		if t.Name == "" {
@@ -311,7 +343,7 @@ func (s *Server) handleSelect(w http.ResponseWriter, r *http.Request, u store.Us
 		}
 		tt, msg := s.target(m, in.targetInput)
 		if msg != "" {
-			writeErr(w, 400, "bad_target", msg)
+			writeTargetErr(w, m, msg)
 			return
 		}
 		t = &tt
@@ -345,7 +377,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request, u store.U
 	cur, _ := s.nw.status()
 	t, msg := s.target(cur.Active, in)
 	if msg != "" {
-		writeErr(w, 400, "bad_target", msg)
+		writeTargetErr(w, cur.Active, msg)
 		return
 	}
 	ctx, cancel := nodeCtx(r)

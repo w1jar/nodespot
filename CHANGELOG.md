@@ -3,6 +3,19 @@
 Release notes are taken from the section of the tag being released
 (`## [X.Y.Z]`) when the tag has no annotation.
 
+## [1.0.1] - 2026-11-27
+
+### Fixed
+- Host lists: on a fresh install the DMR, YSF, P25, NXDN and M17 lists stayed empty until Refresh was pressed, so connects failed. A list that is not on disk yet is now downloaded at startup instead of after a minute, and while any list is missing a failed download is tried again after 30 s, then 1, 2, 4 and 8 minutes, at most 10 minutes apart. Lists already on disk keep the daily check.
+- AllStar node list: while it is empty, a failed download is tried again with the same quick backoff instead of an hour later.
+- Connecting YSF, P25, NXDN or M17 while that list has not downloaded yet now says "The YSF list hasn't downloaded yet; trying now. Try again in a moment." (`409 hostlist_empty`) and starts the download, instead of failing with a plain connect error. A typed `host:port` still works without the list.
+- Updates page: the release notes of a version tagged without an annotation showed the merge commit's message. `latest.json` now takes the notes from the CHANGELOG unless the tag is annotated.
+
+### Changed
+- AMBE vocoder install: while it runs, admins see a banner on the Modes page (above the selected mode) and on the Dashboard: "Installing the AMBE vocoder. This can take a few minutes; BrandMeister, TGIF, DMR, YSF and NXDN have no voice until it finishes.", with the elapsed time and the current step (waiting for other system updates to finish, downloading, installing). A failed install shows its error there with Install to try again and Dismiss. `GET /api/vocoder` has `jobStarted`.
+- The mode buttons on the Modes page show "Needs vocoder", or "Installing vocoder…" while the install runs, on every mode that needs the AMBE vocoder; the settings header shows the same.
+- Connecting a mode that needs the AMBE vocoder while it is missing or still installing says "Connected, but no voice until the AMBE vocoder is installed."
+
 ## [1.0.0] - 2026-11-27
 
 First release of nodespot.

@@ -32,6 +32,8 @@ type VocoderJSON struct {
 	// Job is "", running, failed or done; JobLog is its latest output.
 	Job    string `json:"job,omitempty"`
 	JobLog string `json:"jobLog,omitempty"`
+	// JobStarted is when that job started (RFC 3339); empty when unknown.
+	JobStarted string `json:"jobStarted,omitempty"`
 }
 
 func (s *Server) vocoderRoutes() {
@@ -74,7 +76,7 @@ func (s *Server) ambeModes(r *http.Request) []string {
 func (s *Server) vocoderJSON(r *http.Request, st helper.VocoderStatus) VocoderJSON {
 	return VocoderJSON{
 		Installed: st.Installed, Active: st.Active, Needed: s.ambeModes(r),
-		Supported: st.Supported, Reason: st.Reason, Job: st.Job, JobLog: st.JobLog,
+		Supported: st.Supported, Reason: st.Reason, Job: st.Job, JobLog: st.JobLog, JobStarted: st.JobStarted,
 	}
 }
 

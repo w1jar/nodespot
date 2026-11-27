@@ -370,3 +370,33 @@ export function echoStatusLabel(s: string | undefined): string {
 export function echoDetail(e: { location?: string; status?: string; kind?: string }): string {
   return [e.location, echoKindLabel(e.kind), echoStatusLabel(e.status)].filter(Boolean).join(' · ');
 }
+
+/** What the vocoder install is doing, from the latest apt output in jobLog: scans from the last line back for a line that says. */
+export function vocoderStep(log: string | undefined): string {
+  const lines = (log ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i];
+    if (/Waiting for cache lock|Could not get lock|dpkg frontend lock/i.test(l)) return 'waiting for other system updates to finish';
+    if (/^(Get:|Hit:|Ign:)|Fetched|Reading package lists/.test(l)) return 'downloading';
+    if (/Unpacking|Setting up|Selecting previously unselected/.test(l)) return 'installing';
+  }
+  return 'starting';
+}
+
+/** The last non-empty line of the job output, "" when none: the reason a failed install shows. */
+export function vocoderLastLine(log: string | undefined): string {
+  const lines = (log ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines.length ? lines[lines.length - 1] : '';
+}
+
+/** Elapsed time as "45 s" or "2 min 10 s"; never negative. */
+export function elapsedText(startMs: number, nowMs: number): string {
+  const s = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+}
+
+/** When the install started: jobStarted when it parses, else the time the page first saw it running. */
+export function vocoderStartMs(v: Vocoder | null, firstSeen: number): number {
+  const t = v?.jobStarted ? Date.parse(v.jobStarted) : NaN;
+  return Number.isFinite(t) ? t : firstSeen;
+}

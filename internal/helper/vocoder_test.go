@@ -323,3 +323,25 @@ func TestVocoderOpsOverSocket(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestVocoderStatusJobStarted(t *testing.T) {
+	r := map[string]resp{cmdDpkgVocoder: {code: 1}, cmdActive: {code: 3}}
+	o, _, _ := vocoderOps(t, r)
+	r["systemctl list-units"] = resp{out: loadedUnit + "nodespot-vocoder-install.service loaded active running x\n"}
+	r["systemctl show nodespot-vocoder-install"] = resp{out: "ActiveState=active\nResult=success\nInvocationID=abc\n"}
+	r["systemctl show --property=ActiveEnterTimestamp"] = resp{out: "ActiveEnterTimestamp=@1790000000\n"}
+	st, err := o.VocoderStatus(context.Background())
+	if err != nil || st.Job != "running" || st.JobStarted != "2026-09-21T14:13:20Z" {
+		t.Fatalf("%+v %v", st, err)
+	}
+	// no timestamp (unit never active): the field stays empty
+	r["systemctl show --property=ActiveEnterTimestamp"] = resp{out: "ActiveEnterTimestamp=\n"}
+	if st, _ = o.VocoderStatus(context.Background()); st.JobStarted != "" {
+		t.Fatalf("%+v", st)
+	}
+	// no job: no start time, and no systemctl show call needed
+	r["systemctl list-units"] = resp{}
+	if st, _ = o.VocoderStatus(context.Background()); st.Job != "" || st.JobStarted != "" {
+		t.Fatalf("%+v", st)
+	}
+}

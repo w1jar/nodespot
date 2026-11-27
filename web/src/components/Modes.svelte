@@ -13,9 +13,11 @@
   } from '../lib/modes';
   import { settings } from '../lib/settings.svelte';
   import Toggle from './Toggle.svelte';
+  import VocoderBanner from './VocoderBanner.svelte';
+  import { setVocoder, trackVocoder, vocoder } from '../lib/vocoder.svelte';
   import EyeOff from '@lucide/svelte/icons/eye-off';
   import type { Pending } from '../lib/modes';
-  import type { EchoStation, Favorite, HostItem, HostList, NodeInfo, Vocoder } from '../lib/types';
+  import type { EchoStation, Favorite, HostItem, HostList, NodeInfo } from '../lib/types';
   import FavoriteDialog from './FavoriteDialog.svelte';
   import Confirm from './Confirm.svelte';
   import Dialog from './Dialog.svelte';
@@ -108,11 +110,13 @@
   }
   function pickNode(i: NodeInfo) { pickedName = i.callsign || ''; }
   function pickEcho(e: EchoStation) { pickedName = e.location || ''; }
+  /** A warning toast when an AMBE mode was just selected and the vocoder is missing or installing. */
+  function noVoiceWarning() { if (admin && needsVocoder(info, voc)) toast('Connected, but no voice until the AMBE vocoder is installed.', 'info', 7000); }
   const connect = (t = value, name = pickedName) => {
     if (!t) { toast(sel === 'm17' ? 'Enter a reflector such as M17-XXX' : 'Enter a target', 'error'); return; }
-    return run(async () => { await api.select(sel, targetBody(t, name ? { name } : {})); text = ''; }, `${title}: connecting to ${t}`, sel);
+    return run(async () => { await api.select(sel, targetBody(t, name ? { name } : {})); text = ''; noVoiceWarning(); }, `${title}: connecting to ${t}`, sel);
   };
-  const activate = () => run(() => api.select(sel), `${title} is active`, sel);
+  const activate = () => run(async () => { await api.select(sel); noVoiceWarning(); }, `${title} is active`, sel);
   const startStop = () => (isActive ? run(() => api.select(''), 'Echo test stopped', '') : activate());
   const stop = () => run(() => api.select(''), 'No mode is active', '');
   const disconnect = () => run(() => api.disconnect(), 'Disconnected');
@@ -150,7 +154,7 @@
   }
   $effect(() => { if (!app.modes.length) refreshModes().catch(() => {}); });
 
-  let voc = $state<Vocoder | null>(null);
+  const voc = $derived(vocoder.status);
   // ---- The echo test's codec: saved at once, used by the next recording (the node restarts the echo test on a save).
   let codecBusy = $state(false);
   const codec = $derived(echoCodec(info));
@@ -170,18 +174,8 @@
   const vocNeeded = $derived(admin && needsVocoder(info, voc));
   const settingsOpen = $derived(openFor[sel] ?? (!!info && (!info.configured || vocNeeded)));
 
-  // The AMBE vocoder (md380-emu): an install is a helper job; poll until it ends.
-  async function loadVocoder() { try { voc = await api.vocoder(); } catch { /* the notice stays hidden when the status is unknown */ } }
-  $effect(() => { if (admin) void loadVocoder(); });
-  $effect(() => {
-    if (!vocoderBusy(voc)) return;
-    const t = setInterval(async () => {
-      await loadVocoder();
-      if (voc?.job === 'done') { toast('AMBE vocoder installed'); void refreshModes().catch(() => {}); }
-      else if (voc?.job === 'failed') toast(voc.jobLog ? `Vocoder install failed: ${voc.jobLog.trim().split('\n').pop()}` : 'Vocoder install failed', 'error');
-    }, 2000);
-    return () => clearInterval(t);
-  });
+  // The AMBE vocoder (md380-emu): an install is a helper job; the shared store polls until it ends.
+  $effect(() => { if (admin) return trackVocoder(); });
 
   const DOT = { ok: 'bg-ok', err: 'bg-danger', warn: 'bg-warn', off: 'bg-muted', unset: 'bg-muted/40' } as const;
   const TXT = { ok: 'text-ok', err: 'text-danger', warn: 'text-warn', off: 'text-muted', unset: 'text-muted' } as const;
@@ -222,6 +216,7 @@
             <span class="size-2 shrink-0 rounded-full {DOT[c.tone]}" aria-hidden="true"></span>
             <span class="font-medium">{m.title || modeTitle(m.name)}</span>
             <span class="text-xs {TXT[c.tone]}">{c.text}</span>
+            {#if admin && needsVocoder(m, voc)}<span class="badge border-warn !px-1.5 !py-0 text-[11px] text-warn" data-testid="mode-vocoder-badge">{vocoderBusy(voc) ? 'Installing vocoder…' : 'Needs vocoder'}</span>{/if}
           </button>
           {/if}
         {/each}
@@ -247,6 +242,7 @@
     </section>
 
     {#if info}
+      <VocoderBanner />
       <section class="card space-y-3 p-3" aria-label="{title} controls" data-testid="mode-panel" data-mode={sel}>
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-base font-semibold">{title}</h2>
@@ -407,12 +403,12 @@
               {#if settingsOpen}<ChevronDown size={16} aria-hidden="true" />{:else}<ChevronRight size={16} aria-hidden="true" />{/if}
               <span>{title} settings</span>
               {#if hidden.includes(sel)}<span class="badge text-muted" data-testid="hidden-badge">Hidden</span>{/if}
-              {#if !info.configured}<span class="badge text-muted">Set up</span>{:else if vocNeeded}<span class="badge border-warn text-warn">Needs vocoder</span>{/if}
+              {#if !info.configured}<span class="badge text-muted">Set up</span>{:else if vocNeeded}<span class="badge border-warn text-warn">{vocoderBusy(voc) ? 'Installing vocoder…' : 'Needs vocoder'}</span>{/if}
             </button>
             {#if settingsOpen}
               <div id="mode-settings" class="border-t border-line p-3">
                 {@render hideSwitch()}
-                {#key sel}<ModeSettings {info} vocoder={voc} onvocoder={(v) => (voc = v)} />{/key}
+                {#key sel}<ModeSettings {info} vocoder={voc} onvocoder={setVocoder} />{/key}
               </div>
             {/if}
           </div>

@@ -41,12 +41,13 @@ func (v *vocoderSys) VocoderInstall(context.Context) (helper.VocoderStatus, erro
 }
 
 type vocoderResp struct {
-	Installed bool     `json:"installed"`
-	Active    bool     `json:"active"`
-	Needed    []string `json:"needed"`
-	Supported bool     `json:"supported"`
-	Reason    string   `json:"reason"`
-	Job       string   `json:"job"`
+	Installed  bool     `json:"installed"`
+	Active     bool     `json:"active"`
+	Needed     []string `json:"needed"`
+	Supported  bool     `json:"supported"`
+	Reason     string   `json:"reason"`
+	Job        string   `json:"job"`
+	JobStarted string   `json:"jobStarted"`
 }
 
 func newVocoderEnv(t *testing.T, st helper.VocoderStatus) (*env, *vocoderSys) {
@@ -153,4 +154,20 @@ func TestVocoderUnavailable(t *testing.T) {
 	// a System helper without the vocoder ops is unavailable too
 	e = newEnv(t, opts{sysHost: newFakeSys()})
 	expectErr(t, e, "admin", "GET", "/api/vocoder", nil, 503, "system_unavailable")
+}
+
+func TestVocoderJobStarted(t *testing.T) {
+	e, _ := newVocoderEnv(t, helper.VocoderStatus{Supported: true, Job: "running", JobStarted: "2026-01-02T03:04:05Z"})
+	var got vocoderResp
+	if c := e.do("admin", "GET", "/api/vocoder", nil, &got); c != 200 || got.Job != "running" || got.JobStarted != "2026-01-02T03:04:05Z" {
+		t.Fatalf("%d %+v", c, got)
+	}
+	e, _ = newVocoderEnv(t, helper.VocoderStatus{Supported: true})
+	var raw map[string]any
+	if c := e.do("admin", "GET", "/api/vocoder", nil, &raw); c != 200 {
+		t.Fatal(c)
+	}
+	if _, ok := raw["jobStarted"]; ok {
+		t.Fatalf("jobStarted present without a job: %v", raw)
+	}
 }

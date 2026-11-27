@@ -311,3 +311,104 @@ func TestRetryAfterFailure(t *testing.T) {
 	}
 	t.Fatal("never retried after the failure")
 }
+
+func TestRetryWaitBackoff(t *testing.T) {
+	m := New(Options{Dir: t.TempDir()})
+	want := []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 10 * time.Minute, 10 * time.Minute}
+	for i, w := range want {
+		if got := m.retryWait(i + 1); got != w {
+			t.Errorf("failure %d: %s, want %s", i+1, got, w)
+		}
+	}
+}
+
+// A missing list is fetched at once, not after FirstDelay, and a failure is
+// retried on the short backoff.
+func TestRunFetchesMissingAtOnce(t *testing.T) {
+	s := &srv{}
+	s.failAll.Store(true)
+	ts := httptest.NewServer(s.handler(t))
+	defer ts.Close()
+	m := New(Options{Dir: t.TempDir(), Settings: set{SettingBaseURL: ts.URL + "/dl/"},
+		FirstDelay: time.Hour, Retry: time.Hour, RetryMin: 20 * time.Millisecond, Logger: log.New(io.Discard, "", 0)})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	deadline := time.Now().Add(10 * time.Second)
+	for atomic.LoadInt32(&s.hits) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if atomic.LoadInt32(&s.hits) == 0 {
+		t.Fatal("no download although the lists are missing")
+	}
+	// the failed check is retried long before Retry (1 h)
+	s.failAll.Store(false)
+	for time.Now().Before(deadline) {
+		if _, err := m.Get("dmr"); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("never retried")
+}
+
+// With every list on disk the first check waits for FirstDelay.
+func TestRunWaitsWhenAllOnDisk(t *testing.T) {
+	s := &srv{}
+	ts := httptest.NewServer(s.handler(t))
+	defer ts.Close()
+	dir := t.TempDir()
+	m := New(Options{Dir: dir, Settings: set{SettingBaseURL: ts.URL + "/dl/"}})
+	if err := m.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	hits := atomic.LoadInt32(&s.hits)
+	m2 := New(Options{Dir: dir, Settings: set{SettingBaseURL: ts.URL + "/dl/"}, FirstDelay: time.Hour})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { m2.Run(ctx); close(done) }()
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	<-done
+	if m2.missing() || atomic.LoadInt32(&s.hits) != hits {
+		t.Fatalf("checked before FirstDelay: %d vs %d", s.hits, hits)
+	}
+}
+
+func TestRefreshIfMissing(t *testing.T) {
+	s := &srv{}
+	ts := httptest.NewServer(s.handler(t))
+	defer ts.Close()
+	m := New(Options{Dir: t.TempDir(), Settings: set{SettingBaseURL: ts.URL + "/dl/"}})
+	if !m.RefreshIfMissing("ysf") {
+		t.Fatal("list reported present")
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := m.Get("ysf"); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := m.Get("ysf"); err != nil {
+		t.Fatal("not downloaded")
+	}
+	// not a manual refresh: the admin's button is not blocked
+	if st := m.Status(); st.NextManual != "" {
+		t.Fatalf("counted as manual: %+v", st)
+	}
+	if m.RefreshIfMissing("ysf") || m.RefreshIfMissing("bogus") {
+		t.Fatal("present or invalid list reported missing")
+	}
+	// busy: no second download
+	m.mu.Lock()
+	m.busy = true
+	m.mu.Unlock()
+	hits := atomic.LoadInt32(&s.hits)
+	m.RefreshIfMissing("p25")
+	time.Sleep(50 * time.Millisecond)
+	if atomic.LoadInt32(&s.hits) != hits {
+		t.Fatal("started a download while busy")
+	}
+}

@@ -219,7 +219,7 @@ func TestRunRefreshesAndSurvivesFailure(t *testing.T) {
 		io.WriteString(w, fixture(t, "astdb.txt"))
 	}))
 	defer srv.Close()
-	d := New(Options{URL: srv.URL, DataDir: t.TempDir(), Interval: 50 * time.Millisecond, Logger: quiet()})
+	d := New(Options{URL: srv.URL, DataDir: t.TempDir(), Interval: 50 * time.Millisecond, RetryMin: 10 * time.Millisecond, Logger: quiet()})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { d.Run(ctx); close(done) }()
@@ -231,5 +231,42 @@ func TestRunRefreshesAndSurvivesFailure(t *testing.T) {
 	<-done
 	if d.Status().Count != 5 {
 		t.Fatalf("Run never recovered: %+v", d.Status())
+	}
+}
+
+func TestRetryWait(t *testing.T) {
+	d := New(Options{Logger: quiet()})
+	want := []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 10 * time.Minute, 10 * time.Minute}
+	for i, w := range want {
+		if got := d.retryWait(i + 1); got != w {
+			t.Errorf("failure %d: %s, want %s", i+1, got, w)
+		}
+	}
+}
+
+// With an empty list a failed download is retried on the short backoff, not
+// after an hour.
+func TestRunEmptyListRetriesSoon(t *testing.T) {
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n.Add(1) <= 2 {
+			http.Error(w, "down", 503)
+			return
+		}
+		io.WriteString(w, fixture(t, "astdb.txt"))
+	}))
+	defer srv.Close()
+	d := New(Options{URL: srv.URL, DataDir: t.TempDir(), RetryMin: 10 * time.Millisecond, RetryMax: 40 * time.Millisecond, Logger: quiet()})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { d.Run(ctx); close(done) }()
+	deadline := time.Now().Add(10 * time.Second)
+	for d.Len() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if d.Len() != 5 || n.Load() != 3 {
+		t.Fatalf("len %d after %d requests", d.Len(), n.Load())
 	}
 }

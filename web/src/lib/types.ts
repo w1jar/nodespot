@@ -140,6 +140,8 @@ export interface Vocoder {
   installed: boolean; active: boolean; needed: string[]; supported: boolean; reason?: string;
   /** The install job: absent when none ran, else running, done or failed. */
   job?: 'running' | 'done' | 'failed'; jobLog?: string;
+  /** RFC3339: when the install job started. */
+  jobStarted?: string;
 }
 
 /** GET and PUT /api/station (admin). */
