@@ -3,6 +3,8 @@ package bm
 import (
 	"encoding/binary"
 	"errors"
+
+	"github.com/w1jar/nodespot/internal/dv/dmr"
 )
 
 // Rewind wire format, as used by Open DMR Terminal (service 0x21). Sources:
@@ -10,7 +12,11 @@ import (
 // Rewind.h of BrandMeister/DigestPlay (MIT), cross-checked with
 // BrandMeister/go-brandmeister (MIT, used as reference only); the Open DMR
 // Terminal differences were confirmed from the published ODMRTP protocol
-// description and implemented independently. All integers are little-endian.
+// description and implemented independently. Rechecked in 0.0.1 against
+// https://github.com/BrandMeister/DigestPlay (Rewind.h, RewindClient.[ch]),
+// https://github.com/BrandMeister/go-brandmeister (rewind/const.go) and two
+// Open DMR Terminal clients on GitHub: a DroidStar fork ("Droidstar-DMR",
+// dmr.cpp) and pySPOT ("pyspot_rx"). All integers are little-endian.
 //
 //	0   8  signature "REWIND01"
 //	8   2  type
@@ -22,7 +28,7 @@ const (
 	sign      = "REWIND01"
 	hdrLen    = 18
 	callLen   = 10
-	superLen  = 12 + 2*callLen // RX only: type, srcID, dstID, srcCall, dstCall
+	superLen  = 12 + 2*callLen // RewindSuperHeader (RX only): type, srcID, dstID, srcCall, dstCall
 	lcLen     = 12             // DMR voice header Full LC incl. CRC
 	frameLen  = 7              // linear AMBE frame (49 bits, MSB first)
 	frameLen3 = 3 * frameLen   // linear audio packet (RX only, see typAudio handling)
@@ -32,26 +38,30 @@ const (
 
 // Packet types.
 const (
-	typKeepAlive      uint16 = 0x0000
-	typClose          uint16 = 0x0001
-	typChallenge      uint16 = 0x0002
-	typAuth           uint16 = 0x0003
-	typReport         uint16 = 0x0100
-	typBusyNotice     uint16 = 0x0200
-	typSubscription   uint16 = 0x0901
-	typCancelling     uint16 = 0x0902
-	typSessionPoll    uint16 = 0x0903
-	typDMRDataBase    uint16 = 0x0910
-	typVoiceHeader    uint16 = typDMRDataBase + 1
-	typTerminator     uint16 = typDMRDataBase + 2
-	typAudio          uint16 = 0x0920
-	typEmbedded       uint16 = 0x0927
-	typSuperHeader    uint16 = 0x0928
-	typFailureCode    uint16 = 0x0929
-	flagRealTime1     uint16 = 1
-	serviceOpenTerm   byte   = 0x21 // OPEN_TERMINAL (0x20 is the Simple External Application)
-	superPrivate      uint32 = 5    // super header type of a private call (RX only)
-	sessionGroup      uint32 = 7
+	typKeepAlive     uint16 = 0x0000
+	typClose         uint16 = 0x0001
+	typChallenge     uint16 = 0x0002
+	typAuth          uint16 = 0x0003
+	typReport        uint16 = 0x0100
+	typBusyNotice    uint16 = 0x0200
+	typConfiguration uint16 = 0x0900 // never sent (options 0 = none, as DigestPlay does)
+	typSubscription  uint16 = 0x0901
+	typCancelling    uint16 = 0x0902
+	typSessionPoll   uint16 = 0x0903
+	typDMRDataBase   uint16 = 0x0910
+	typVoiceHeader   uint16 = typDMRDataBase + 1
+	typTerminator    uint16 = typDMRDataBase + 2
+	typAudio         uint16 = 0x0920
+	typEmbedded      uint16 = 0x0927
+	typSuperHeader   uint16 = 0x0928
+	typFailureCode   uint16 = 0x0929
+	flagRealTime1    uint16 = 1
+	serviceOpenTerm  byte   = 0x21 // OPEN_TERMINAL (0x20 is the Simple External Application)
+	// Session types (SESSION_TYPE_* in DigestPlay RewindClient.h,
+	// rewind.PrivateVoice/GroupVoice in go-brandmeister): the type of a
+	// SUBSCRIPTION and of a super header.
+	sessionPrivate    uint32 = 5 // private voice; subscribed with our own DMR ID
+	sessionGroup      uint32 = 7 // group voice; subscribed with the talkgroup
 	maxPacket                = 512
 	defaultPort              = 54006
 	maxDescriptionLen        = 96
@@ -145,15 +155,25 @@ func cstr(b []byte) string {
 }
 
 // voiceHeaderLC builds the 12 byte Full LC of a voice header (ETSI TS 102
-// 361-1): FLCO, FID, service options, dst(3), src(3), CRC(3, not computed:
-// the wiki says the server does not need it).
+// 361-1): FLCO (0x00 group, 0x03 unit to unit), FID, service options,
+// dst(3), src(3) and the RS(12,9) parity masked with the voice LC header
+// CRC mask 0x96 (TS 102 361-1 B.3.12). Earlier versions left the parity
+// zero; DroidStar's Open DMR Terminal client (dmr.cpp, send_frame) computes
+// it, so it is computed here too, the same way as for the Homebrew bursts
+// (dmr.RS129). Whether the master checks it is not confirmed.
 func voiceHeaderLC(private bool, dst, src uint32) []byte {
-	b := make([]byte, lcLen)
+	var raw [9]byte
 	if private {
-		b[0] = 0x03
+		raw[0] = 0x03
 	}
-	b[3], b[4], b[5] = byte(dst>>16), byte(dst>>8), byte(dst)
-	b[6], b[7], b[8] = byte(src>>16), byte(src>>8), byte(src)
+	raw[3], raw[4], raw[5] = byte(dst>>16), byte(dst>>8), byte(dst)
+	raw[6], raw[7], raw[8] = byte(src>>16), byte(src>>8), byte(src)
+	p := dmr.RS129(raw)
+	b := make([]byte, lcLen)
+	copy(b, raw[:])
+	for i := range p {
+		b[9+i] = p[i] ^ dmr.MaskVoiceLCHeader
+	}
 	return b
 }
 
