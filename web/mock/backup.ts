@@ -12,7 +12,7 @@ const pending = new Map<string, true>();
 let lastResult: unknown = null;
 
 const preview = () => ({
-  backup: { hostname: 'node-demo', created: new Date(Date.now() - 3 * 86400e3).toISOString(), createdBy: 'admin', nodespotVersion: '0.0.1', arch: 'arm64', osId: 'debian', osCodename: 'trixie', osName: 'Debian GNU/Linux 13 (trixie)', callsign: 'N0CALL', channel: 'stable' },
+  backup: { hostname: 'node-demo', created: new Date(Date.now() - 3 * 86400e3).toISOString(), createdBy: 'admin', nodespotVersion: '1.0.0', arch: 'arm64', osId: 'debian', osCodename: 'trixie', osName: 'Debian GNU/Linux 13 (trixie)', callsign: 'N0CALL', channel: 'stable' },
   node: { arch: 'arm64', osId: 'debian', osCodename: 'trixie', osName: 'Debian GNU/Linux 13 (trixie)', callsign: 'N0CALL' },
   warnings: [{ code: 'secrets_missing', message: 'The backup has no mode passwords. Set them up again after the restore.' }],
   users: [{ username: 'admin', role: 'admin' }, { username: 'op', role: 'operator' }, { username: 'guest', role: 'viewer' }],

@@ -12,7 +12,7 @@ import (
 // Rewind.h of BrandMeister/DigestPlay (MIT), cross-checked with
 // BrandMeister/go-brandmeister (MIT, used as reference only); the Open DMR
 // Terminal differences were confirmed from the published ODMRTP protocol
-// description and implemented independently. Rechecked in 0.0.1 against
+// description and implemented independently. Rechecked in 1.0.0 against
 // https://github.com/BrandMeister/DigestPlay (Rewind.h, RewindClient.[ch]),
 // https://github.com/BrandMeister/go-brandmeister (rewind/const.go) and two
 // Open DMR Terminal clients on GitHub: a DroidStar fork ("Droidstar-DMR",

@@ -23,7 +23,7 @@ const (
 	TGIFPort    = ctl.TGIFPort
 
 	softwareID = "nodespot"
-	packageVer = "nodespot-0.0.1"
+	packageVer = "nodespot-1.0.0"
 )
 
 func init() {

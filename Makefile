@@ -16,7 +16,7 @@ NFPM = go run github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)
 # X.Y.Z+dev.N.g<sha> after the last release tag (N commits later), which sorts above
 # X.Y.Z and below the next release, so the next real release installs over it.
 # Without any release tag (a fresh repository): 0.0.0+dev.N.g<shortsha>, N = commits
-# on HEAD, which sorts below the first release 0.0.1.
+# on HEAD, which sorts below the first release 1.0.0.
 GIT_TAG     := $(shell git describe --tags --exact-match --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' 2>/dev/null)
 GIT_DESC    := $(shell git describe --tags --long --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' 2>/dev/null)
 DEV_VERSION := $(if $(GIT_DESC),$(shell echo '$(GIT_DESC)' | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)-(g[0-9a-f]+)$$/\1+dev.\2.\3/'),0.0.0+dev.$(shell git rev-list --count HEAD 2>/dev/null || echo 0).g$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown))
