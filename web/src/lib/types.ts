@@ -140,6 +140,8 @@ export interface Vocoder {
   installed: boolean; active: boolean; needed: string[]; supported: boolean; reason?: string;
   /** The install job: absent when none ran, else running, done or failed. */
   job?: 'running' | 'done' | 'failed'; jobLog?: string;
+  /** RFC3339: when the install job started. */
+  jobStarted?: string;
 }
 
 /** GET and PUT /api/station (admin). */
@@ -240,21 +242,6 @@ export interface About {
 }
 /** GET /api/settings (and the SSE hello and settings events). hiddenModes: the modes an admin hid from the Modes row and the pickers. */
 export interface Settings { favoritesScan?: boolean; hiddenModes?: string[]; [key: string]: unknown }
-
-// ---- The public status view (GET /api/public/status, SSE "snapshot"): no IPs, no system info.
-export interface PubStation { callsign: string; mode: string; modeTitle: string; target: string; state: ModeState | string; txKeyed: boolean; rxKeyed: boolean }
-/** One call on the public page; callsign, name and location are absent when callsigns are hidden. */
-export interface PubCall { mode: string; callsign?: string; target?: string; at: number; duration: number; name?: string; location?: string }
-export interface PubSnapshot {
-  title: string; now: number; callsigns: boolean; showHeard: boolean;
-  station: PubStation; calling: PubCall | null; heard?: PubCall[];
-}
-export interface PublicInfo { enabled: boolean; title: string; loggedIn: boolean }
-/** GET/PUT /api/public (admin). */
-export interface PublicSettings {
-  enabled: boolean; title: string; showCallsigns: boolean; showHeard: boolean; allowEmbedding: boolean; trustProxy: boolean;
-  defaultTitle: string; clients: number;
-}
 
 // ---- Backup and restore (docs/BACKUP.md, /api/backup/*, /api/restore/*). Admin only (the restore upload also with a setup code).
 export interface BackupInfo { node: boolean; secrets: boolean; sa818: boolean }

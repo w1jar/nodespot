@@ -39,15 +39,14 @@ func (s *Server) initFavStats() {
 	}
 	fs.OnUpdate = func(u favstats.Update) {
 		f := frame("favstats", u)
-		s.hub.broadcast(sseMsg{priv: f, pub: f})
+		s.hub.broadcast(sseMsg{all: f})
 	}
 	if s.d.Store != nil {
 		fs.SetEnabled(s.settings().FavoritesScan)
 	}
 }
 
-// handleFavStats serves the snapshot. It needs a session and is never part
-// of the public page.
+// handleFavStats serves the snapshot. It needs a session.
 func (s *Server) handleFavStats(w http.ResponseWriter, r *http.Request, _ store.User) {
 	if s.d.FavStats == nil {
 		writeJSON(w, 200, favstats.Update{Stats: map[string]favstats.Activity{}, CheckedAt: map[string]time.Time{}, Removed: []string{}})

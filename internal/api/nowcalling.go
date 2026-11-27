@@ -18,8 +18,7 @@ import (
 // "nowcalling" and GET /api/nowcalling.
 //
 // Callsigns and names are personal data heard on air. They go to every
-// logged-in role over the event stream and the REST call; the public status
-// view shows them only when the admin turned that on.
+// logged-in role over the event stream and the REST call.
 
 type ncState struct {
 	tr *nowcalling.Tracker
@@ -30,8 +29,7 @@ func (s *Server) initNowCalling() {
 	n.tr.Resolve = s.ncResolve
 	n.tr.OnChange = func(sn nowcalling.Snapshot) {
 		f := frame("nowcalling", sn)
-		s.hub.broadcast(sseMsg{priv: f, pub: f})
-		s.pub.Changed()
+		s.hub.broadcast(sseMsg{all: f})
 	}
 	s.nc = n
 }

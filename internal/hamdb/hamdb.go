@@ -388,27 +388,6 @@ func (m *Manager) Lookup(call string) (Info, bool) {
 	return Info{}, false
 }
 
-// Cached returns the cached answer for call and nothing else: unlike Lookup it
-// never queues a callsign, so it is safe to call for a request from an
-// untrusted visitor (the public page). It reports false while the switch is
-// off, for an invalid callsign, and for one that is not cached or has expired.
-func (m *Manager) Cached(call string) (Info, bool) {
-	call = strings.ToUpper(strings.TrimSpace(call))
-	if !ValidCall(call) {
-		return Info{}, false
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.enabled {
-		return Info{}, false
-	}
-	e, ok := m.cache[call]
-	if !ok || !e.Found || m.expired(e, m.o.Now()) {
-		return Info{}, false
-	}
-	return Info{First: e.First, Name: e.Name, City: e.City, State: e.State, Country: e.Country}, true
-}
-
 // Run does the queued lookups until ctx ends.
 func (m *Manager) Run(ctx context.Context) {
 	for ctx.Err() == nil {

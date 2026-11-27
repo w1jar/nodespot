@@ -1,6 +1,9 @@
 package api_test
 
 import (
+	"time"
+
+	"github.com/w1jar/nodespot/internal/api"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -124,4 +127,39 @@ func TestHostListsStatusWithoutManager(t *testing.T) {
 		t.Fatalf("status: %d %+v", c, st)
 	}
 	expectErr(t, e, "admin", "POST", "/api/hostlists/refresh", nil, 503, "hostlists_unavailable")
+}
+
+// A connect that needs a host list with no entries is a 409 hostlist_empty
+// that starts a background download; once it is there the connect works.
+func TestConnectWithEmptyHostList(t *testing.T) {
+	e := hostListsEnv(t, false)
+	var n api.NodeJSON
+	if c := e.do("op", "POST", "/api/select", map[string]string{"mode": "ysf"}, &n); c != 200 {
+		t.Fatalf("select: %d", c)
+	}
+	var er struct{ Error, Code string }
+	c := e.do("op", "POST", "/api/connect", map[string]string{"target": "00001"}, &er)
+	if c != 409 || er.Code != "hostlist_empty" || er.Error != "The YSF list hasn't downloaded yet; trying now. Try again in a moment." {
+		t.Fatalf("connect: %d %+v", c, er)
+	}
+	// a literal host:port needs no list
+	if c := e.do("op", "POST", "/api/connect", map[string]string{"target": "192.0.2.50:42000"}, &n); c != 200 {
+		t.Fatalf("host:port: %d", c)
+	}
+	// the background download fills the list; the admin's button is not blocked
+	deadline := time.Now().Add(10 * time.Second)
+	var st statusDoc
+	for time.Now().Before(deadline) {
+		e.do("op", "GET", "/api/hostlists/status", nil, &st)
+		if st.Lists["ysf"].Entries == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if st.Lists["ysf"].Entries != 1 || st.NextManual != "" {
+		t.Fatalf("after: %+v", st)
+	}
+	if c := e.do("op", "POST", "/api/connect", map[string]string{"target": "00001"}, &n); c != 200 {
+		t.Fatalf("connect after download: %d", c)
+	}
 }

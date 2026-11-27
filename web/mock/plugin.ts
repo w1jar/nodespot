@@ -239,7 +239,7 @@ let favs: { id: number; mode: string; target: string; label: string; group: stri
 let nextFav = 10;
 const sortedFavs = () => [...favs].sort((a, b) => a.mode.localeCompare(b.mode) || a.group.localeCompare(b.group) || a.position - b.position).map((f) => ({ ...f, info: f.mode === 'allstar' ? allstarInfo(f.target) : null }));
 
-// ---- Now calling (the lookup strip) and the public view.
+// ---- Now calling (the lookup strip).
 const callOf = (c: Call, active_: boolean, start: number, end?: number) => ({ id: `${c.mode}-${c.callsign}-${start}`, kind: c.mode, call: c.callsign, name: c.name, location: c.place, ...(c.id ? { dmrId: String(c.id) } : {}), ...(c.node ? { node: c.node, desc: c.desc } : {}), target: c.target, start: iso(start), ...(end ? { end: iso(end) } : {}), active: active_ });
 const callFor = (h: HeardRow): Call => enrich({ callsign: h.callsign, name: h.name, place: h.place, id: h.id, mode: h.mode, target: h.target }, h.mode);
 const nowCalling = () => ({
@@ -247,19 +247,6 @@ const nowCalling = () => ({
   recent: heard.filter((h) => h.end).sort((a, b) => b.start - a.start).slice(0, 10).map((h) => callOf(callFor(h), false, h.start, h.end)),
 });
 const heardJSON = () => [...heard].sort((a, b) => b.start - a.start).map((h) => enrich(h, h.mode)).map((h) => ({ mode: h.mode, callsign: h.callsign, name: h.name, place: h.place, ...(h.id ? { id: h.id } : {}), target: h.target, start: iso(h.start), ...(h.end ? { end: iso(h.end), durationNs: (h.end - h.start) * 1e6 } : {}) }));
-
-const pubCfg = { enabled: true, title: '', showCallsigns: true, showHeard: true, allowEmbedding: false, trustProxy: false };
-const pubDefaultTitle = () => `${station.callsign || 'Station'} node`;
-function pubSnapshot() {
-  const cs = pubCfg.showCallsigns, d = defOf(active);
-  const row = (c: { callsign: string; name: string; place: string; mode: string; target: string }, at: number, dur: number) => ({ mode: c.mode, ...(cs ? { callsign: c.callsign, name: c.name, location: c.place } : {}), target: c.target, at: Math.floor(at / 1000), duration: dur });
-  return {
-    title: pubCfg.title || pubDefaultTitle(), now: Math.floor(now() / 1000), callsigns: cs, showHeard: pubCfg.showHeard,
-    station: { callsign: cs ? station.callsign : '', mode: active, modeTitle: d?.title ?? '', target, state: active ? state : 'idle', txKeyed: ptt, rxKeyed: cos },
-    calling: talker ? row({ callsign: talker.callsign, name: talker.name, place: talker.place, mode: active, target }, Date.parse(talker.since), 0) : null,
-    ...(pubCfg.showHeard ? { heard: heard.filter((h) => h.end).sort((a, b) => b.start - a.start).slice(0, 15).map((h) => row(h, h.start, Math.round((h.end! - h.start) / 1000))) } : {}),
-  };
-}
 
 // ---- Radio levels (the sound chip) and the caller lookup lists.
 const level = (on: boolean) => ({ RMSDb: on ? -24 + Math.random() * 6 : -60, PeakDb: on ? -12 + Math.random() * 4 : -55, Active: on, Clipped: 0, Frames: 480 });
@@ -313,7 +300,6 @@ export function mockApi(): Plugin {
   const err = (res: ServerResponse, code: number, msg: string, c: string) => json(res, code, { error: msg, code: c });
   let rawBody = '';
   const readBody = (req: IncomingMessage) => new Promise<any>((ok) => { let d = ''; req.on('data', (c) => (d += c.toString('latin1'))); req.on('end', () => { rawBody = d; try { ok(d ? JSON.parse(d) : {}); } catch { ok({}); } }); });
-  const pubClients = new Set<ServerResponse>();
   const sse = (c: { res: ServerResponse }, ev: string, data: unknown) => c.res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
   restartClients = () => { clients.forEach((c) => c.res.end()); clients.clear(); };
   const broadcast = (ev: string, f: (role: string) => unknown) => clients.forEach((c) => { const d = f(c.role); if (d !== undefined) sse(c, ev, d); });
@@ -359,7 +345,6 @@ export function mockApi(): Plugin {
         }
         pushNode();
         broadcast('nowcalling', () => nowCalling());
-        if (pubCfg.enabled) pubClients.forEach((res) => res.write(`event: snapshot\ndata: ${JSON.stringify(pubSnapshot())}\n\n`));
         if (tick % 10 === 0) broadcast('system', system);
       }, 1000);
       setInterval(() => clients.forEach((c) => c.res.write(': ping\n\n')), 15000);
@@ -388,15 +373,6 @@ export function mockApi(): Plugin {
           login(u); return json(res, 200, u);
         }
         if (p === '/logout') { if (cookie) sessions.delete(cookie); return json(res, 204); }
-        if (p === '/public/info') return json(res, 200, { enabled: pubCfg.enabled, title: pubCfg.enabled ? pubSnapshot().title : '', loggedIn: !!user });
-        if (p === '/public/status') return pubCfg.enabled ? json(res, 200, pubSnapshot()) : err(res, 404, 'no such endpoint', 'not_found');
-        if (p === '/public/events') {
-          if (!pubCfg.enabled) return err(res, 404, 'no such endpoint', 'not_found');
-          res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-          pubClients.add(res); req.on('close', () => pubClients.delete(res));
-          res.write(`event: snapshot\ndata: ${JSON.stringify(pubSnapshot())}\n\n`);
-          return;
-        }
         if (handleBackup({ m, p, body, raw: rawBody, res, user, setupNeeded, setupDone: () => { setupNeeded = false; }, json: (c, b) => json(res, c, b), err: (c, msg, code) => json(res, c, { error: msg, code }), restart: () => restartClients() })) return;
         if (!user) return err(res, 401, 'authentication required', 'unauthorized');
         const isAdmin = user.role === 'admin', canOp = user.role !== 'viewer';
@@ -580,16 +556,6 @@ export function mockApi(): Plugin {
         }
         if (p === '/nowcalling' && m === 'GET') return json(res, 200, nowCalling());
 
-        // ---- Public page settings.
-        if (p === '/public') {
-          if (!isAdmin) return forbid();
-          if (m === 'PUT') {
-            for (const k of ['enabled', 'showCallsigns', 'showHeard', 'allowEmbedding', 'trustProxy'] as const) if (typeof body[k] === 'boolean') pubCfg[k] = body[k];
-            if (typeof body.title === 'string') { if (body.title.length > 80) return err(res, 400, 'title is too long', 'bad_request'); pubCfg.title = body.title; }
-            if (!pubCfg.enabled) { pubClients.forEach((r) => r.end()); pubClients.clear(); }
-          }
-          return json(res, 200, { ...pubCfg, defaultTitle: pubDefaultTitle(), clients: pubClients.size });
-        }
         if (p === '/settings' && m === 'GET') return json(res, 200, settingsJSON());
         if (p === '/settings/hidden-modes' && m === 'PUT') {
           if (!isAdmin) return forbid();

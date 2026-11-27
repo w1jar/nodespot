@@ -42,6 +42,11 @@ type Options struct {
 	URL      string // empty disables downloading
 	DataDir  string // cache at <DataDir>/astdb.txt; empty disables caching
 	Interval time.Duration
+	// RetryMin and RetryMax bound the retry backoff while the list is empty
+	// (defaults 30 s doubling to 10 min). With a list loaded a failure is
+	// retried after an hour.
+	RetryMin time.Duration
+	RetryMax time.Duration
 	Client   *http.Client
 	MaxBytes int64 // download size cap, default 20 MB
 	Timeout  time.Duration
@@ -338,22 +343,58 @@ func (d *DB) Run(ctx context.Context) {
 	}
 	t := time.NewTimer(wait)
 	defer t.Stop()
+	fails := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 			err := d.Refresh(ctx)
-			if err != nil {
-				t.Reset(time.Hour) // retry sooner than a day after a failure
-				if iv < time.Hour {
-					t.Reset(iv)
-				}
-			} else {
+			switch {
+			case err == nil:
+				fails = 0
 				t.Reset(iv)
+			case d.Len() == 0:
+				// nothing to use yet: retry soon, backing off
+				fails++
+				t.Reset(d.retryWait(fails))
+			default:
+				fails++
+				w := time.Hour // retry sooner than a day after a failure
+				if iv < w {
+					w = iv
+				}
+				t.Reset(w)
 			}
 		}
 	}
+}
+
+// Len is the number of nodes in the list.
+func (d *DB) Len() int {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return len(d.list)
+}
+
+// retryWait is the wait after the nth failure in a row while the list is
+// empty: RetryMin (30 s), doubled each time, capped at RetryMax (10 min).
+func (d *DB) retryWait(n int) time.Duration {
+	lo, hi := d.opt.RetryMin, d.opt.RetryMax
+	if lo <= 0 {
+		lo = 30 * time.Second
+	}
+	if hi <= 0 {
+		hi = 10 * time.Minute
+	}
+	w := lo
+	for i := 1; i < n && w < hi; i++ {
+		w *= 2
+	}
+	if w > hi {
+		w = hi
+	}
+	return w
 }
 
 // Lookup returns a node's info.

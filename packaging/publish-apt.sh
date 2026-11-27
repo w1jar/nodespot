@@ -316,7 +316,11 @@ notes_for() { # notes_for VERSION
 		if [ -n "${NOTES_FILE:-}" ] && [ -f "$NOTES_FILE" ]; then
 			notes=$(cat "$NOTES_FILE")
 		elif [ "$v" = "$tag_version" ] && [ -d "$CODE_DIR/.git" ]; then
-			notes=$(git -C "$CODE_DIR" tag -l --format='%(contents)' "$TAG" 2>/dev/null || true)
+			# only an annotated tag has its own text: for a lightweight tag
+			# %(contents) is the commit message ("Merge pull request ...")
+			if [ "$(git -C "$CODE_DIR" cat-file -t "refs/tags/$TAG" 2>/dev/null || true)" = tag ]; then
+				notes=$(git -C "$CODE_DIR" tag -l --format='%(contents)' "$TAG" 2>/dev/null || true)
+			fi
 		fi
 	fi
 	if [ -z "${notes//[[:space:]]/}" ] && [ -f "$CODE_DIR/CHANGELOG.md" ]; then

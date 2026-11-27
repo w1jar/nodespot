@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../lib/api';
-  import { app, onLoggedIn } from '../lib/store.svelte';
+  import { onLoggedIn } from '../lib/store.svelte';
   import { navigate } from '../lib/router.svelte';
   import Radio from '@lucide/svelte/icons/radio-tower';
   let username = $state(''), password = $state(''), busy = $state(false), err = $state('');
@@ -20,5 +20,4 @@
     {#if err}<p class="text-sm text-danger" role="alert">{err}</p>{/if}
     <button class="btn btn-primary w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
   </form>
-  {#if app.publicEnabled}<a class="mt-3 text-center text-sm text-muted underline hover:text-fg" href="#/">Back to the public status page</a>{/if}
 </main>

@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings --test src/lib/modes.test.ts src/lib/hostlists.test.ts src/lib/levels.test.ts src/lib/station.test.ts src/lib/audio.test.ts src/lib/radio.test.ts src/lib/schedules.test.ts src/lib/sysnav.test.ts src/lib/svcweb.test.ts src/lib/wifi.test.ts src/lib/termconn.test.ts src/lib/nowcalling.test.ts src/lib/lastheard.test.ts src/lib/pubnow.test.ts src/lib/eachkeys.test.ts src/lib/reload.test.ts src/lib/title.test.ts src/lib/tuning.test.ts src/components/settings/sections.test.ts"
+    "test": "node --experimental-strip-types --no-warnings --test src/lib/modes.test.ts src/lib/hostlists.test.ts src/lib/levels.test.ts src/lib/station.test.ts src/lib/audio.test.ts src/lib/radio.test.ts src/lib/schedules.test.ts src/lib/sysnav.test.ts src/lib/svcweb.test.ts src/lib/wifi.test.ts src/lib/termconn.test.ts src/lib/nowcalling.test.ts src/lib/lastheard.test.ts src/lib/eachkeys.test.ts src/lib/reload.test.ts src/lib/title.test.ts src/lib/tuning.test.ts src/components/settings/sections.test.ts"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "7.3.1",

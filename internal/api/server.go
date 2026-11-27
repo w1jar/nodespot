@@ -23,7 +23,6 @@ import (
 	"github.com/w1jar/nodespot/internal/helper"
 	"github.com/w1jar/nodespot/internal/hostlists"
 	"github.com/w1jar/nodespot/internal/nodelist"
-	"github.com/w1jar/nodespot/internal/public"
 	"github.com/w1jar/nodespot/internal/radioid"
 	"github.com/w1jar/nodespot/internal/schedules"
 	"github.com/w1jar/nodespot/internal/store"
@@ -71,9 +70,6 @@ type Deps struct {
 	ConfigPath    string
 	Firewall      func(ctx context.Context) (helper.Firewall, error)
 	PlatformPaths *diag.PlatformPaths
-	// PublicDefaultEnabled turns the public status view on when the admin
-	// never chose (demo mode).
-	PublicDefaultEnabled bool
 	// Backup is the backup and restore service (nil: 503
 	// backup_unavailable). Restart ends the process for a restart after a
 	// restore (nil: no restart, demo mode).
@@ -93,7 +89,6 @@ type Deps struct {
 type Server struct {
 	d   Deps
 	hub *hub
-	pub *public.Service
 	mux *http.ServeMux
 
 	// Intervals (exported for tests).
@@ -145,14 +140,6 @@ func New(d Deps) *Server {
 	if d.Updates != nil && d.Updates.OS != nil {
 		d.Updates.OS.OnChange = s.broadcastUpdates
 	}
-	var pst public.SettingsStore
-	if d.Store != nil {
-		pst = d.Store
-	}
-	s.pub = public.New(public.Options{
-		Store: pst, Logger: d.Logger, DefaultEnabled: d.PublicDefaultEnabled,
-		Input: s.publicInput,
-	})
 	s.initNowCalling()
 	s.initFavStats()
 	s.initSchedules()
@@ -182,11 +169,7 @@ func (s *Server) Run(ctx context.Context) {
 func (s *Server) Shutdown() {
 	s.stopOnce.Do(func() { close(s.stop) })
 	s.hub.closeAll()
-	s.pub.Close()
 }
-
-// Public returns the public status service (for tests and wiring).
-func (s *Server) Public() *public.Service { return s.pub }
 
 // Handler returns the full HTTP handler (API, UI, security headers).
 func (s *Server) Handler() http.Handler { return s.secure(s.mux) }
@@ -321,15 +304,6 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/system/reboot", s.authed(store.RoleAdmin, s.handleReboot))
 	m.HandleFunc("POST /api/system/restart-nodespot", s.authed(store.RoleAdmin, s.handleRestartNodespot))
 	m.HandleFunc("GET /api/events", s.authed(store.RoleViewer, s.handleEvents))
-	// public status view: no auth, 404 unless enabled by an admin
-	m.HandleFunc("GET /api/public/info", func(w http.ResponseWriter, r *http.Request) {
-		_, ok := s.d.Auth.Authenticate(r)
-		s.pub.Info(w, r, ok)
-	})
-	m.HandleFunc("GET /api/public/status", s.pub.Status)
-	m.HandleFunc("GET /api/public/events", s.pub.Events)
-	m.HandleFunc("GET /api/public", s.authed(store.RoleAdmin, s.handlePublicGet))
-	m.HandleFunc("PUT /api/public", s.authed(store.RoleAdmin, s.handlePublicPut))
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not_found", "no such endpoint")
 	})
@@ -342,16 +316,6 @@ func (s *Server) routes() {
 func (s *Server) secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		// Only /embed (the chrome-less public view) can be framed, and only
-		// while the public page and "allow embedding" are both on. Every other
-		// path, the login page included, is never framable.
-		frame := "'none'"
-		embed := r.URL.Path == "/embed" || r.URL.Path == "/embed/"
-		if embed {
-			if c := s.pub.Settings(); c.Enabled && c.AllowEmbedding {
-				frame = "*"
-			}
-		}
 		// connect-src names this host's ws:// and wss:// explicitly: 'self' is
 		// not read as covering WebSocket by every browser (older Safari), and
 		// the terminal needs one. Nothing wider than this host is allowed.
@@ -359,12 +323,10 @@ func (s *Server) secure(next http.Handler) http.Handler {
 		if hh := cspHost(r.Host); hh != "" {
 			connect += " ws://" + hh + " wss://" + hh
 		}
-		h.Set("Content-Security-Policy", "default-src 'self'; "+connect+"; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors "+frame+"; base-uri 'self'; form-action 'self'")
+		h.Set("Content-Security-Policy", "default-src 'self'; "+connect+"; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "same-origin")
-		if frame == "'none'" {
-			h.Set("X-Frame-Options", "DENY")
-		}
+		h.Set("X-Frame-Options", "DENY")
 		if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
 			h.Set("Cache-Control", "no-store")
 			h.Set("X-nodespot-Instance", s.instance)

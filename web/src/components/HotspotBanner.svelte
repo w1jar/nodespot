@@ -3,7 +3,7 @@
   import Wifi from '@lucide/svelte/icons/wifi';
   // Shown when this page was opened over the setup hotspot (open WiFi, plain HTTP).
 </script>
-{#if app.hotspot && !app.embed}
+{#if app.hotspot}
   <div class="border-b border-warn/50 bg-warn/10 px-3 py-2 text-sm" role="alert">
     <div class="mx-auto flex max-w-[1100px] items-start gap-2">
       <Wifi size={16} class="mt-0.5 shrink-0 text-warn" />

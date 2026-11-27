@@ -10,10 +10,11 @@ export const AMBE_MODES = ['bm', 'dmr', 'tgif', 'ysf', 'nxdn'];
 let installed = false;
 let job: '' | 'running' | 'done' = '';
 let doneAt = 0;
+let startedAt = '';
 
 function status(c: { extra?: () => string[] }) {
   if (job === 'running' && Date.now() >= doneAt) { job = 'done'; installed = true; }
-  return { installed, active: installed, needed: [...AMBE_MODES, ...(c.extra?.() ?? [])], supported: true, ...(job ? { job } : {}) };
+  return { installed, active: installed, needed: [...AMBE_MODES, ...(c.extra?.() ?? [])], supported: true, ...(job ? { job } : {}), ...(job === 'running' ? { jobStarted: startedAt, jobLog: 'Get:1 http://192.0.2.1/debian stable InRelease' } : {}) };
 }
 
 export function handleVocoder(c: Ctx): boolean {
@@ -23,7 +24,7 @@ export function handleVocoder(c: Ctx): boolean {
   if (p === '/vocoder' && m === 'GET') { c.json(200, status(c)); return true; }
   if (p === '/vocoder/install' && m === 'POST') {
     if (installed) { c.json(200, status(c)); return true; }
-    if (job !== 'running') { job = 'running'; doneAt = Date.now() + 3000; }
+    if (job !== 'running') { job = 'running'; startedAt = new Date().toISOString(); doneAt = Date.now() + 3000; }
     c.json(202, status(c));
     return true;
   }

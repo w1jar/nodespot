@@ -12,22 +12,21 @@
   import Setup from './components/Setup.svelte';
   import NodeSetup from './components/NodeSetup.svelte';
   import Dashboard from './components/Dashboard.svelte';
-  import PublicView from './components/public/PublicView.svelte';
 
   // Operators and viewers open only About and Account; any other settings page falls back to the Dashboard.
   const settingsOpen = $derived(settingsRoute(router.path, visibleGroups(groups, isAdmin()).map((g) => ({ id: g.id, tabs: (g.tabs ?? []).map((t) => t.id) })), defaultFor(isAdmin()), isAdmin()) !== null);
 
-  // The one place that sets the tab title (the public page sets its own). Follows the callsign live.
+  // The one place that sets the tab title. Follows the callsign live.
   const pageName = $derived(router.path === '/schedules' ? 'Schedules' : settingsOpen ? 'Settings' : router.path === '/modes' ? 'Modes' : '');
   $effect(() => {
-    if (!app.ready || app.embed || router.path === '/public' || (!app.user && app.publicEnabled && router.path !== '/login')) return;
+    if (!app.ready) return;
     document.title = app.user ? pageTitle(app.node?.callsign, pageName) : pageTitle('');
   });
 
   $effect(() => {
-    if (!app.ready || app.embed) return;
+    if (!app.ready) return;
     if (app.setupNeeded) { if (router.path !== '/setup') navigate('/setup'); }
-    else if (!app.user) { if (router.path !== '/login' && !app.publicEnabled) navigate('/login'); }
+    else if (!app.user) { if (router.path !== '/login') navigate('/login'); }
     else if (router.path === '/login' || router.path === '/setup') navigate('/');
   });
 </script>
@@ -35,15 +34,10 @@
 <HotspotBanner />
 {#if !app.ready}
   <div class="grid min-h-dvh place-items-center text-sm text-muted" role="status">Loading…</div>
-{:else if app.embed}
-  {#if app.publicEnabled}<PublicView mode="embed" />{:else}<p class="grid min-h-dvh place-items-center text-sm text-muted">This page is not available.</p>{/if}
 {:else if app.setupNeeded}
   <Setup />
 {:else if !app.user}
-  {#if app.publicEnabled && router.path !== '/login'}<PublicView mode="visitor" />{:else}<Login />{/if}
-{:else if router.path === '/public' && app.publicEnabled}
-  <Header />
-  <PublicView mode="preview" />
+  <Login />
 {:else if stationSetupOpen()}
   <Header />
   <main class="mx-auto max-w-[1100px] px-3 py-2 sm:px-4"><NodeSetup /></main>

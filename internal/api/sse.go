@@ -13,12 +13,11 @@ import (
 	"github.com/w1jar/nodespot/internal/store"
 )
 
-// sseMsg is a pre-framed SSE message in two variants: for privileged
-// clients (admin/operator) and for viewers.
+// sseMsg is a pre-framed SSE message for every client.
 type sseMsg struct {
-	priv, pub []byte
-	// admin, when set, is sent to admin clients instead of priv/pub; a
-	// message with only admin set reaches admins and nobody else.
+	all []byte
+	// admin, when set, is sent to admin clients instead of all; a message
+	// with only admin set reaches admins and nobody else.
 	admin []byte
 }
 
@@ -32,7 +31,6 @@ func frame(event string, v any) []byte {
 
 type client struct {
 	ch    chan sseMsg
-	priv  atomic.Bool
 	admin atomic.Bool
 	done  chan struct{}
 	once  sync.Once
@@ -55,9 +53,8 @@ func newHub(onCount func(int)) *hub {
 
 const clientBuffer = 64
 
-func (h *hub) add(priv bool) *client {
+func (h *hub) add() *client {
 	c := &client{ch: make(chan sseMsg, clientBuffer), done: make(chan struct{})}
-	c.priv.Store(priv)
 	h.mu.Lock()
 	h.clients[c] = struct{}{}
 	n := len(h.clients)
@@ -126,7 +123,7 @@ func (s *Server) broadcastFavorites() {
 		return
 	}
 	f := frame("favorites", favs)
-	s.hub.broadcast(sseMsg{priv: f, pub: f})
+	s.hub.broadcast(sseMsg{all: f})
 }
 
 // broadcastSchedules sends the schedules snapshot (the same frame for all
@@ -136,7 +133,7 @@ func (s *Server) broadcastSchedules() {
 		return
 	}
 	f := frame("schedules", s.d.Schedules.Snapshot())
-	s.hub.broadcast(sseMsg{priv: f, pub: f})
+	s.hub.broadcast(sseMsg{all: f})
 }
 
 // updateInterval follows the number of SSE clients; the argument is
@@ -161,7 +158,7 @@ func (s *Server) systemLoop(ctx context.Context) {
 				continue
 			}
 			f := frame("system", s.systemJSON(ctx))
-			s.hub.broadcast(sseMsg{priv: f, pub: f})
+			s.hub.broadcast(sseMsg{all: f})
 			if s.d.Updates != nil {
 				s.broadcastUpdates()
 			}
@@ -185,7 +182,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, u store.Us
 		return rc.Flush() == nil
 	}
 
-	c := s.hub.add(auth.RoleRank(u.Role) >= auth.RoleRank(store.RoleOperator))
+	c := s.hub.add()
 	c.admin.Store(u.Role == store.RoleAdmin)
 	defer s.hub.remove(c)
 
@@ -213,10 +210,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, u store.Us
 		case <-c.done:
 			return
 		case m := <-c.ch:
-			b := m.pub
-			if c.priv.Load() {
-				b = m.priv
-			}
+			b := m.all
 			if m.admin != nil {
 				b = nil
 				if c.admin.Load() {
@@ -235,7 +229,6 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, u store.Us
 			if err != nil {
 				return
 			}
-			c.priv.Store(auth.RoleRank(cu.Role) >= auth.RoleRank(store.RoleOperator))
 			c.admin.Store(cu.Role == store.RoleAdmin)
 			if !write([]byte(": ping\n\n")) {
 				return

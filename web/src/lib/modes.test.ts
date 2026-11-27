@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { draftOf, savePayload, missingField, dirty, targetText, targetBody, favoritesOf, recentTargets, stateText, linkStatsText, linkStatsTitle, sortModes, modeTitle, needsVocoder, vocoderBusy, stationValue, stationHint, notReadyText, notReadyShort, ECHO_CODECS, echoCodec, echoCodecValues } from './modes.ts';
+import { draftOf, savePayload, missingField, dirty, targetText, targetBody, favoritesOf, recentTargets, stateText, linkStatsText, linkStatsTitle, sortModes, modeTitle, needsVocoder, vocoderBusy, vocoderStep, vocoderLastLine, elapsedText, vocoderStartMs, stationValue, stationHint, notReadyText, notReadyShort, ECHO_CODECS, echoCodec, echoCodecValues } from './modes.ts';
 import type { ModeInfo, Favorite, Heard, NowCall } from './types';
 
 const bm: ModeInfo = {
@@ -273,4 +273,42 @@ test('EchoLink results read as location, kind and status', async () => {
   assert.equal(echoKindLabel('nope'), 'User');
   assert.equal(echoStatusLabel(''), '');
   assert.equal(echoStatusLabel('away'), 'Away');
+});
+
+test('vocoderStep: the latest meaningful apt line decides', () => {
+  assert.equal(vocoderStep(''), 'starting');
+  assert.equal(vocoderStep(undefined), 'starting');
+  assert.equal(vocoderStep('Something odd'), 'starting');
+  assert.equal(vocoderStep('Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend'), 'waiting for other system updates to finish');
+  assert.equal(vocoderStep('E: Could not get lock /var/lib/dpkg/lock'), 'waiting for other system updates to finish');
+  assert.equal(vocoderStep('Waiting for dpkg frontend lock'), 'waiting for other system updates to finish');
+  assert.equal(vocoderStep('Get:1 http://192.0.2.1/debian stable InRelease'), 'downloading');
+  assert.equal(vocoderStep('Hit:2 http://192.0.2.1/debian stable'), 'downloading');
+  assert.equal(vocoderStep('Fetched 12 MB in 3s\nReading package lists...'), 'downloading');
+  assert.equal(vocoderStep('Get:1 x\nUnpacking foo (1.0) ...\n'), 'installing');
+  assert.equal(vocoderStep('Selecting previously unselected package foo.'), 'installing');
+  assert.equal(vocoderStep('Setting up foo (1.0) ...'), 'installing');
+  assert.equal(vocoderStep('Waiting for cache lock\nGet:1 x\nsome noise\n'), 'downloading');
+});
+
+test('vocoderLastLine: the last non-empty line', () => {
+  assert.equal(vocoderLastLine('a\nE: Unable to locate package x\n\n'), 'E: Unable to locate package x');
+  assert.equal(vocoderLastLine(''), '');
+  assert.equal(vocoderLastLine(undefined), '');
+});
+
+test('elapsedText: seconds, then minutes and seconds', () => {
+  assert.equal(elapsedText(1000, 1000), '0 s');
+  assert.equal(elapsedText(0, 45_000), '45 s');
+  assert.equal(elapsedText(0, 60_000), '1 min 0 s');
+  assert.equal(elapsedText(0, 130_500), '2 min 10 s');
+  assert.equal(elapsedText(5000, 1000), '0 s');
+});
+
+test('vocoderStartMs: jobStarted wins, else when the page first saw the job', () => {
+  const v = { installed: false, active: false, needed: [], supported: true, job: 'running' as const };
+  assert.equal(vocoderStartMs({ ...v, jobStarted: '2026-01-02T03:04:05Z' }, 99), Date.parse('2026-01-02T03:04:05Z'));
+  assert.equal(vocoderStartMs(v, 99), 99);
+  assert.equal(vocoderStartMs({ ...v, jobStarted: 'garbage' }, 99), 99);
+  assert.equal(vocoderStartMs(null, 99), 99);
 });

@@ -301,7 +301,7 @@ func installHead(t *testing.T, env ...string) (string, error) {
 		t.Fatal("option parsing not found")
 	}
 	script := `die() { printf '%s\n' "error: $*" >&2; exit 1; }
-` + s[i:j] + `printf 'port=%s takeover=%s undo=%s dv=%s\n' "$PORT_WANT" "$TAKEOVER_WANT" "$TAKEOVER_UNDO" "$DV_WANT"
+` + s[i:j] + `printf 'port=%s takeover=%s undo=%s dv=%s vocoder=%s\n' "$PORT_WANT" "$TAKEOVER_WANT" "$TAKEOVER_UNDO" "$DV_WANT" "$VOCODER_WANT"
 `
 	cmd := exec.Command("sh", "-c", script)
 	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH")}, env...)
@@ -314,16 +314,18 @@ func TestInstallOptionParsing(t *testing.T) {
 		env  []string
 		want string
 	}{
-		{nil, "port= takeover=0 undo=0 dv=0"},
-		{[]string{"NODESPOT_TAKEOVER=1"}, "port=80 takeover=1 undo=0 dv=0"},
-		{[]string{"NODESPOT_TAKEOVER=yes"}, "port=80 takeover=1 undo=0 dv=0"},
-		{[]string{"NODESPOT_TAKEOVER=TRUE"}, "port=80 takeover=1 undo=0 dv=0"},
-		{[]string{"NODESPOT_TAKEOVER=1", "NODESPOT_PORT=8181"}, "port=8181 takeover=1 undo=0 dv=0"},
-		{[]string{"NODESPOT_TAKEOVER=1", "NODESPOT_DV=1"}, "port=80 takeover=1 undo=0 dv=1"},
-		{[]string{"NODESPOT_TAKEOVER=undo"}, "port= takeover=0 undo=1 dv=0"},
-		{[]string{"NODESPOT_TAKEOVER=undo", "NODESPOT_PORT=8181"}, "port=8181 takeover=0 undo=1 dv=0"},
-		{[]string{"NODESPOT_PORT=80"}, "port=80 takeover=0 undo=0 dv=0"},
-		{[]string{"NODESPOT_PORT=1024"}, "port=1024 takeover=0 undo=0 dv=0"},
+		{nil, "port= takeover=0 undo=0 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_TAKEOVER=1"}, "port=80 takeover=1 undo=0 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_TAKEOVER=yes"}, "port=80 takeover=1 undo=0 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_TAKEOVER=TRUE"}, "port=80 takeover=1 undo=0 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_TAKEOVER=1", "NODESPOT_PORT=8181"}, "port=8181 takeover=1 undo=0 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_TAKEOVER=1", "NODESPOT_DV=1"}, "port=80 takeover=1 undo=0 dv=1 vocoder=0"},
+		{[]string{"NODESPOT_TAKEOVER=undo"}, "port= takeover=0 undo=1 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_TAKEOVER=undo", "NODESPOT_PORT=8181"}, "port=8181 takeover=0 undo=1 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_PORT=80"}, "port=80 takeover=0 undo=0 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_PORT=1024"}, "port=1024 takeover=0 undo=0 dv=0 vocoder=0"},
+		{[]string{"NODESPOT_VOCODER=1"}, "port= takeover=0 undo=0 dv=0 vocoder=1"},
+		{[]string{"NODESPOT_VOCODER=Yes", "NODESPOT_TAKEOVER=1"}, "port=80 takeover=1 undo=0 dv=0 vocoder=1"},
 	}
 	for _, c := range ok {
 		got, err := installHead(t, c.env...)
@@ -336,6 +338,9 @@ func TestInstallOptionParsing(t *testing.T) {
 		{"NODESPOT_TAKEOVER=maybe"},
 		{"NODESPOT_TAKEOVER=undo", "NODESPOT_PORT=80"},
 		{"NODESPOT_TAKEOVER=undo", "NODESPOT_DV=1"},
+		{"NODESPOT_VOCODER=0"},
+		{"NODESPOT_VOCODER=maybe"},
+		{"NODESPOT_TAKEOVER=undo", "NODESPOT_VOCODER=1"},
 		{"NODESPOT_PORT=443"},
 		{"NODESPOT_PORT=81"},
 		{"NODESPOT_PORT=080"},
@@ -436,6 +441,50 @@ func TestInstallArchCheckBeforeChanges(t *testing.T) {
 	for _, later := range []string{"install -m 0644 \"$tmp/keyring.gpg\"", "apt-get "} {
 		if strings.Contains(before, later) {
 			t.Errorf("%q comes before the architecture check", later)
+		}
+	}
+}
+
+// TestInstallVocoderFailureOnlyWarns runs install_vocoder with a fake helper:
+// success is reported, and a failing or missing helper only warns (the
+// function returns 0, so the installer goes on and exits 0).
+func TestInstallVocoderFailureOnlyWarns(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no sh")
+	}
+	s := installScript(t)
+	i := strings.Index(s, "VOCODER_RESULT=\n")
+	j := strings.Index(s, "if [ \"$TAKEOVER_UNDO\" -eq 1 ]; then\n\trc=0")
+	if i < 0 || j < i {
+		t.Fatal("install_vocoder not found")
+	}
+	dir := t.TempDir()
+	mk := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	cases := []struct{ helper, want string }{
+		{mk("ok", `[ "$*" = "vocoder-install --wait" ] || exit 9; echo working`), "RESULT=installed and running"},
+		{mk("bad", `echo "vocoder-install: Debian bullseye is not supported" >&2; exit 1`), "RESULT=not installed (warning"},
+		{filepath.Join(dir, "missing"), "RESULT=not installed (warning"},
+	}
+	for _, c := range cases {
+		script := `say() { printf '%s\n' "nodespot-install: $*"; }
+` + s[i:j] + `rc=0
+install_vocoder || rc=$?
+printf 'rc=%s RESULT=%s\n' "$rc" "$VOCODER_RESULT"
+`
+		cmd := exec.Command("sh", "-c", script)
+		cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "NODESPOT_HELPER=" + c.helper}
+		out, err := cmd.CombinedOutput()
+		if err != nil || !strings.Contains(string(out), "rc=0 "+c.want) {
+			t.Errorf("%s: %v\n%s", filepath.Base(c.helper), err, out)
+		}
+		if strings.Contains(c.want, "not installed") && !strings.Contains(string(out), "Install it later from the Modes page") {
+			t.Errorf("%s: no warning:\n%s", filepath.Base(c.helper), out)
 		}
 	}
 }

@@ -39,11 +39,16 @@ const (
 	// or minus) added to it.
 	Interval = 24 * time.Hour
 	Jitter   = time.Hour
-	// FirstDelay is the wait before the first check after the start.
+	// FirstDelay is the wait before the first check after the start, when
+	// every list is already on disk. A missing list is fetched at once.
 	FirstDelay = 60 * time.Second
 	// RetryAfter is the wait before the next check after a failed one (no
-	// network yet at boot, a clock not yet set, the server down).
+	// network yet at boot, a clock not yet set, the server down). It is also
+	// the cap of the backoff used while a list is missing.
 	RetryAfter = 10 * time.Minute
+	// RetryMin is the first wait after a failed check while a list is
+	// missing; each further failure doubles it, up to RetryAfter.
+	RetryMin = 30 * time.Second
 	// ManualEvery is the least time between two manual refreshes.
 	ManualEvery = 10 * time.Minute
 	// Timeout bounds one file's download.
@@ -98,8 +103,12 @@ type Options struct {
 	FirstDelay time.Duration
 	// Interval overrides the period between checks (Jitter is added).
 	Interval time.Duration
-	// Retry overrides RetryAfter.
+	// Retry overrides RetryAfter (the wait after a failure once every list
+	// is on disk, and the cap of the backoff before that).
 	Retry time.Duration
+	// RetryMin overrides RetryMin (the first backoff step while a list is
+	// missing).
+	RetryMin time.Duration
 	// OnChange is called after the status changed.
 	OnChange func()
 }
@@ -164,6 +173,12 @@ func New(o Options) *Manager {
 	}
 	if o.Retry <= 0 {
 		o.Retry = RetryAfter
+	}
+	if o.RetryMin <= 0 {
+		o.RetryMin = RetryMin
+	}
+	if o.RetryMin > o.Retry {
+		o.RetryMin = o.Retry
 	}
 	return &Manager{o: o, lists: map[string]*loaded{}, meta: map[string]fileMeta{}, errs: map[string]string{}}
 }
@@ -355,14 +370,45 @@ func (m *Manager) Status() Status {
 	return st
 }
 
-// Run loads the files, checks for new ones after FirstDelay and then about
-// once a day (with jitter), until ctx ends. A failed check is tried again
-// after Retry instead of a day later.
+// missing reports whether a list of any mode is not loaded.
+func (m *Manager) missing() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, mode := range Modes {
+		if m.lists[mode] == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// retryWait is the wait after the nth failed check in a row (n >= 1) while a
+// list is missing: RetryMin, doubled each time, capped at Retry.
+func (m *Manager) retryWait(n int) time.Duration {
+	d := m.o.RetryMin
+	for i := 1; i < n && d < m.o.Retry; i++ {
+		d *= 2
+	}
+	if d > m.o.Retry {
+		d = m.o.Retry
+	}
+	return d
+}
+
+// Run loads the files, then checks for new ones and again about once a day
+// (with jitter), until ctx ends. The first check comes after FirstDelay, or
+// at once when a list is missing (a fresh install). While a list is missing a
+// failed check is retried after RetryMin, doubling up to Retry; once every
+// list is on disk a failure is retried after Retry.
 func (m *Manager) Run(ctx context.Context) {
 	m.Load()
 	d := m.o.FirstDelay
+	if m.missing() {
+		d = 0
+	}
 	t := time.NewTimer(d)
 	defer t.Stop()
+	fails := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -372,14 +418,38 @@ func (m *Manager) Run(ctx context.Context) {
 		next := m.o.Interval + time.Duration(rand.Int63n(int64(2*Jitter))) - Jitter
 		if m.enabled() {
 			if err := m.refresh(ctx, false); err != nil && !errors.Is(err, ErrBusy) {
-				m.o.Logger.Printf("hostlists: %v (trying again in %s)", err, m.o.Retry)
+				fails++
 				next = m.o.Retry
+				if m.missing() {
+					next = m.retryWait(fails)
+				}
+				m.o.Logger.Printf("hostlists: %v (trying again in %s)", err, next)
+			} else {
+				fails = 0
 			}
 		} else {
 			next = 5 * time.Minute // look again soon: the enable may come any time
 		}
 		t.Reset(next)
 	}
+}
+
+// RefreshIfMissing starts a background download when the list of mode is not
+// loaded and reports whether the list is missing. It is not a manual refresh
+// (it does not count against ManualEvery) and does nothing when a download is
+// already running or digital modes are off.
+func (m *Manager) RefreshIfMissing(mode string) bool {
+	if !ValidMode(mode) {
+		return false
+	}
+	m.mu.Lock()
+	missing := m.lists[mode] == nil
+	busy := m.busy
+	m.mu.Unlock()
+	if missing && !busy && m.enabled() {
+		go func() { _ = m.refresh(context.Background(), false) }()
+	}
+	return missing
 }
 
 // Refresh downloads the lists now (the admin's button). It waits, is

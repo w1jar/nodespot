@@ -10,7 +10,6 @@ export const OLD_IDS: Readonly<Record<string, readonly [string, string?]>> = {
   'dv-user-list': ['modes', 'lookup'],
   'dv-callsigns': ['modes', 'lookup'],
   'users': ['access'],
-  'public': ['access'],
   'overview': ['system', 'overview'],
   'updates': ['system', 'updates'],
   'network': ['system', 'network'],

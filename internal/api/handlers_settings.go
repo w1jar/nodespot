@@ -98,7 +98,7 @@ func (s *Server) handleHiddenModesPut(w http.ResponseWriter, r *http.Request, u 
 	s.audit(u, "modes.hidden", map[string]any{"hiddenModes": l})
 	out := s.settings()
 	f := frame("settings", out)
-	s.hub.broadcast(sseMsg{priv: f, pub: f})
+	s.hub.broadcast(sseMsg{all: f})
 	writeJSON(w, 200, out)
 }
 

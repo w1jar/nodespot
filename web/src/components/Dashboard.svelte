@@ -2,13 +2,15 @@
   // Overview: the station (radio, PTT/COS, levels, ID), the active mode and target, who is talking,
   // pinned favorites, schedules and one Last heard list across all modes.
   import { api } from '../lib/api';
-  import { app, canOperate, clock, refreshNode } from '../lib/store.svelte';
+  import { app, canOperate, clock, isAdmin, refreshNode } from '../lib/store.svelte';
   import { TUNE_HREF, showTuneBanner } from '../lib/tuning';
   import { toast, toastError } from '../lib/toast.svelte';
-  import { favoriteActive, modeTitle, pinnedFavorites, stateText, targetBody, targetText } from '../lib/modes';
+  import { favoriteActive, modeTitle, needsVocoder, pinnedFavorites, stateText, targetBody, targetText } from '../lib/modes';
   import { agoText, who } from '../lib/nowcalling';
   import { mergeHeard } from '../lib/lastheard';
   import type { Favorite, RadioLevels, Reading } from '../lib/types';
+  import VocoderBanner from './VocoderBanner.svelte';
+  import { trackVocoder, vocoder } from '../lib/vocoder.svelte';
   import LastHeardTable from './LastHeardTable.svelte';
   import SchedulesCard from './SchedulesCard.svelte';
   import Footer from './Footer.svelte';
@@ -34,6 +36,7 @@
     const t = setInterval(tick, 2000);
     return () => { stop = true; clearInterval(t); };
   });
+  $effect(() => { if (isAdmin()) return trackVocoder(); });
   const db = (r: Reading | undefined) => (r && Number.isFinite(r.RMSDb) && r.RMSDb > -120 ? `${r.RMSDb.toFixed(0)} dB` : '—');
 
   const alerts = $derived.by(() => {
@@ -60,7 +63,8 @@
   async function tap(f: Favorite) {
     if (busy || !op) return;
     busy = String(f.id);
-    try { await api.select(f.mode, targetBody(f.target, f.label && f.label !== f.target ? { name: f.label } : {})); toast(`${modeTitle(f.mode, app.modes)}: connecting to ${f.label || f.target}`); } catch (e) { toastError(e); } finally { busy = ''; }
+    try { await api.select(f.mode, targetBody(f.target, f.label && f.label !== f.target ? { name: f.label } : {})); toast(`${modeTitle(f.mode, app.modes)}: connecting to ${f.label || f.target}`);
+      if (isAdmin() && needsVocoder(app.modes.find((m) => m.name === f.mode), vocoder.status)) toast('Connected, but no voice until the AMBE vocoder is installed.', 'info', 7000); } catch (e) { toastError(e); } finally { busy = ''; }
   }
   const talker = $derived(node?.mode?.talker);
   /** A local station is transmitting into the receiver and its audio goes to the active mode. */
@@ -118,6 +122,7 @@
         {/if}
       </div>
 
+      <VocoderBanner />
       <div class="card space-y-1 px-3 py-2" data-testid="mode-card">
         <div class="flex items-baseline gap-2">
           <span class="text-xs font-semibold uppercase tracking-wide text-muted">Mode</span>

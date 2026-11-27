@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,9 @@ type VocoderStatus struct {
 	// Job is "", running, failed or done (the install job).
 	Job    string `json:"job,omitempty"`
 	JobLog string `json:"jobLog,omitempty"`
+	// JobStarted is when the running or last install job started (RFC 3339,
+	// from the transient unit's ActiveEnterTimestamp); empty when unknown.
+	JobStarted string `json:"jobStarted,omitempty"`
 }
 
 // VocoderPlatform decides whether the vocoder can be installed: host codename
@@ -148,8 +152,24 @@ func (o *Ops) VocoderStatus(ctx context.Context) (VocoderStatus, error) {
 	}
 	if st.Job != "" {
 		st.JobLog = LastLines(log, logLines)
+		st.JobStarted = o.jobStarted(ctx, vocoderJobUnit)
 	}
 	return st, nil
+}
+
+// jobStarted is when the unit last became active (RFC 3339 UTC), or "".
+func (o *Ops) jobStarted(ctx context.Context, unit string) string {
+	out, _, err := o.Run.Run(ctx, "systemctl", "show", "--property=ActiveEnterTimestamp", "--timestamp=unix", unit+".service")
+	if err != nil {
+		return ""
+	}
+	v := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "ActiveEnterTimestamp="))
+	v = strings.TrimPrefix(v, "@")
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		return ""
+	}
+	return time.Unix(n, 0).UTC().Format(time.RFC3339)
 }
 
 // vocoderScript is the fixed script of the install unit. It sequences apt and
@@ -262,6 +282,7 @@ func (o *Ops) VocoderInstall(ctx context.Context) (VocoderStatus, error) {
 		return VocoderStatus{}, fmt.Errorf("systemd-run failed: %s", LastLines(out, 5))
 	}
 	st.Job, st.JobLog = "running", ""
+	st.JobStarted = o.now().UTC().Format(time.RFC3339)
 	return st, nil
 }
 
