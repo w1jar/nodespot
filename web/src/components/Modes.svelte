@@ -302,7 +302,7 @@
                   {/if}
                 </div>
               {/if}
-              <div class="flex min-w-0 items-center gap-1.5 text-sm {localTx ? 'talk-live talk-local' : talker ? 'talk-live' : ''} {sel === 'echotest' ? '' : 'ml-auto'}" aria-live="polite" data-testid="mode-now-calling" data-live={localTx ? 'local' : talker ? 'remote' : undefined}>
+              <div class="flex min-w-0 max-w-full items-center gap-1.5 rounded border border-line bg-surface-2 px-3 py-1.5 text-sm {localTx ? 'talk-live talk-local' : talker ? 'talk-live' : ''} {sel === 'echotest' ? '' : 'ml-auto'}" aria-live="polite" data-testid="mode-now-calling" data-live={localTx ? 'local' : talker ? 'remote' : undefined}>
                 <span class="shrink-0 whitespace-nowrap text-[11px] uppercase tracking-wide text-muted">Now calling</span>
                 <Mic size={14} class="shrink-0 {localTx ? 'talk-mic text-accent' : talker ? 'talk-mic text-danger' : 'text-muted'}" aria-hidden="true" />
                 {#if localTx}<span class="min-w-0 truncate" data-testid="mode-local-tx"><b>Local station</b> · sending to {modeTitle(active, app.modes)}</span>
@@ -310,7 +310,6 @@
                 {:else}<span class="text-muted">{isActive ? 'Nobody is talking' : '—'}</span>{/if}
               </div>
             </div>
-            {#if linked && st?.links?.length && sel === 'allstar'}<div class="truncate text-xs text-muted">Links: {st.links.join(', ')}</div>{/if}
             {#if isActive && st?.link}<p class="break-words font-mono text-[11px] text-muted" data-testid="link-stats" title={linkStatsTitle(st.link)}>{linkStatsText(st.link, app.node?.radio.netDropped)}</p>{/if}
           </div>
           {#if isActive && st?.registration && !st.registration.registered}<p class="text-xs text-warn">Not registered yet{st.registration.lastError ? `: ${st.registration.lastError}` : ''}</p>{/if}
@@ -329,24 +328,24 @@
                 <label class="sr-only" for="mtarget">{targetLabel(info)}</label>
                 <div class="flex flex-wrap items-stretch gap-1.5 md:flex-nowrap">
                   <div class="relative min-w-0 flex-1 basis-full md:basis-0">
-                    <Search size={18} class="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted" aria-hidden="true" />
+                    <Search size={16} class="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-muted" aria-hidden="true" />
                     {#if kind === 'nodes'}
-                      <NodePicker id="mtarget" bind:value={text} source={sel === 'echolink' ? 'echolink' : 'allstar'} testid="target-search" placeholder={targetPlaceholder(info)} onenter={() => connect()} onpick={pickNode} onpickecho={pickEcho} inputmode="text" inputClass="!min-h-12 !pl-10 !text-base" />
+                      <NodePicker id="mtarget" bind:value={text} source={sel === 'echolink' ? 'echolink' : 'allstar'} testid="target-search" placeholder={targetPlaceholder(info)} onenter={() => connect()} onpick={pickNode} onpickecho={pickEcho} inputmode="text" inputClass="!min-h-10 !pl-9" />
                     {:else if kind === 'hosts'}
-                      <NodePicker id="mtarget" bind:value={text} options={hosts} placeholder={targetPlaceholder(info)} label={(o) => `${o.value} ${o.name}`.trim()} onpickoption={pickHost} onenter={() => connect()} inputmode="text" inputClass="!min-h-12 !pl-10 !text-base" />
+                      <NodePicker id="mtarget" bind:value={text} options={hosts} placeholder={targetPlaceholder(info)} label={(o) => `${o.value} ${o.name}`.trim()} onpickoption={pickHost} onenter={() => connect()} inputmode="text" inputClass="!min-h-10 !pl-9" />
                     {:else}
-                      <input id="mtarget" class="input font-mono !min-h-12 !pl-10 !text-base" bind:value={text} autocomplete="off" inputmode="text" placeholder={targetPlaceholder(info)} />
+                      <input id="mtarget" class="input font-mono !min-h-10 !pl-9" bind:value={text} autocomplete="off" inputmode="text" placeholder={targetPlaceholder(info)} />
                     {/if}
                   </div>
                   {#if sel === 'm17'}
-                    <select class="input !min-h-12 !w-auto" bind:value={module} disabled={busy} aria-label="Module" title="The module (room) of the reflector" data-testid="m17-module">
+                    <select class="input !min-h-10 !w-auto" bind:value={module} disabled={busy} aria-label="Module" title="The module (room) of the reflector" data-testid="m17-module">
                       {#each M17_MODULES as x (x)}<option value={x}>Module {x}</option>{/each}
                     </select>
                   {/if}
-                  <button class="btn btn-primary !min-h-12 grow !px-5 !text-base sm:grow-0" disabled={busy || !value}><Plug size={16} aria-hidden="true" />Connect</button>
-                  <button type="button" class="btn btn-icon !min-h-12 !w-12 !px-0 {starred ? 'border-accent' : ''}" disabled={busy || !!block} aria-pressed={!!starred} data-testid="star"
+                  <button class="btn btn-primary !min-h-10 grow sm:grow-0" disabled={busy || !value}><Plug size={14} aria-hidden="true" />Connect</button>
+                  <button type="button" class="btn btn-icon !min-h-10 !w-10 !px-0 {starred ? 'border-accent' : ''}" disabled={busy || !!block} aria-pressed={!!starred} data-testid="star"
                     aria-label={starred ? 'Already a favorite' : 'Save the target as a favorite'} title={block || 'Save the target as a favorite'} onclick={openStar}>
-                    <Star size={18} class={starred ? 'fill-accent text-accent' : 'text-muted'} aria-hidden="true" /></button>
+                    <Star size={16} class={starred ? 'fill-accent text-accent' : 'text-muted'} aria-hidden="true" /></button>
                 </div>
                 {#if kind === 'hosts' && hostLists[sel] && !hostLists[sel].items.length}
                   <p class="text-xs text-warn" role="status" data-testid="hosts-empty">{emptyListNote(sel, sel.toUpperCase())}{#if admin}{' '}<a class="underline" href="#/settings/station/hostlists">Open it</a>{/if}</p>
