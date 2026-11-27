@@ -303,7 +303,7 @@
                 </div>
               {/if}
               <div class="flex min-w-0 max-w-full items-center gap-1.5 rounded border border-line bg-surface-2 px-3 py-1.5 text-sm {localTx ? 'talk-live talk-local' : talker ? 'talk-live' : ''} {sel === 'echotest' ? '' : 'ml-auto'}" aria-live="polite" data-testid="mode-now-calling" data-live={localTx ? 'local' : talker ? 'remote' : undefined}>
-                <span class="shrink-0 whitespace-nowrap text-[11px] uppercase tracking-wide text-muted">Now calling</span>
+                <span class="sr-only">Now calling</span>
                 <Mic size={14} class="shrink-0 {localTx ? 'talk-mic text-accent' : talker ? 'talk-mic text-danger' : 'text-muted'}" aria-hidden="true" />
                 {#if localTx}<span class="min-w-0 truncate" data-testid="mode-local-tx"><b>Local station</b> · sending to {modeTitle(active, app.modes)}</span>
                 {:else if talker}<span class="min-w-0 truncate" data-testid="mode-talker"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name}{' · '}{talker.name}{/if}{#if talker.place}{' · '}<span class="text-muted">{talker.place}</span>{/if}</span>
