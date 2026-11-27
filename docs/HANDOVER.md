@@ -18,24 +18,24 @@ All-in-one multi-mode radio node for Raspberry Pi and mini PCs (Debian 12 or 13 
 1. Create the public repository `w1jar/nodespot` (empty) and push the source to `main`.
 2. Add the repository secret `APT_SIGNING_KEY` (Settings > Secrets and variables > Actions): the armored private GPG key that signs the apt repository (uid "nodespot apt repository", RSA 4096, no passphrase). The key was generated fresh for nodespot (it is not the aslcp key); the public key is published as `nodespot-archive-keyring.gpg` on the Pages site. GitHub secrets cannot be read back; the maintainer keeps a copy of the key.
 3. Settings > Actions > General > Workflow permissions: the workflows request `contents: write` themselves, but "Read and write permissions" must not be blocked by an organization policy.
-4. Push the first tag `v0.0.1`. The Release workflow creates the orphan `gh-pages` branch on this first run (and the pre-release).
+4. Push the first tag `v1.0.0`. The Release workflow creates the orphan `gh-pages` branch on this first run (and the pre-release).
 5. After that first release: Settings > Pages > Build and deployment > Source "Deploy from a branch", branch `gh-pages`, folder `/ (root)`. Then check https://w1jar.github.io/nodespot/ and `install.sh`. (Until the branch exists it cannot be selected.)
 
 ## Releasing
 
-Versions are plain `X.Y.Z`; the first release is 0.0.1. Every tag is first a beta; a release is a separate **promote** step. A repository without tags builds `0.0.0+dev.N.g<sha>` packages (N = commits on HEAD), which sort below 0.0.1.
+Versions are plain `X.Y.Z`; the first release is 1.0.0. Every tag is first a beta; a release is a separate **promote** step. A repository without tags builds `0.0.0+dev.N.g<sha>` packages (N = commits on HEAD), which sort below 1.0.0.
 
 1. Add a `## [X.Y.Z]` section to `CHANGELOG.md` on the branch being released (the release notes come from it), push to `main`, wait for CI.
 2. The maintainer pushes the tag `vX.Y.Z` (or creates it on https://github.com/w1jar/nodespot/releases/new, target `main`, "pre-release" ticked). Tag pushes from development sessions are blocked; do not work around that (the maintainer chose to keep the final say). Only tags of the form `vX.Y.Z` trigger the build.
 3. `.github/workflows/release.yml` (taken from the tagged commit) tests and builds the arm64 and amd64 debs, then `packaging/publish-apt.sh` puts them in `pool/beta`, writes `latest-beta.json`, signs (secret `APT_SIGNING_KEY`) and pushes to the `gh-pages` branch of this repository (built-in token); the debs are attached to a GitHub pre-release. Suite `beta` indexes all of `pool/`, suite `stable` only `pool/main`. `install.sh` is refreshed only when the published version is the newest in the pool. armhf is no longer built; the armhf debs published earlier stay in the pool and stay indexed (frozen: never pruned, nothing added). The newest 5 builds per architecture are kept in each pool directory (the version just added is never pruned).
-4. After testing on a node (Updates > Beta), the maintainer runs the **Promote** workflow (Actions > Promote > Run workflow, input `version`, e.g. `0.0.1`, no leading v). It moves exactly those debs from `pool/beta` to `pool/main` (no rebuild), regenerates and signs both suites, updates `latest.json`, and marks the GitHub release as a full release (and "latest" if it is the newest stable version). It refuses a version that is not in the beta suite and is safe to run twice. If the release has deb assets they must be identical to the packages in the apt repo.
+4. After testing on a node (Updates > Beta), the maintainer runs the **Promote** workflow (Actions > Promote > Run workflow, input `version`, e.g. `1.0.0`, no leading v). It moves exactly those debs from `pool/beta` to `pool/main` (no rebuild), regenerates and signs both suites, updates `latest.json`, and marks the GitHub release as a full release (and "latest" if it is the newest stable version). It refuses a version that is not in the beta suite and is safe to run twice. If the release has deb assets they must be identical to the packages in the apt repo.
 5. Nodes update from the Updates tab or `apt upgrade`; the channel (Release/Beta on the Updates tab) is the suite word in `/etc/apt/sources.list.d/nodespot.list`, switched by the helper ops `update-channel-stable|beta`.
 6. To delete unwanted beta packages: the **Remove from beta** workflow (`.github/workflows/apt-remove.yml`; inputs `glob`, `keep_version`, `apply`; dry run unless `apply` is ticked; it only touches the beta pool and refuses if `keep_version` would be gone). It runs `publish-apt.sh --remove`.
 7. To delete old GitHub releases (for example old pre-releases whose tags are already gone): the **Delete releases** workflow (`.github/workflows/release-delete.yml`; inputs `glob`, `delete_tags`, `apply`; dry run unless `apply` is ticked). It deletes matching pre-releases by release id (never full releases); with `delete_tags` also the matching git tags, except a full release's tag. It does not touch the apt repository.
 
 ## Current state
 
-- No release has been tagged yet; the first one is 0.0.1 (the CHANGELOG section `## [0.0.1]` holds its notes). Everything is untested on hardware until the maintainer installs a beta build on a node.
+- No release has been tagged yet; the first one is 1.0.0 (the CHANGELOG section `## [1.0.0]` holds its notes). Everything is untested on hardware until the maintainer installs a beta build on a node.
 
 ## Working agreements
 
