@@ -57,7 +57,7 @@
     <h2 class="text-base font-semibold">Channel</h2>
     <form class="space-y-3" onsubmit={save}>
       {#if sa818}
-        <StationFields bind:st radio idToggle={false} idPrefix="rt" />
+        <StationFields bind:st radio callsign={false} idToggle={false} idPrefix="rt" />
         <div class="grid gap-3 sm:grid-cols-2">
           <div>
             <label class="label" for="rt-sa-volume">Volume (1 to 8)</label>

@@ -9,6 +9,7 @@ Release notes are taken from the section of the tag being released
 - Modes page and Dashboard: the talker line was missing the spaces around "·" between the callsign, name and place.
 - Settings > Station > Radio: the "Program the SA818" button was hidden unless a serial port had been typed in, so on a normal install (port found automatically) the module could not be programmed from the page. It now shows whenever the interface has an SA818.
 - The CTCSS (tone) input's "None" option said "squelch is not read"; it now says "None (no tone input)".
+- Settings > Station showed the callsign, frequency, tone, squelch and narrow fields a second time next to the Radio page's Channel card, and "Identify the station" a second time next to Timing and ID. The Station card now has the callsign and the DMR and NXDN IDs only; the channel is on the Radio page's Channel card (without the callsign) and the ID switch is in Timing and ID. The first-run setup page is unchanged.
 
 ### Changed
 - All of the SA818's values are in the Channel card: frequency, tone and squelch as before, plus volume (1 to 8, default 8), tail tone (leave as is, open or closed) and the three filters, which moved there from Timing and ID > Advanced. The card shows what the module was last programmed with, or "Unknown until programmed". Saving reprograms the module when any of these values changed, and so does a restart, not only when the channel changed.
