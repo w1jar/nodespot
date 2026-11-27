@@ -6,7 +6,7 @@ Section: net
 Maintainer: nodespot <noreply@users.noreply.github.com>
 Installed-Size: 28735
 Depends: systemd, adduser, git
-Filename: pool/beta/a/nodespot/nodespot_1.0.0_arm64.deb
+Filename: pool/main/a/nodespot/nodespot_1.0.0_arm64.deb
 Size: 9003522
 MD5sum: 088b8d7bc3b362afcbcf7b09007f9044
 SHA1: 50bcb397b65e636ce5c857b8b63a14fac7ae811f
