@@ -233,6 +233,20 @@ func (c *Client) RadioTune(ctx context.Context, rx, tx *float64, boost *bool) (r
 	return out, err
 }
 
+// AutosetRx starts the receive auto-set, or cancels it.
+func (c *Client) AutosetRx(ctx context.Context, cancel bool) (AutosetStatus, error) {
+	var out AutosetStatus
+	err := c.Call(ctx, OpAutosetRx, map[string]any{"cancel": cancel}, &out)
+	return out, err
+}
+
+// AutosetStatus returns the state of the receive auto-set.
+func (c *Client) AutosetStatus(ctx context.Context) (AutosetStatus, error) {
+	var out AutosetStatus
+	err := c.Call(ctx, OpAutosetStat, nil, &out)
+	return out, err
+}
+
 // RadioInfo describes the radio interface: the preset, the pins, the
 // detected chip and the presets to choose from.
 func (c *Client) RadioInfo(ctx context.Context) (RadioDetail, error) {

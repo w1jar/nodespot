@@ -51,6 +51,13 @@ type Mixer interface {
 	Close() error
 }
 
+// StepMixer is implemented by a [Mixer] that can say where its controls sit
+// on their hardware steps and what each step is in dB (the alsa mixer does).
+type StepMixer interface {
+	CaptureStep() (alsa.VolumeStep, error)
+	PlaybackStep() (alsa.VolumeStep, error)
+}
+
 // BoostMixer is implemented by a [Mixer] whose chip may have a microphone
 // boost control (the alsa mixer does).
 type BoostMixer interface {
@@ -246,6 +253,14 @@ func (c *core) Levels() Levels {
 		}
 		if v, err := c.p.Mixer.PlaybackVolume(); err == nil {
 			l.PlaybackVolume = v
+		}
+	}
+	if sm, ok := c.p.Mixer.(StepMixer); ok {
+		if v, err := sm.CaptureStep(); err == nil {
+			l.CaptureSteps, l.CaptureStep, l.CaptureDb, l.CaptureDbs = v.Steps, v.Step, v.Db, v.Dbs
+		}
+		if v, err := sm.PlaybackStep(); err == nil {
+			l.PlaybackSteps, l.PlaybackStep, l.PlaybackDb = v.Steps, v.Step, v.Db
 		}
 	}
 	if b, ok := c.p.Mixer.(BoostMixer); ok && b.BoostAvailable() {

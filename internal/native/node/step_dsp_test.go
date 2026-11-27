@@ -193,3 +193,47 @@ func TestTxOffDelayExtendsHang(t *testing.T) {
 		t.Fatal("PTT still keyed after hang plus the transmit-off delay")
 	}
 }
+
+// A transmission summary is published when the carrier drops, with the AGC
+// pinned at its maximum for quiet input, and it is kept through a kerchunk.
+func TestLastRxSummary(t *testing.T) {
+	cfg := quietConfig()
+	cfg.Station.Advanced.RadioAGC = bp(true)
+	g := newRig(t, cfg)
+	g.sel(mode.BM, nil)
+	if g.e.Status().Radio.LastRx != nil {
+		t.Fatal("a summary before any transmission")
+	}
+	talk := func(frames int, amp float64) {
+		g.r.SetCarrier(true)
+		for i := 0; i < frames; i++ {
+			g.r.Inject(sineFrame(500, amp, i))
+			g.step(1)
+		}
+		g.r.SetCarrier(false)
+		g.step(3)
+	}
+	talk(150, 300) // 3 s at about -43 dBFS RMS
+	sum := g.e.Status().Radio.LastRx
+	if sum == nil {
+		t.Fatal("no summary after a transmission")
+	}
+	if !sum.AGCAtMax || sum.AGCGainDb < 15 || sum.Clipped != 0 || sum.DurationMs < 2500 {
+		t.Errorf("summary %+v", *sum)
+	}
+	if sum.PeakDb > -38 || sum.PeakDb < -42 {
+		t.Errorf("peak %.1f", sum.PeakDb)
+	}
+	if in := g.e.InputLevel().LastRx; in == nil || *in != *sum {
+		t.Errorf("input level lastRx %+v", in)
+	}
+	first := *sum
+	talk(10, 8000) // a kerchunk keeps the previous summary
+	if got := g.e.Status().Radio.LastRx; got == nil || *got != first {
+		t.Errorf("kerchunk replaced the summary: %+v", got)
+	}
+	talk(100, 32767) // loud: clipped
+	if got := g.e.Status().Radio.LastRx; got == nil || got.Clipped == 0 || got.AGCAtMax {
+		t.Errorf("loud summary %+v", got)
+	}
+}

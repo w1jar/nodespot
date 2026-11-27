@@ -20,6 +20,20 @@ type Levels struct {
 	// 0 to 1. They are -1 when the chip has no such control.
 	CaptureVolume  float64
 	PlaybackVolume float64
+	// CaptureSteps and PlaybackSteps are the number of hardware steps of
+	// each control above its lowest, so it has Steps+1 positions; 0 when the
+	// chip has no such control. CaptureStep and PlaybackStep are the
+	// position, 0..Steps, and CaptureDb and PlaybackDb the gain there in dB
+	// (nil when the control has no dB information). The volumes above are
+	// Step/Steps, so a slider on the steps never moves by itself.
+	CaptureSteps, CaptureStep   int
+	CaptureDb                   *float64
+	PlaybackSteps, PlaybackStep int
+	PlaybackDb                  *float64
+	// CaptureDbs is the gain of every capture step (NaN where unknown),
+	// nil without dB information. The node uses it to pick a step; it is
+	// not part of the API.
+	CaptureDbs []float64 `json:"-"`
 	// BoostAvailable says the sound chip has a microphone boost control, and
 	// Boost whether it is on.
 	BoostAvailable, Boost bool

@@ -197,6 +197,9 @@ var (
 	ioctlElemInfo  = ioc(iocRead|iocWrite, 'U', 0x11, unsafe.Sizeof(ctlElemInfo{}))
 	ioctlElemRead  = ioc(iocRead|iocWrite, 'U', 0x12, unsafe.Sizeof(ctlElemValue{}))
 	ioctlElemWrite = ioc(iocRead|iocWrite, 'U', 0x13, unsafe.Sizeof(ctlElemValue{}))
+	// ioctlTLVRead is SNDRV_CTL_IOCTL_TLV_READ: struct snd_ctl_tlv, a header
+	// of numid and length followed by the data.
+	ioctlTLVRead = ioc(iocRead|iocWrite, 'U', 0x1a, tlvHeaderSize)
 )
 
 // anyParams returns parameters that accept everything, the equivalent of
@@ -241,3 +244,10 @@ func (p *hwParams) get(param int) (lo, hi uint32) {
 	iv := p.Intervals[param-firstInterval]
 	return iv.Min, iv.Max
 }
+
+// Control access bit and TLV buffer sizes.
+const (
+	accessTLVRead = 1 << 28 // SNDRV_CTL_ELEM_ACCESS_TLV_READ
+	tlvHeaderSize = 8
+	tlvMaxBytes   = 512
+)

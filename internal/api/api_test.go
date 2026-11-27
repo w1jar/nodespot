@@ -1403,3 +1403,26 @@ func TestRadioTestTone(t *testing.T) {
 		t.Fatalf("while receiving: %d %+v", c, out)
 	}
 }
+
+func TestRadioAutoset(t *testing.T) {
+	e := newEnv(t, opts{})
+	var st struct{ State, Error string }
+	if c := e.do("admin", "GET", "/api/radio/autoset", nil, &st); c != 200 || st.State != "idle" {
+		t.Fatalf("idle: %d %+v", c, st)
+	}
+	// A sound chip with no capture steps: 409 with the node's reason.
+	var out struct{ Code, Error string }
+	if c := e.do("admin", "POST", "/api/radio/autoset", nil, &out); c != 409 || out.Code != "node_refused" || !strings.Contains(out.Error, "receive level") {
+		t.Fatalf("no steps: %d %+v", c, out)
+	}
+	e.node.Radio.SetCaptureSteps([]float64{0, 1, 2, 3, 4})
+	if c := e.do("admin", "POST", "/api/radio/autoset", nil, &st); c != 200 || st.State != "waiting" {
+		t.Fatalf("start: %d %+v", c, st)
+	}
+	if c := e.do("admin", "POST", "/api/radio/autoset", nil, &out); c != 409 {
+		t.Fatalf("second start: %d", c)
+	}
+	if c := e.do("admin", "DELETE", "/api/radio/autoset", nil, &st); c != 200 || st.State != "idle" {
+		t.Fatalf("cancel: %d %+v", c, st)
+	}
+}

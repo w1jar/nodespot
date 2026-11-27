@@ -56,11 +56,13 @@ const (
 	OpInputLevel  = "input_level"  // -> InputLevel
 	OpRadioTune   = "radio_tune"   // {rxVolume?, txVolume?, rxBoost?} -> radio.Levels
 	OpRadioProg   = "radio_program"
-	OpRadioInfo   = "radio_info" // -> RadioDetail
-	OpTestTone    = "test_tone"  // {seconds?, stop?} -> Status (seconds 0: 5, at most 10)
-	OpConfig      = "config"     // -> the station settings (no mode passwords)
-	OpReload      = "reload"     // read the config file again
-	OpSubscribe   = "subscribe"  // the connection then streams Event lines
+	OpRadioInfo   = "radio_info"     // -> RadioDetail
+	OpTestTone    = "test_tone"      // {seconds?, stop?} -> Status (seconds 0: 5, at most 10)
+	OpAutosetRx   = "autoset_rx"     // {cancel?} -> AutosetStatus (starts, or cancels, the receive auto-set)
+	OpAutosetStat = "autoset_status" // -> AutosetStatus
+	OpConfig      = "config"         // -> the station settings (no mode passwords)
+	OpReload      = "reload"         // read the config file again
+	OpSubscribe   = "subscribe"      // the connection then streams Event lines
 )
 
 // Server serves the control API on a Unix socket.
@@ -318,6 +320,19 @@ func (s *Server) do(ctx context.Context, req Request) (any, error) {
 		return e.Levels(), nil
 	case OpRadioInfo:
 		return e.RadioInfo(), nil
+	case OpAutosetStat:
+		return e.AutosetStatus(), nil
+	case OpAutosetRx:
+		var a struct {
+			Cancel bool `json:"cancel"`
+		}
+		if err := args(req.Args, &a); err != nil {
+			return nil, err
+		}
+		if a.Cancel {
+			return e.AutosetCancel(), nil
+		}
+		return e.AutosetRx()
 	case OpTestTone:
 		var a struct {
 			Seconds float64 `json:"seconds"`

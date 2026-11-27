@@ -99,6 +99,12 @@ type simplex struct {
 	toneLimit time.Time
 
 	modeAGC, radioAGC *audio.AGC
+	// rxAcc sums up the local transmission in progress; lastRx is the
+	// summary of the last one long enough to judge, kept until the next.
+	rxAcc  *audio.RxAccum
+	lastRx *audio.RxSummary
+	// auto is the receive auto-set in progress (see autoset.go).
+	auto *autoRun
 	// Station audio conditioning: PL high-pass and de-emphasis on the way
 	// from the radio, pre-emphasis on the way to it.
 	rxPL     *audio.HighPass
@@ -153,6 +159,7 @@ func (e *Engine) Step(now time.Time) {
 		e.retryUnkey(now)
 	}
 
+	e.autosetTick(now)
 	// Radio side: a local station transmitting into our receiver. While
 	// we transmit the receiver hears nothing of use (simplex).
 	carrier := e.o.Radio.Carrier()
@@ -330,6 +337,7 @@ func (e *Engine) stepRF(now time.Time, m mode.Mode, rfActive bool) {
 	if s.rfStart.IsZero() {
 		s.rfStart = now
 		s.radioAGC.Reset()
+		s.rxAcc.Reset()
 		s.rxPL.Reset()
 		s.rxDeemph.Reset()
 	}
@@ -354,9 +362,9 @@ func (e *Engine) stepRF(now time.Time, m mode.Mode, rfActive bool) {
 		}
 		s.rx.Add(&f)
 		s.rxAt = now
-		if m == nil {
-			continue
-		}
+		e.autosetFrame(&f)
+		// The audio is conditioned the same way with no mode to send it
+		// to, so the tuning page can measure it.
 		if p.plFilter {
 			s.rxPL.Process(&f)
 		}
@@ -364,8 +372,13 @@ func (e *Engine) stepRF(now time.Time, m mode.Mode, rfActive bool) {
 			s.rxDeemph.Process(&f)
 		}
 		audio.ApplyGain(&f, p.rxGainDb)
+		pre := f
 		if p.radioAGC {
 			s.radioAGC.Process(&f, p.rxAGC)
+		}
+		s.rxAcc.Add(&pre, &f, s.radioAGC.GainDb(), p.rxAGC.MaxGainDb, p.radioAGC)
+		if m == nil {
+			continue
 		}
 		m.Send(f)
 		s.rfSentTo = m
@@ -389,6 +402,11 @@ func (e *Engine) drainRX(c <-chan audio.Frame, now time.Time) {
 // the end. The radio is not keyed for it.
 func (e *Engine) endRF(now time.Time, m mode.Mode) {
 	s := &e.sx
+	e.autosetRFEnd()
+	if sum, ok := s.rxAcc.Summary(now); ok {
+		s.lastRx = &sum
+	}
+	s.rxAcc.Reset()
 	sent := s.rfSentTo
 	s.rfStart, s.rfSentTo = time.Time{}, nil
 	if sent == nil {

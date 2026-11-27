@@ -1,6 +1,7 @@
 package radio
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,7 +23,8 @@ type Fake struct {
 	played  []Frame
 	pttLog  []bool
 	vols    Volumes
-	boostOK bool // the fake chip has a boost control
+	boostOK bool      // the fake chip has a boost control
+	capDbs  []float64 // the fake capture control's step gains, nil: no steps
 	boost   bool
 	closed  bool
 	pttErr  error
@@ -133,12 +135,25 @@ func (f *Fake) Levels() Levels {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := time.Now()
-	return Levels{
+	l := Levels{
 		CaptureVolume: f.vols.Capture, PlaybackVolume: f.vols.Playback,
 		BoostAvailable: f.boostOK, Boost: f.boostOK && f.boost,
 		Rx: f.rx.Snapshot(now), Tx: f.tx.Snapshot(now), DroppedRx: f.dropped.Load(),
 	}
+	if n := len(f.capDbs) - 1; n > 0 {
+		l.CaptureSteps = n
+		l.CaptureStep = int(math.Round(f.vols.Capture * float64(n)))
+		l.CaptureDbs = f.capDbs
+		if db := f.capDbs[l.CaptureStep]; !math.IsNaN(db) {
+			l.CaptureDb = &db
+		}
+	}
+	return l
 }
+
+// SetCaptureSteps gives the fake capture control the hardware steps with
+// these gains in dB (one per step, so len-1 steps); nil removes them.
+func (f *Fake) SetCaptureSteps(dbs []float64) { f.mu.Lock(); f.capDbs = dbs; f.mu.Unlock() }
 
 // SetVolumes implements Radio.
 func (f *Fake) SetVolumes(capture, playback float64) error {

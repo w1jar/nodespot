@@ -1,6 +1,6 @@
 import type {
   About, BackupInfo, BackupSelection, Favorite, HostList, HostListsStatus, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
-  InputLevel, NowCalling, PublicInfo, PublicSettings, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
+  AutosetStatus, InputLevel, NowCalling, PublicInfo, PublicSettings, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
   Settings, Station, SysLogs, SysNetwork, SysServices, SystemInfo, Target, TerminalSessionInfo, TerminalStatus, TerminalTicket, UpdateInfo, User,
   UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo,
 } from './types';
@@ -141,6 +141,9 @@ export const api = {
   heard: (limit = 50) => req<Heard[]>('GET', `/heard?limit=${limit}`),
   radio: () => req<RadioLevels>('GET', '/radio'),
   setRadio: (p: { rxVolume?: number; txVolume?: number; rxBoost?: boolean }) => req<RadioLevels>('PUT', '/radio', p),
+  radioAutoset: () => req<AutosetStatus>('GET', '/radio/autoset'),
+  startAutoset: () => req<AutosetStatus>('POST', '/radio/autoset'),
+  cancelAutoset: () => req<AutosetStatus>('DELETE', '/radio/autoset'),
   radioInput: () => req<InputLevel>('GET', '/radio/input'),
   radioInfo: () => req<RadioInfo>('GET', '/radio/info'),
   radioProgram: () => req<NodeJSON>('POST', '/radio/program'),

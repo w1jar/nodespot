@@ -49,7 +49,29 @@ export interface EchoReport {
   at: string; frames: number; durationMs: number; peakDb: number; rmsDb: number; voicedFrames: number; clipped: number; warnings?: string[];
 }
 /** The live radio RX input level (GET /api/radio/input; also radio.level of the node status). */
-export interface InputLevel { peakDb: number; rmsDb: number; cos: boolean }
+export interface InputLevel { peakDb: number; rmsDb: number; cos: boolean; lastRx?: RxSummary }
+/** The level summary of the last local transmission (at least half a second of speech), as the node measured it before the AGC. */
+export interface RxSummary {
+  at: string; durationMs: number;
+  /** Loudest input sample, dBFS. */
+  peakDb: number;
+  /** Input speech RMS (gate open), dBFS. */
+  speechDb: number;
+  /** Mean AGC gain over the speech, dB (0 with the AGC off). */
+  agcGainDb: number;
+  /** Speech RMS after the AGC, dBFS. */
+  outDb: number;
+  /** The AGC sat at its maximum gain for most of the speech. */
+  agcAtMax: boolean;
+  /** Input samples at full scale. */
+  clipped: number;
+}
+/** GET/POST/DELETE /api/radio/autoset: the receive auto-set. */
+export interface AutosetStatus {
+  state: 'idle' | 'waiting' | 'measuring' | 'done' | 'failed';
+  error?: string;
+  result?: { step: number; steps: number; db: number | null; speechDb: number; peakDb: number; estimated?: boolean };
+}
 export interface NodeJSON {
   callsign?: string; started: string;
   radio: {
@@ -60,6 +82,8 @@ export interface NodeJSON {
     /** The preset in use and the interface found (chip name, USB id). */
     preset?: string; chip?: string; usbId?: string; product?: string; detected?: boolean; sa818?: boolean;
     level?: InputLevel;
+    /** The summary of the last local transmission, kept until the next. */
+    lastRx?: RxSummary;
     /** True while the test tone (POST /api/radio/tone) is keyed. */
     testTone?: boolean;
   };
@@ -172,7 +196,9 @@ export interface RadioInfo {
 export interface Reading { RMSDb: number; PeakDb: number; Active: boolean; Clipped: number; Frames: number }
 /** GET and PUT /api/radio: the sound chip's levels. -1 means the chip has no such control. */
 export interface RadioLevels {
-  CaptureVolume: number; PlaybackVolume: number; BoostAvailable?: boolean; Boost?: boolean; Rx: Reading; Tx: Reading; DroppedRx: number; DroppedTx: number; Xruns: number;
+  CaptureVolume: number; PlaybackVolume: number;
+  /** The sound chip's hardware steps (0 or absent: no such control): a control has Steps+1 positions, 0..Steps, and the volume is Step/Steps. Db is the gain at the step, null without dB information. */
+  CaptureSteps?: number; CaptureStep?: number; CaptureDb?: number | null; PlaybackSteps?: number; PlaybackStep?: number; PlaybackDb?: number | null; BoostAvailable?: boolean; Boost?: boolean; Rx: Reading; Tx: Reading; DroppedRx: number; DroppedTx: number; Xruns: number;
 }
 
 /** One row of GET /api/heard: who was heard on which mode. */

@@ -130,12 +130,42 @@ const inputLevel = () => {
   // The receive level and gain move the meter, as on a real radio.
   const gain = 20 * Math.log10(Math.max(0.05, Number(station.radio.rxVolume ?? 0.6)) / 0.6) + Number(station.advanced.rxGainDb ?? 0);
   const peakDb = on ? Math.min(0, -14 + gain + 4 * Math.sin(t * 2.3) + Math.random() * 2) : -90;
-  return { peakDb, rmsDb: on ? peakDb - 9 : -90, cos };
+  return { peakDb, rmsDb: on ? peakDb - 9 : -90, cos, ...(radioPresent ? { lastRx: lastRx() } : {}) };
+};
+// The mock sound chip: capture has 36 positions with a 1 dB scale, playback 152 positions in 0.5 dB steps (like a CM108's controls).
+const CAP_STEPS = 35, PLAY_STEPS = 151;
+const capStep = () => Math.round(Math.min(1, Math.max(0, Number(station.radio.rxVolume ?? 0.6))) * CAP_STEPS);
+const capDb = (k: number) => k - 12;
+const playStep = () => Math.round(Math.min(1, Math.max(0, Number(station.radio.txVolume ?? 0.55))) * PLAY_STEPS);
+const playDb = (k: number) => (k - PLAY_STEPS) * 0.5;
+// The last transmission as the node would summarize it: the speech level follows the capture step (and the static gain), the AGC
+// adds what it can toward -22 dBFS up to its maximum, and the peak clips near the top.
+const lastRx = () => {
+  const agcOn = station.advanced.radioAgc !== false, max = Number(station.advanced.agcMaxDb ?? 18);
+  const speechDb = -52 + capStep() + Number(station.advanced.rxGainDb ?? 0);
+  const peakDb = Math.min(0, speechDb + 16);
+  const gain = agcOn ? Math.max(-20, Math.min(max, -22 - speechDb)) : 0;
+  return { at: iso(now() - 12e3), durationMs: 4200, peakDb, speechDb, agcGainDb: gain, outDb: Math.min(speechDb + gain, -3), agcAtMax: agcOn && gain >= max - 0.5, clipped: peakDb >= -1 ? 37 : 0 };
+};
+// Receive auto-set: waits 3 s for a transmission, measures 3 s, then picks the lowest step whose speech reaches the AGC's floor.
+let auto: { t0: number; applied?: boolean; result?: Record<string, unknown> } | null = null;
+const autoStatus = () => {
+  if (!auto) return { state: 'idle' };
+  if (process.env.MOCK_AUTOSET_FAIL === '1') return now() - auto.t0 < 3e3 ? { state: 'waiting' } : { state: 'failed', error: 'No transmission heard in 15 seconds. Key up the radio and talk, then try again.' };
+  const dt = now() - auto.t0;
+  if (dt < 3e3) return { state: 'waiting' };
+  if (dt < 6e3) return { state: 'measuring' };
+  if (!auto.applied) {
+    const max = Number(station.advanced.agcMaxDb ?? 18), floor = -22 - max + 6, step = Math.min(CAP_STEPS, Math.max(0, Math.ceil(floor + 52)));
+    station.radio.rxVolume = step / CAP_STEPS;
+    auto.applied = true; auto.result = { step, steps: CAP_STEPS, db: capDb(step), speechDb: -52 + step, peakDb: -36 + step };
+  }
+  return { state: 'done', result: auto.result };
 };
 const nodeJSON = () => ({
   callsign: station.callsign || undefined, started,
   echoTest: { at: iso(now() - 30e3), frames: 160, durationMs: 3200, peakDb: -9.4, rmsDb: -21.8, voicedFrames: 142, clipped: 0 },
-  radio: { present: radioPresent && resolved().audio, level: inputLevel(), ptt, cos, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818, ...(testTone ? { testTone: true } : {}) },
+  radio: { present: radioPresent && resolved().audio, level: (({ lastRx: _l, ...l }) => l)(inputLevel() as any), ...(radioPresent ? { lastRx: lastRx() } : {}), ptt, cos, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818, ...(testTone ? { testTone: true } : {}) },
   active: active || undefined, since: active ? since : undefined,
   mode: active ? modeStatus(active) : undefined,
   id: { enabled: station.id.enabled, owed: false, last: iso(now() - 240e3) },
@@ -199,7 +229,7 @@ function pubSnapshot() {
 // ---- Radio levels (the sound chip) and the caller lookup lists.
 const level = (on: boolean) => ({ RMSDb: on ? -24 + Math.random() * 6 : -60, PeakDb: on ? -12 + Math.random() * 4 : -55, Active: on, Clipped: 0, Frames: 480 });
 // The mock's sound chip has a microphone boost control.
-const radioLevels = () => ({ CaptureVolume: station.radio.rxVolume, PlaybackVolume: station.radio.txVolume, BoostAvailable: true, Boost: !!station.radio.rxBoost, Rx: level(cos), Tx: level(ptt), DroppedRx: 0, DroppedTx: 0, Xruns: 0 });
+const radioLevels = () => ({ CaptureVolume: station.radio.rxVolume, PlaybackVolume: station.radio.txVolume, CaptureSteps: CAP_STEPS, CaptureStep: capStep(), CaptureDb: capDb(capStep()), PlaybackSteps: PLAY_STEPS, PlaybackStep: playStep(), PlaybackDb: playDb(playStep()), BoostAvailable: true, Boost: !!station.radio.rxBoost, Rx: level(cos), Tx: level(ptt), DroppedRx: 0, DroppedTx: 0, Xruns: 0 });
 let userList = { enabled: true, entries: 183204, updated: iso(now() - 86400e3), checked: iso(now() - 3600e3), size: 9.4e6, busy: false };
 let hamdb = { enabled: false, cached: 0, today: 0, dailyMax: 500 };
 
@@ -428,9 +458,19 @@ export function mockApi(): Plugin {
         if (p === '/heard' && m === 'GET') return json(res, 200, heardJSON().slice(0, +(url.searchParams.get('limit') ?? 50)));
         if (p === '/radio' && (m === 'GET' || m === 'PUT')) {
           if (m === 'PUT') { if (!isAdmin) return forbid(); for (const k of ['rxVolume', 'txVolume']) if (body[k] != null && !(typeof body[k] === 'number' && body[k] >= 0 && body[k] <= 1)) return err(res, 400, `${k} must be 0 to 1`, 'bad_request');
-            if (typeof body.rxVolume === 'number') station.radio.rxVolume = body.rxVolume; if (typeof body.txVolume === 'number') station.radio.txVolume = body.txVolume; if (typeof body.rxBoost === 'boolean') station.radio.rxBoost = body.rxBoost; }
+            if (typeof body.rxVolume === 'number') station.radio.rxVolume = Math.round(body.rxVolume * CAP_STEPS) / CAP_STEPS; if (typeof body.txVolume === 'number') station.radio.txVolume = Math.round(body.txVolume * PLAY_STEPS) / PLAY_STEPS; if (typeof body.rxBoost === 'boolean') station.radio.rxBoost = body.rxBoost; }
           if (!radioPresent) return err(res, 404, 'this node has no radio', 'no_radio');
           return json(res, 200, radioLevels());
+        }
+        if (p === '/radio/autoset' && (m === 'GET' || m === 'POST' || m === 'DELETE')) {
+          if (!isAdmin) return forbid();
+          if (!radioPresent) return err(res, 404, 'this node has no radio', 'no_radio');
+          if (m === 'POST') {
+            if (auto && ['waiting', 'measuring'].includes(autoStatus().state)) return err(res, 409, 'an auto-set is already running', 'node_refused');
+            auto = { t0: now() };
+          }
+          if (m === 'DELETE') auto = null;
+          return json(res, 200, autoStatus());
         }
         if (p === '/radio/input' && m === 'GET') {
           if (!isAdmin) return forbid();

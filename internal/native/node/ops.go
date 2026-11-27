@@ -59,6 +59,9 @@ type RadioStatus struct {
 	COS      bool   `json:"cos"`
 	// Level is the receive level over the last 100 ms (see InputLevel).
 	Level InputLevel `json:"level"`
+	// LastRx summarizes the last local transmission long enough to judge
+	// (at least half a second of speech); it stays until the next one.
+	LastRx *audio.RxSummary `json:"lastRx,omitempty"`
 	// RxActive: a local station is transmitting into the receiver and its
 	// audio is being sent to the active mode.
 	RxActive bool `json:"rxActive,omitempty"`
@@ -84,6 +87,10 @@ type InputLevel struct {
 	PeakDb float64 `json:"peakDb"`
 	RMSDb  float64 `json:"rmsDb"`
 	COS    bool    `json:"cos"`
+	// LastRx is the summary of the last local transmission, as in the
+	// status's radio.lastRx; only the live level endpoint carries it here,
+	// so the tuning page needs one poll.
+	LastRx *audio.RxSummary `json:"lastRx,omitempty"`
 }
 
 // IDStatus is the station ID.
@@ -103,7 +110,7 @@ func (e *Engine) Status() Status {
 		Started:  e.started,
 		Radio: RadioStatus{
 			Present: !e.o.RadioAbsent, PTT: e.sx.ptt, COS: e.sx.cos,
-			Level:  e.inputLevelLocked(),
+			Level: e.inputLevelLocked(), LastRx: e.sx.lastRx,
 			Preset: string(e.info.Interface.Preset), Chip: e.info.Chip, USBID: e.info.USBID,
 			Product: e.info.Product, Detected: e.info.Detected, SA818: e.info.Interface.SA818,
 			RxActive: e.sx.rfOn, NetDropped: e.sx.netDropped, RxLocked: e.sx.rfLocked, TxLocked: e.sx.txLocked, PTTStuck: e.sx.pttStuck,
@@ -567,7 +574,9 @@ const inputStale = 200 * time.Millisecond
 func (e *Engine) InputLevel() InputLevel {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.inputLevelLocked()
+	l := e.inputLevelLocked()
+	l.LastRx = e.sx.lastRx
+	return l
 }
 
 func (e *Engine) inputLevelLocked() InputLevel {

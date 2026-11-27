@@ -6,6 +6,8 @@ Release notes are taken from the section of the tag being released
 ## [0.0.1] - 2026-11-27
 
 ### Changed
+- Audio tuning, step 1: the instantaneous verdict and the live numbers are replaced by a live bar and a held "Last transmission" card with one plain sentence (Sounds good / Too quiet / Distorting) and a collapsed Details. The node now publishes `radio.lastRx` (also on `GET /api/radio/input`) per transmission, measured after the static gain and before the AGC; kerchunks under 0.5 s of speech do not replace it.
+- The radio level sliders move in the sound chip's own steps and show dB when the chip has a dB table. `rxVolume` and `txVolume` fractions snap to that step grid, so values read back exactly.
 - BrandMeister: with the node's `-debug` flag the log shows the login result, each subscription sent (session type and number), `tx start`/`tx end` and `rx start`/`rx end` of every call (session type, source, destination, packets) and, at most once a minute per type, server failure codes, reports, a close and packet types the client does not handle.
 - TGIF now requires the hotspot password, as BrandMeister does: without one the mode shows "Not set up" and cannot be made active. A stored password counts, so saving other fields never asks for it again.
 - Modes > settings: a saved password has a Clear button (with a confirm) that deletes only that password. `PUT /api/modes/{mode}` accepts `"clear": ["password"]` for it; unknown or non-password keys are refused with `409 node_refused`.
@@ -48,6 +50,8 @@ Release notes are taken from the section of the tag being released
 - AllStar: "peer hung up" and "rejected" errors now carry the far node's cause text and code, such as "peer hung up: Normal clearing (cause code 16)".
 
 ### Added
+- Auto-set for the receive level (`GET`/`POST`/`DELETE /api/radio/autoset`, admin): measures raw capture while you talk and sets the lowest capture step that reaches the AGC target without clipping, using the chip's dB per step (TLV, 1 dB per step when unknown). Plain failures for no carrier, too little speech and too quiet. Transmit has no Auto-set.
+- The radio levels report `captureSteps`, `captureStep`, `captureDb`, `playbackSteps`, `playbackStep` and `playbackDb`.
 - Test tone: Settings > Station > Audio, tuning step 2, "Send test tone" keys the transmitter with a 1 kHz tone for 5 seconds at the level network speech reaches the radio, with a Stop button. It waits for the key-up delay, is refused while the channel is busy, and gives way when anyone starts talking. New `POST /api/radio/tone` (`{seconds?}`, 1 to 10) and `DELETE /api/radio/tone` (admin); the node status has `radio.testTone` while it plays.
 - EchoLink link counters on the Modes card, like AllStar's: packets received and sent, plus late, dropped, bad and send errors when any occur (status `link`, `proto: "echolink"`).
 - EchoLink logging: `echolink: sending` and `echolink: sent N packets` for each transmission to the station, and with `nodespot-node -debug` a summary at the start and end of each talk spurt each way (sequence numbers and counts, never audio). A failed audio send is logged once per transmission.

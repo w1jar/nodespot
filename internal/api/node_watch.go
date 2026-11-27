@@ -30,6 +30,8 @@ type Node interface {
 	RadioLevels(ctx context.Context) (radio.Levels, error)
 	InputLevel(ctx context.Context) (node.InputLevel, error)
 	RadioTune(ctx context.Context, rx, tx *float64, boost *bool) (radio.Levels, error)
+	AutosetRx(ctx context.Context, cancel bool) (node.AutosetStatus, error)
+	AutosetStatus(ctx context.Context) (node.AutosetStatus, error)
 	RadioInfo(ctx context.Context) (node.RadioDetail, error)
 	RadioProgram(ctx context.Context) (node.Status, error)
 	TestTone(ctx context.Context, seconds float64, stop bool) (node.Status, error)

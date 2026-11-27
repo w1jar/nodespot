@@ -279,23 +279,122 @@ func (m *Mixer) Unmute() error {
 	return nil
 }
 
-// fractionToRaw maps 0..1 to the control's raw range, honoring its step.
+// stepSize is the raw distance between two hardware positions.
+func stepSize(ci ControlInfo) int64 { return max(ci.Step, 1) }
+
+// stepCount is the number of steps above the lowest position: the control
+// has stepCount+1 positions.
+func stepCount(ci ControlInfo) int {
+	if ci.Max <= ci.Min {
+		return 0
+	}
+	return int((ci.Max - ci.Min) / stepSize(ci))
+}
+
+// rawToStep is the position (0..stepCount) nearest to a raw value.
+func rawToStep(ci ControlInfo, v int64) int {
+	n := stepCount(ci)
+	k := int(math.Round(float64(v-ci.Min) / float64(stepSize(ci))))
+	return min(max(k, 0), n)
+}
+
+// stepToRaw is the raw value of position k.
+func stepToRaw(ci ControlInfo, k int) int64 {
+	return ci.Min + int64(min(max(k, 0), stepCount(ci)))*stepSize(ci)
+}
+
+// fractionToRaw maps 0..1 to the nearest of the control's hardware steps: a
+// fraction k/stepCount lands exactly on step k.
 func fractionToRaw(ci ControlInfo, f float64) int64 {
 	if math.IsNaN(f) {
 		f = 0
 	}
 	f = math.Min(math.Max(f, 0), 1)
-	raw := ci.Min + int64(math.Round(f*float64(ci.Max-ci.Min)))
-	if ci.Step > 1 {
-		raw = ci.Min + (raw-ci.Min)/ci.Step*ci.Step
-	}
-	return raw
+	return stepToRaw(ci, int(math.Round(f*float64(stepCount(ci)))))
 }
 
-// rawToFraction maps a raw value to 0..1.
+// rawToFraction maps a raw value to 0..1 along the hardware steps, so that
+// it is the inverse of fractionToRaw for every step.
 func rawToFraction(ci ControlInfo, v int64) float64 {
-	if ci.Max <= ci.Min {
+	n := stepCount(ci)
+	if n == 0 {
 		return 0
 	}
-	return float64(v-ci.Min) / float64(ci.Max-ci.Min)
+	return float64(rawToStep(ci, v)) / float64(n)
+}
+
+// tlvRead reads the dB information (TLV) of a control: its type, length and
+// data, or nil when the control has none.
+func (m *Mixer) tlvRead(info *ctlElemInfo) ([]byte, error) {
+	if info.Access&accessTLVRead == 0 {
+		return nil, nil
+	}
+	buf := make([]byte, tlvHeaderSize+tlvMaxBytes)
+	binary.LittleEndian.PutUint32(buf[0:], info.ID.Numid)
+	binary.LittleEndian.PutUint32(buf[4:], tlvMaxBytes)
+	if err := ioctl(m.fd, ioctlTLVRead, unsafe.Pointer(&buf[0])); err != nil {
+		return nil, fmt.Errorf("alsa: TLV_READ: %w", err)
+	}
+	b := buf[tlvHeaderSize:]
+	if len(b) < 8 {
+		return nil, nil
+	}
+	n := 8 + int(binary.LittleEndian.Uint32(b[4:]))
+	if n > len(b) {
+		return nil, nil
+	}
+	return b[:n], nil
+}
+
+// StepOf returns a volume control's hardware steps, position and, when the
+// control has dB information, the gain at that position.
+func (m *Mixer) StepOf(name string) (VolumeStep, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	info, err := m.info(name)
+	if err != nil {
+		return VolumeStep{}, err
+	}
+	ci, err := decodeInfo(name, info)
+	if err != nil {
+		return VolumeStep{}, err
+	}
+	val := &ctlElemValue{ID: info.ID}
+	if err := ioctl(m.fd, ioctlElemRead, unsafe.Pointer(val)); err != nil {
+		return VolumeStep{}, fmt.Errorf("alsa: ELEM_READ %q: %w", name, err)
+	}
+	var sum float64
+	for i := 0; i < ci.Count; i++ {
+		sum += float64(rawToStep(ci, int64(binary.LittleEndian.Uint64(val.Value[i*8:]))))
+	}
+	vs := VolumeStep{Steps: stepCount(ci), Step: int(math.Round(sum / float64(ci.Count)))}
+	if tlv, err := m.tlvRead(info); err == nil && tlv != nil {
+		vs.Dbs = make([]float64, vs.Steps+1)
+		known := false
+		for k := range vs.Dbs {
+			db, ok := tlvDb(tlv, ci.Min, ci.Max, stepToRaw(ci, k))
+			if !ok {
+				db = math.NaN()
+			}
+			vs.Dbs[k], known = db, known || ok
+		}
+		if !known {
+			vs.Dbs = nil
+		} else if db := vs.Dbs[vs.Step]; !math.IsNaN(db) {
+			vs.Db = &db
+		}
+	}
+	return vs, nil
+}
+
+// CaptureStep returns the microphone capture control's step and dB.
+func (m *Mixer) CaptureStep() (vs VolumeStep, err error) {
+	err = m.First(CaptureVolumeNames, func(n string) (err error) { vs, err = m.StepOf(n); return })
+	return
+}
+
+// PlaybackStep returns the speaker playback control's step and dB.
+func (m *Mixer) PlaybackStep() (vs VolumeStep, err error) {
+	err = m.First(PlaybackVolumeNames, func(n string) (err error) { vs, err = m.StepOf(n); return })
+	return
 }

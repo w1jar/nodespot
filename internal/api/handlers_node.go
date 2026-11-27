@@ -41,6 +41,9 @@ func (s *Server) nodeRoutes() {
 	m.HandleFunc("PUT /api/radio", s.authed(store.RoleAdmin, s.handleRadioPut))
 	m.HandleFunc("GET /api/radio/info", s.authed(store.RoleAdmin, s.handleRadioInfo))
 	m.HandleFunc("POST /api/radio/program", s.authed(store.RoleAdmin, s.handleRadioProgram))
+	m.HandleFunc("GET /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetGet))
+	m.HandleFunc("POST /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetStart))
+	m.HandleFunc("DELETE /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetCancel))
 	m.HandleFunc("POST /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestTone))
 	m.HandleFunc("DELETE /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestToneStop))
 	m.HandleFunc("GET /api/hostlists", s.authed(store.RoleOperator, s.handleHostLists))
@@ -502,6 +505,55 @@ func (s *Server) handleRadioProgram(w http.ResponseWriter, r *http.Request, u st
 	s.audit(u, "radio.program", nil)
 	s.adopt(st)
 	writeJSON(w, 200, s.nw.json())
+}
+
+// handleAutosetGet answers the state of the receive auto-set.
+func (s *Server) handleAutosetGet(w http.ResponseWriter, r *http.Request, _ store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.AutosetStatus(ctx)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, st)
+}
+
+// handleAutosetStart starts the receive auto-set and answers its state
+// ({state:"waiting"}); the page polls GET until it is done or failed. The
+// node refuses (409) with no radio, a sound chip without a receive level
+// control, or a run already going.
+func (s *Server) handleAutosetStart(w http.ResponseWriter, r *http.Request, u store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.AutosetRx(ctx, false)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	s.audit(u, "radio.autoset", nil)
+	writeJSON(w, 200, st)
+}
+
+// handleAutosetCancel stops a running receive auto-set (none is not an error).
+func (s *Server) handleAutosetCancel(w http.ResponseWriter, r *http.Request, _ store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.AutosetRx(ctx, true)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, st)
 }
 
 // handleTestTone keys the radio with the 1 kHz test tone {seconds?} (1 to

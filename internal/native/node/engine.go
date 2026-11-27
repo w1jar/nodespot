@@ -78,6 +78,7 @@ type Engine struct {
 	modes    map[string]*instance
 	buildErr map[string]string
 	tunes    map[string]Tune // what each mode reconnects to (see Tune)
+	autoStat AutosetStatus   // the last receive auto-set outcome
 	active   *instance
 	since    time.Time
 	info     radio.Info
@@ -134,6 +135,7 @@ func New(cfg *Config, o Options) (*Engine, error) {
 		e.tunes = t
 	}
 	e.sx.modeAGC, e.sx.radioAGC = audio.NewAGC(), audio.NewAGC()
+	e.sx.rxAcc = audio.NewRxAccum()
 	e.sx.rxPL, e.sx.rxDeemph, e.sx.txPre = audio.NewPLFilter(), audio.NewDeemphasisNode(), audio.NewPreemphasisNode()
 	e.ctx, e.stop = context.WithCancel(context.Background())
 	return e, nil
