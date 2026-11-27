@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The Now Calling strip, shared by the app and the public page: a full-width button under the header. Plain display props only.
+  // The Now Calling strip: a full-width button under the header. Plain display props only.
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Clock from '@lucide/svelte/icons/clock';
   let { mode, label, source = '', main = '', secs = '', idle = '', onclick }: {

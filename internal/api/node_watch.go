@@ -148,12 +148,10 @@ func linkedTo(st node.Status, m, target string) bool {
 	return target == "" || strings.EqualFold(st.Mode.Target.ID, target)
 }
 
-// broadcastNodeStatus sends the cached status as the SSE event "node" and
-// tells the public view.
+// broadcastNodeStatus sends the cached status as the SSE event "node".
 func (s *Server) broadcastNodeStatus() {
 	f := frame("node", s.nodeJSON())
-	s.hub.broadcast(sseMsg{priv: f, pub: f})
-	s.pub.Changed()
+	s.hub.broadcast(sseMsg{all: f})
 }
 
 // nodeChanged refreshes the cached status soon (after a command; the event
@@ -306,7 +304,7 @@ func (s *Server) nodeEvent(ctx context.Context, ev node.Event) {
 // "nodeevent" to logged-in clients.
 func (s *Server) broadcastNodeEvent(ev node.Event) {
 	f := frame("nodeevent", ev)
-	s.hub.broadcast(sseMsg{priv: f, pub: f})
+	s.hub.broadcast(sseMsg{all: f})
 }
 
 // SystemNode adapts a node client to system.New: the start time and the

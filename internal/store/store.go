@@ -77,7 +77,7 @@ var migrations = []string{
 		position INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE TABLE settings (k TEXT PRIMARY KEY, v TEXT NOT NULL);`,
-	// 2: recent activity (link and local-receiver keyups) for the public page.
+	// 2: recent activity (link and local-receiver keyups).
 	`CREATE TABLE activity (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		node TEXT NOT NULL,

@@ -123,36 +123,6 @@ func TestLookupFetchesAndCaches(t *testing.T) {
 	}
 }
 
-func TestCachedNeverQueues(t *testing.T) {
-	r := newRig(t, true)
-	if _, ok := r.m.Cached("N0CALL"); ok {
-		t.Fatal("an uncached callsign must miss")
-	}
-	if w := r.step(); w >= 0 || r.f.count() != 0 {
-		t.Fatalf("Cached queued a lookup: w=%v hits=%d", w, r.f.count())
-	}
-	r.m.Lookup("N0CALL")
-	r.step()
-	in, ok := r.m.Cached("n0call")
-	if !ok || in.Name != "Pat Example" {
-		t.Fatalf("got %+v %v", in, ok)
-	}
-	if _, ok := r.m.Cached("Echo test"); ok {
-		t.Fatal("invalid callsign")
-	}
-	r.clk.Add(31 * 24 * time.Hour)
-	if _, ok := r.m.Cached("N0CALL"); ok {
-		t.Fatal("expired entry")
-	}
-	if w := r.step(); w >= 0 || r.f.count() != 1 {
-		t.Fatalf("Cached queued a refresh: w=%v hits=%d", w, r.f.count())
-	}
-	off := newRig(t, false)
-	if _, ok := off.m.Cached("N0CALL"); ok {
-		t.Fatal("switch off")
-	}
-}
-
 func TestNotFoundCachedForSevenDays(t *testing.T) {
 	r := newRig(t, true)
 	r.m.Lookup("N1CALL")

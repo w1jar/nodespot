@@ -13,7 +13,8 @@ import (
 // by callsign, then the cache of hamdb.org. Every lookup is local and never
 // waits: the radioid.net index keeps a small cache of the IDs it read, and
 // a callsign hamdb.org has not answered yet is only queued. Only empty
-// fields are filled. AllStar (a node's callsign is not a person) and the
+// fields are filled. AllStar (a node's callsign is not a person; a bare node
+// number is resolved through the node list instead) and the
 // echo test (the station itself) are left as they are.
 
 // person is who a DMR ID or callsign belongs to.
@@ -53,6 +54,26 @@ func (s *Server) lookupPerson(id uint32, call string) (person, bool) {
 // enrichable reports whether calls on mode m are looked up.
 func enrichable(m string) bool { return m != "" && m != mode.AllStar && m != mode.EchoTest }
 
+// allstarNode resolves an AllStar call that carries only a node number (all
+// digits) through the node list, the same way "Now calling" does (ncResolve):
+// the node's callsign and its description, which the web shows as the second
+// line. A call that is not a bare number, or not in the list, is left alone.
+func (s *Server) allstarNode(call string) (callsign, desc string, ok bool) {
+	if call == "" || s.d.Nodelist == nil {
+		return "", "", false
+	}
+	for _, r := range call {
+		if r < '0' || r > '9' {
+			return "", "", false
+		}
+	}
+	in, found := s.d.Nodelist.Lookup(call)
+	if !found {
+		return "", "", false
+	}
+	return firstWord(in.Callsign), in.Description, true
+}
+
 // fill sets the empty ones of callsign, name and place from p.
 func (p person) fill(callsign, name, place *string) {
 	if *callsign == "" {
@@ -69,6 +90,14 @@ func (p person) fill(callsign, name, place *string) {
 // enrichTalker returns t with its empty fields filled (t itself when there
 // is nothing to look up or nothing found; t is never modified).
 func (s *Server) enrichTalker(m string, t *mode.Talker) *mode.Talker {
+	if m == mode.AllStar && t != nil {
+		if cs, name, ok := s.allstarNode(t.Callsign); ok {
+			c := *t
+			c.Callsign, c.Name, c.Place = cs, name, ""
+			return &c
+		}
+		return t
+	}
 	if t == nil || !enrichable(m) || (t.Callsign != "" && t.Name != "" && t.Place != "") || (t.ID == 0 && t.Callsign == "") {
 		return t
 	}
@@ -101,6 +130,12 @@ func (s *Server) enrichStatus(st *mode.Status) *mode.Status {
 func (s *Server) enrichHeard(l []mode.Heard) {
 	for i := range l {
 		h := &l[i]
+		if h.Mode == mode.AllStar {
+			if cs, name, ok := s.allstarNode(h.Callsign); ok {
+				h.Callsign, h.Name, h.Place = cs, name, ""
+			}
+			continue
+		}
 		if !enrichable(h.Mode) || (h.Callsign != "" && h.Name != "" && h.Place != "") || (h.ID == 0 && h.Callsign == "") {
 			continue
 		}

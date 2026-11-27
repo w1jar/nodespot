@@ -19,15 +19,13 @@ export const app = $state<{
   updates: UpdatesBadge;
   /** Set while the panel or the node restarts: the page waits for the server and reloads. */
   restarting: { kind: 'nodespot' | 'reboot'; since: number } | null;
-  /** The public status view is on (admin setting); the app is the chrome-less /embed view. */
-  publicEnabled: boolean; embed: boolean;
   /** This page was opened over the setup hotspot (GET /api/setup): a login typed here is not encrypted. */
   hotspot: boolean;
 }>({
   ready: false, setupNeeded: false, user: null, instance: '', node: null, modes: [], heard: [], events: [], favorites: [], schedules: null, nowcalling: null, system: null,
   conn: 'offline', stateAt: Date.now(), version: '', haveFavorites: false, updating: null,
   updates: { nodespot: false, nodespotVersion: '', os: 0, security: 0, reboot: false }, restarting: null,
-  publicEnabled: false, hotspot: false, embed: location.pathname === '/embed' || location.pathname === '/embed/',
+  hotspot: false,
 });
 
 /** Ticking clock (ms) so durations advance between updates. */
@@ -181,13 +179,7 @@ export function onLoggedIn(u: User) {
   api.system().then((s) => { app.system = s; }).catch(() => {});
 }
 
-/** Learn whether the public view is on (it may be, for visitors without a session). */
-export async function refreshPublicInfo(): Promise<boolean> {
-  try { const i = await api.publicInfo(); app.publicEnabled = i.enabled; return i.loggedIn; } catch { app.publicEnabled = false; return true; }
-}
-
 export async function boot() {
-  if (app.embed) { await refreshPublicInfo(); app.ready = true; return; }
   setUnauthorizedHandler(() => { if (app.user) { app.user = null; stopEvents(); } navigate('/login'); });
   try {
     const s = await api.setupNeeded();
@@ -195,10 +187,7 @@ export async function boot() {
     app.hotspot = !!s.hotspot;
     if (s.needed) { navigate('/setup'); app.ready = true; return; }
   } catch { /* backend down: fall through to login */ }
-  // The info call says whether a session exists, so visitors never trigger a 401.
-  if (await refreshPublicInfo()) {
-    try { onLoggedIn(await api.session()); } catch { if (!app.publicEnabled) navigate('/login'); }
-  } else if (!app.publicEnabled) navigate('/login');
+  try { onLoggedIn(await api.session()); } catch { navigate('/login'); }
   app.ready = true;
   try {
     const v = sessionStorage.getItem('nodespot-updated');

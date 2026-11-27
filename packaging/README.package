@@ -65,3 +65,8 @@ Removal
                      /etc/nodespot/sa818.json) and the nodespot-node user, and the state
                      left by 2.x (/var/lib/nodespot-dv, /var/lib/nodespot-config-history,
                      /var/lib/nodespot-dvstate*)
+
+AMBE vocoder (md380-emu) at install:
+  The installer can also install it, with the same code as the Modes page:
+      curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_VOCODER=1 sh
+  If that fails, nodespot stays installed; install the vocoder later from the Modes page.

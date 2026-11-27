@@ -21,12 +21,11 @@ test('movedPath maps each old System section to its tab', () => {
 });
 
 test('movedPath maps every flat settings id of the first Settings layout', () => {
-  assert.equal(Object.keys(OLD_IDS).length, 21);
+  assert.equal(Object.keys(OLD_IDS).length, 20);
   assert.equal(movedPath('/settings/audio-levels'), '/settings/station/audio');
   for (const id of ['dv-engine', 'dv-identity', 'dv-bridge', 'dv-audio']) assert.equal(movedPath('/settings/' + id), '/modes');
   assert.equal(movedPath('/settings/dv-user-list'), '/settings/station/lookup');
   assert.equal(movedPath('/settings/users'), '/settings/access');
-  assert.equal(movedPath('/settings/public'), '/settings/access');
   assert.equal(movedPath('/settings/web-port'), '/settings/system/web-port');
   assert.equal(movedPath('/settings/backup/'), '/settings/maintenance/backup');
   assert.equal(movedPath('/settings/audit'), '/settings/maintenance/audit');

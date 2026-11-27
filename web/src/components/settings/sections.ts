@@ -38,7 +38,7 @@ export const groups: SettingsGroup[] = [
     { id: 'lookup', label: 'Caller lookup', bare: true, load: () => import('./CallerLookup.svelte') },
     { id: 'hostlists', label: 'Host lists', bare: true, load: () => import('./HostLists.svelte') },
   ] },
-  { id: 'access', label: 'Access', admin: true, pages: [() => import('./Users.svelte'), () => import('../PublicSettings.svelte')] },
+  { id: 'access', label: 'Access', admin: true, pages: [() => import('./Users.svelte')] },
   { id: 'system', label: 'System', admin: true, tabs: [
     { id: 'overview', label: 'Overview', title: 'Host and time', load: () => import('./Overview.svelte') },
     { id: 'updates', label: 'Updates', bare: true, load: () => import('./Updates.svelte') },

@@ -22,7 +22,7 @@ after 14 days. Push any commit to the branch to get a fresh build.
   match of the browser languages, else en-US. Sets `<html lang>`.
 - Dates, times, numbers and relative times follow the locale (`util.ts`).
 - Language picker (`LanguageSelect.svelte`) in Settings → About, the header
-  user menu, and the login, setup and public pages. Each language is shown in
+  user menu, and the login and setup pages. Each language is shown in
   its own name.
 - The CodeMirror find/replace panel is translated.
 - Layout fixes for longer Russian text: header nav wraps on phones, wider mode

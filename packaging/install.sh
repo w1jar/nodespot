@@ -32,6 +32,16 @@
 # Digital modes are built into the native node (nodespot-node): there is
 # nothing to install. NODESPOT_DV, which enabled them in 2.x, is still accepted
 # and does nothing.
+# AMBE vocoder (md380-emu, for the DMR and other digital voice modes): by default it is
+# installed later, on demand, from the Modes page. NODESPOT_VOCODER=1 (or yes, true)
+# installs it during the install, after nodespot is installed and started, with the
+# same code as the Modes page (nodespot-helper vocoder-install --wait): it adds the
+# md380-emu apt repository with its pinned key, installs the packages and keeps the
+# service local-only. It can take a few minutes.
+#   curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_VOCODER=1 sh
+# If the vocoder cannot be installed (unsupported system, no network, apt error)
+# the installer prints a warning and still finishes successfully; install it later
+# from the Modes page. Not combined with NODESPOT_TAKEOVER=undo.
 # 64-bit only: arm64 and amd64. On a 32-bit system (dpkg architecture armhf,
 # including a 32-bit userland on a 64-bit kernel) the installer refuses before
 # anything is changed; reinstall with Raspberry Pi OS Lite (64-bit).
@@ -111,6 +121,16 @@ case "$DV_VAL" in
 *) die "NODESPOT_DV must be 1, yes or true (got '$DV_VAL')" ;;
 esac
 [ "$TAKEOVER_UNDO" -eq 0 ] || [ "$DV_WANT" -eq 0 ] || die "NODESPOT_TAKEOVER=undo cannot be combined with NODESPOT_DV"
+
+# --- AMBE vocoder (NODESPOT_VOCODER) ---------------------------------------------
+VOCODER_WANT=0
+VOCODER_VAL="${NODESPOT_VOCODER:-}"
+case "$VOCODER_VAL" in
+"") ;;
+1 | [Yy][Ee][Ss] | [Tt][Rr][Uu][Ee]) VOCODER_WANT=1 ;;
+*) die "NODESPOT_VOCODER must be 1, yes or true (got '$VOCODER_VAL')" ;;
+esac
+[ "$TAKEOVER_UNDO" -eq 0 ] || [ "$VOCODER_WANT" -eq 0 ] || die "NODESPOT_TAKEOVER=undo cannot be combined with NODESPOT_VOCODER"
 
 # --- architecture: 64-bit only (before anything is changed) -----------------
 [ "$TAKEOVER_UNDO" -eq 1 ] || check_arch
@@ -659,6 +679,24 @@ dv_note() {
 	DV_RESULT="built into the node, nothing to enable. Pick a mode in the web UI."
 }
 
+# install_vocoder: NODESPOT_VOCODER=1. The helper does the work (platform check,
+# pinned key, apt source, install job) and waits for it. A failure only warns.
+VOCODER_RESULT=
+install_vocoder() {
+	helper="${NODESPOT_HELPER:-/usr/libexec/nodespot/nodespot-helper}"
+	say "installing the AMBE vocoder (md380-emu); this can take a few minutes"
+	if [ ! -x "$helper" ]; then
+		VOCODER_RESULT="not installed (warning: $helper not found)"
+	elif "$helper" vocoder-install --wait; then
+		VOCODER_RESULT="installed and running"
+	else
+		VOCODER_RESULT="not installed (warning: see the message above)"
+	fi
+	case "$VOCODER_RESULT" in
+	"not installed"*) say "warning: the vocoder was not installed; nodespot itself is installed. Install it later from the Modes page." >&2 ;;
+	esac
+}
+
 if [ "$TAKEOVER_UNDO" -eq 1 ]; then
 	rc=0
 	takeover_undo || rc=$?
@@ -673,7 +711,11 @@ PORT_FAIL=0
 [ -z "$PORT_WANT" ] || set_port "$PORT_WANT" || PORT_FAIL=1
 # Digital modes go first so the setup link stays the last thing on the screen.
 [ "$DV_WANT" -eq 0 ] || dv_note
+[ "$VOCODER_WANT" -eq 0 ] || install_vocoder
 setup_admin
+if [ -n "$VOCODER_RESULT" ]; then
+	printf '\nAMBE vocoder: %s\n' "$VOCODER_RESULT"
+fi
 if [ -n "$DV_RESULT" ]; then
 	printf '\nDigital modes: %s\n' "$DV_RESULT"
 fi

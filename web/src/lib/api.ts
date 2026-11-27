@@ -1,6 +1,6 @@
 import type {
   About, BackupInfo, BackupSelection, Favorite, HostList, HostListsStatus, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
-  AutosetStatus, InputLevel, NowCalling, PublicInfo, PublicSettings, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
+  AutosetStatus, InputLevel, NowCalling, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
   Settings, Station, SysLogs, SysNetwork, SysServices, SystemInfo, Target, TerminalSessionInfo, TerminalStatus, TerminalTicket, UpdateInfo, User,
   UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo, EchoSearch,
 } from './types';
@@ -218,9 +218,6 @@ export const api = {
   hamdb: () => req<HamDBStatus>('GET', '/dv/hamdb'),
   setHamDB: (enabled: boolean) => req<HamDBStatus>('PUT', '/dv/hamdb', { enabled }),
 
-  publicInfo: () => req<PublicInfo>('GET', '/public/info', undefined, { noAuthRedirect: true }),
-  publicSettings: () => req<PublicSettings>('GET', '/public'),
-  putPublic: (p: Partial<Omit<PublicSettings, 'defaultTitle' | 'clients'>>) => req<PublicSettings>('PUT', '/public', p),
 
   backupInfo: () => req<BackupInfo>('GET', '/backup/info'),
   backup: downloadBackup,

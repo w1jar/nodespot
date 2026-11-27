@@ -9,12 +9,19 @@ Release notes are taken from the section of the tag being released
 - Host lists: on a fresh install the DMR, YSF, P25, NXDN and M17 lists stayed empty until Refresh was pressed, so connects failed. A list that is not on disk yet is now downloaded at startup instead of after a minute, and while any list is missing a failed download is tried again after 30 s, then 1, 2, 4 and 8 minutes, at most 10 minutes apart. Lists already on disk keep the daily check.
 - AllStar node list: while it is empty, a failed download is tried again with the same quick backoff instead of an hour later.
 - Connecting YSF, P25, NXDN or M17 while that list has not downloaded yet now says "The YSF list hasn't downloaded yet; trying now. Try again in a moment." (`409 hostlist_empty`) and starts the download, instead of failing with a plain connect error. A typed `host:port` still works without the list.
+- Last heard: linked to an AllStar hub, every transmission showed twice, once as the bare node number and once with the node list's callsign and description. AllStar rows now always use the node list's callsign and description (a node not in the list keeps its number), the Dashboard matches the two copies of one transmission by mode, target and start time, and consecutive rows from the same station and target collapse into one row with the latest time and a count ("×12").
 - Updates page: the release notes of a version tagged without an annotation showed the merge commit's message. `latest.json` now takes the notes from the CHANGELOG unless the tag is annotated.
 
 ### Changed
 - AMBE vocoder install: while it runs, admins see a banner on the Modes page (above the selected mode) and on the Dashboard: "Installing the AMBE vocoder. This can take a few minutes; BrandMeister, TGIF, DMR, YSF and NXDN have no voice until it finishes.", with the elapsed time and the current step (waiting for other system updates to finish, downloading, installing). A failed install shows its error there with Install to try again and Dismiss. `GET /api/vocoder` has `jobStarted`.
 - The mode buttons on the Modes page show "Needs vocoder", or "Installing vocoder…" while the install runs, on every mode that needs the AMBE vocoder; the settings header shows the same.
 - Connecting a mode that needs the AMBE vocoder while it is missing or still installing says "Connected, but no voice until the AMBE vocoder is installed."
+
+### Added
+- Install the AMBE vocoder with nodespot: `curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_VOCODER=1 sh`. It uses the same install as the Modes page (`nodespot-helper vocoder-install --wait`) and shows its progress. If it fails or the system is not supported, nodespot is still installed and the installer says the vocoder can be installed later from the Modes page.
+
+### Removed
+- The public status page for visitors who are not logged in, its settings and `/api/public/*`. A visitor who is not logged in gets the login page. The embed route is gone and the web UI can no longer be framed. Old public page settings are ignored, and backups that contain them still restore.
 
 ## [1.0.0] - 2026-11-27
 

@@ -63,6 +63,11 @@ func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "term-host" {
 		os.Exit(helper.RunTermHost(os.Args[2:]))
 	}
+	// The installer (NODESPOT_VOCODER=1) installs the AMBE vocoder with the
+	// same code as the web UI and waits for it (internal/helper/vocoder_wait.go).
+	if len(os.Args) >= 2 && os.Args[1] == "vocoder-install" {
+		os.Exit(runVocoderInstall(os.Args[2:]))
+	}
 	listen := flag.String("listen", "", "listen on this unix socket path instead of using systemd socket activation (testing)")
 	var allow uidList
 	flag.Var(&allow, "allow-uid", "additionally allow this uid (testing; repeatable)")
@@ -109,5 +114,27 @@ func runGuard() int {
 		fmt.Fprintln(os.Stderr, "web-port-guard:", err)
 		return 1
 	}
+	return 0
+}
+
+// runVocoderInstall is `nodespot-helper vocoder-install --wait`: install the
+// vocoder and wait for the job. Exit 0 only when the vocoder is installed and
+// running; a message on stderr says why otherwise.
+func runVocoderInstall(args []string) int {
+	if len(args) != 1 || args[0] != "--wait" {
+		fmt.Fprintln(os.Stderr, "usage: nodespot-helper vocoder-install --wait")
+		return 2
+	}
+	if os.Geteuid() != 0 {
+		fmt.Fprintln(os.Stderr, "vocoder-install must run as root")
+		return 1
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := helper.NewOps().VocoderInstallWait(ctx, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "vocoder-install:", err)
+		return 1
+	}
+	fmt.Println("the vocoder is installed and running")
 	return 0
 }

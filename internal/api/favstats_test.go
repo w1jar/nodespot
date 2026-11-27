@@ -107,12 +107,6 @@ func TestFavStatsScanFlow(t *testing.T) {
 	if strings.Contains(string(b), "rxPct") {
 		t.Fatal("activity leaked into the favorites list")
 	}
-	// Public page data never mentions the scan.
-	e.do("admin", "PUT", "/api/public", map[string]any{"enabled": true}, nil)
-	_, pb, _ := e.raw("GET", "/api/public/status", nil, "", nil)
-	if strings.Contains(string(pb), "rxPct") || strings.Contains(string(pb), "favstats") {
-		t.Fatal("scan data on the public page")
-	}
 	// Off again: values are dropped and an event says so.
 	e.do("op", "PUT", "/api/favorites/scan", map[string]any{"enabled": false}, nil)
 	st.wait(func(ev sseEvent) bool { return ev.name == "favstats" && strings.Contains(ev.data, `"enabled":false`) })

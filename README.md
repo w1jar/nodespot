@@ -26,7 +26,6 @@ nodespot runs its own node (`nodespot-node`): one radio (a SHARI or another SA81
 - **Users and roles**: admin, operator and viewer, with rate-limited login and CSRF protection.
 - **Updates from the web page**: Settings, System, Updates shows the installed and available version with release notes, lets you pick the release or beta channel, and installs updates on request.
 - **Built-in bug reporting**: Settings, About has a prefilled issue form, and Settings, Maintenance, Diagnostics has a diagnostics download that removes private data.
-- **Public status page** (optional, off by default): a read-only live view of your node for visitors who are not logged in, with recent activity. See below.
 - Light and dark themes, works on phones and tablets.
 - Small and safe: one static binary, runs as an unprivileged, hardened systemd service; a tiny root helper performs only package updates, firewall changes and similar system tasks.
 
@@ -96,6 +95,16 @@ Any Raspberry Pi that runs 64-bit Raspberry Pi OS works. 32-bit Raspberry Pi OS 
 ### Digital modes at install
 
 Digital modes are built into the node; there is nothing to enable. `NODESPOT_DV=1`, which enabled them in 2.x, is still accepted and does nothing. Prefer to do it by hand? See the manual steps on <https://w1jar.github.io/nodespot/>.
+
+### AMBE vocoder at install (`NODESPOT_VOCODER`)
+
+The AMBE vocoder (md380-emu), which DMR, YSF and NXDN voice need, is normally installed later from the Modes page. To install it during the install instead, run the installer with `NODESPOT_VOCODER=1` (`yes` and `true` work too; any other value is refused):
+
+```sh
+curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_VOCODER=1 sh
+```
+
+It uses the same code as the Modes page (`nodespot-helper vocoder-install --wait`) and runs after nodespot is installed and started; it can take a few minutes. If the vocoder cannot be installed (unsupported system, no network, apt error) the installer prints a warning and still finishes successfully; install it later from the Modes page. It cannot be combined with `NODESPOT_TAKEOVER=undo`.
 
 ### First login
 
@@ -181,18 +190,6 @@ On the **DV** page, the Digital Modes card shows the bridge node and its link, h
 ![DV page, BrandMeister network panel](docs/images/digital-networks.png)
 
 ![Settings, Digital Modes](docs/images/digital-setup.png)
-
-## Public status page
-
-A modern replacement for public Allmon3/Supermon pages. It is off by default. Enable it in **Settings, Access, Public page** (administrators only).
-
-![Public status page](docs/images/public-page.png)
-
-- **What visitors see:** when it is on and a visitor is not logged in, the address of the panel (`http://<your-node>:8080/`) shows a live, read-only page that looks like the Dashboard (node tiles, a Now Calling banner and a Last heard table, optionally the linked network) with a **Log in** button. It has no pins, no Unlink or connect buttons and no system bar. Logged-in users get the normal dashboard, with a "Public view" preview in the user menu. When it is off, visitors get the login page as before.
-- **What you control:** the title, which local nodes are shown, and whether callsigns and node info of linked nodes, the network list and recent activity are shown. **Show digital modes activity** (off by default) adds the digital modes call in progress and the last heard digital calls (mode, callsign, talkgroup or reflector, slot, time, and name and place only when already in the local cache); no master or server host, login state, bridge node, DMR ID or address is ever sent. IP addresses, system information, favorites and users are never part of it.
-- **One port:** the page is served by the same server on the same port as the panel (the public data is at `/api/public/status` and `/api/public/events`; everything else under `/api` still needs a login). Making the panel reachable from the internet therefore also exposes the login page. Use strong passwords, and prefer a tunnel or reverse proxy (Cloudflare Tunnel, Caddy) over forwarding a router port to the panel.
-- **Abuse limits:** each visitor address gets a request rate limit (HTTP 429), at most 4 live connections per address and 200 in total. Behind a reverse proxy or tunnel turn on **Trust proxy headers** so the limits use the real visitor address (the last `X-Forwarded-For` entry, as added by your proxy). Leave it off otherwise.
-- **Embedding:** with **Allow embedding** on, `http://<your-node>:8080/embed` shows a chrome-less version (no login button) that other sites can put in an iframe; Settings, Access, Public page shows the embed code. Only `/embed` can be framed; the login page never can.
 
 ## Updating
 

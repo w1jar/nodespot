@@ -1,8 +1,8 @@
-// The rows of the Last heard table (LastHeardTable.svelte), shared by the Dashboard and the public page.
+// The rows of the Last heard table (LastHeardTable.svelte).
 // A call of any mode ends up in the same shape: callsign, mode, target, when, and the lookup links the callsign opens.
 import { modeTitle } from './modes.ts';
 import { placeText, qrzUrl, radioidUrl } from './nowcalling.ts';
-import type { Heard, NowCall, PubSnapshot } from './types';
+import type { Heard, NowCall } from './types';
 
 export interface HeardItem {
   key: string;
@@ -14,6 +14,10 @@ export interface HeardItem {
   target: string;
   /** When it was heard (ms); 0 when unknown. */
   at: number;
+  /** When the transmission started (ms); 0 when unknown. Used to match the same transmission from two sources. */
+  start: number;
+  /** How many consecutive transmissions of the same station on the same target the row stands for; absent for one. */
+  count?: number;
   /** The caller's name and place for the muted second line under the callsign ("Pat Example · Springfield, XX"); '' when not known. */
   person: string;
   /** Tooltip for the row. */
@@ -53,6 +57,7 @@ export function heardItems(heard: Heard[] | undefined): HeardItem[] {
       mode: modeTitle(h.mode),
       target: targetCell(h.mode, h.target),
       at: parseAt(h.end || h.start),
+      start: parseAt(h.start),
       person: personLine(h.name, h.place),
       title: h.id ? `ID ${h.id}` : undefined,
       qrz: lookupCall(call),
@@ -71,6 +76,7 @@ export function callItems(recent: NowCall[] | undefined): HeardItem[] {
       mode: modeTitle(c.kind),
       target: targetCell(c.kind, c.target),
       at: parseAt(c.end || c.start),
+      start: parseAt(c.start),
       person: c.kind === 'allstar' ? (c.desc ?? '').trim() : personLine(c.first || c.name, placeText(c)),
       title: (c.targetName ?? '').trim() || undefined,
       qrz: lookupCall(call),
@@ -79,23 +85,36 @@ export function callItems(recent: NowCall[] | undefined): HeardItem[] {
   });
 }
 
-/** The one Last heard list: the node's heard log and the strip's recent calls, newest first, without the same call twice. */
-export function mergeHeard(recent: NowCall[] | undefined, heard: Heard[] | undefined, limit = 12): HeardItem[] {
-  const all = [...heardItems(heard), ...callItems(recent)].sort((a, b) => b.at - a.at);
-  const seen = new Set<string>(), out: HeardItem[] = [];
-  for (const r of all) {
-    const k = `${r.call}|${r.mode}|${Math.round(r.at / 5000)}`;
-    if (seen.has(k)) continue;
-    seen.add(k); out.push(r);
+/** Two rows this close in start time (ms) on the same mode and target are one transmission. */
+export const SAME_TX_MS = 3000;
+
+const richness = (r: HeardItem): number => (r.person ? 2 : 0) + (r.qrz ? 1 : 0);
+
+/** Rows of the same transmission (same mode, target and start time within SAME_TX_MS, whatever the call text) once, the richer row kept. */
+export function dedupeHeard(rows: HeardItem[]): HeardItem[] {
+  const out: HeardItem[] = [];
+  for (const r of rows) {
+    const t = r.start || r.at;
+    const i = t ? out.findIndex((o) => o.mode === r.mode && o.target === r.target && Math.abs((o.start || o.at) - t) <= SAME_TX_MS) : -1;
+    if (i < 0) out.push(r);
+    else if (richness(r) > richness(out[i])) out[i] = r;
   }
-  return out.slice(0, limit);
+  return out;
 }
 
-/** The public page's Last heard rows, newest first. Only what the public API sends: a callsign opens QRZ and nothing opens radioid.net. */
-export function pubHeardItems(snap: Pick<PubSnapshot, 'heard' | 'showHeard'> | null | undefined, limit = 12): HeardItem[] {
-  if (!snap?.showHeard) return [];
-  return (snap.heard ?? []).map((c, i) => ({
-    key: `p:${i}:${c.at}`, call: c.callsign || `${modeTitle(c.mode)} caller`, mode: modeTitle(c.mode), target: targetCell(c.mode, c.target),
-    at: c.at * 1000, person: personLine(c.name, c.location), qrz: lookupCall(c.callsign), radioid: '',
-  })).sort((a, b) => b.at - a.at).slice(0, limit);
+/** Newest-first rows with consecutive ones of the same mode, target and call as one row (newest time, count). */
+export function collapseHeard(rows: HeardItem[]): HeardItem[] {
+  const out: HeardItem[] = [];
+  for (const r of rows) {
+    const p = out[out.length - 1];
+    if (p && p.mode === r.mode && p.target === r.target && p.call === r.call) p.count = (p.count ?? 1) + 1;
+    else out.push({ ...r });
+  }
+  return out;
+}
+
+/** The one Last heard list: the node's heard log and the strip's recent calls, newest first, each transmission once, repeats collapsed. */
+export function mergeHeard(recent: NowCall[] | undefined, heard: Heard[] | undefined, limit = 12): HeardItem[] {
+  const all = [...callItems(recent), ...heardItems(heard)].sort((a, b) => b.at - a.at);
+  return collapseHeard(dedupeHeard(all)).slice(0, limit);
 }

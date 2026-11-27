@@ -13,7 +13,6 @@
   import LogOut from '@lucide/svelte/icons/log-out';
   import MenuIcon from '@lucide/svelte/icons/menu';
   import X from '@lucide/svelte/icons/x';
-  import Eye from '@lucide/svelte/icons/eye';
   import { fade, fly } from 'svelte/transition';
   import NowCalling from './NowCalling.svelte';
 
@@ -27,7 +26,7 @@
   let open = $state(false);
   let menuBtn: HTMLButtonElement | undefined = $state();
   const showDot = $derived(isAdmin() && (updCount > 0 || app.updates.reboot));
-  const pageName = $derived(isSettingsPath(router.path) ? 'Settings' : router.path === '/public' ? 'Public view' : (nav.find(([p]) => p === router.path)?.[1] ?? ''));
+  const pageName = $derived(isSettingsPath(router.path) ? 'Settings' : (nav.find(([p]) => p === router.path)?.[1] ?? ''));
   const dur = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150);
   const inSettings = $derived(isSettingsPath(router.path));
   // The Settings item is lit on every settings route.
@@ -92,7 +91,6 @@
             <div class="px-3 py-1.5 text-xs text-muted">{app.user?.username} · {app.user?.role}</div>
             <button role="menuitem" class="btn w-full justify-start border-transparent" onclick={() => { menu = false; navigate('/settings/account'); }}>Account</button>
             <button role="menuitem" class="btn w-full justify-start border-transparent" onclick={() => { menu = false; navigate('/settings/about'); }}>About</button>
-            {#if app.publicEnabled}<button role="menuitem" class="btn w-full justify-start border-transparent" onclick={() => { menu = false; navigate('/public'); }}>Public view</button>{/if}
             <button role="menuitem" class="btn w-full justify-start border-transparent" onclick={logout}><LogOut size={15} />Sign out</button>
           </div>
         {/if}
@@ -118,9 +116,6 @@
           <div class="mt-2 border-t border-line pt-2">
             <a href="#/settings/account" onclick={() => (open = false)} aria-current={router.path === '/settings/account' ? 'page' : undefined} class={item(router.path === '/settings/account')}>Account</a>
             <a href="#/settings/about" onclick={() => (open = false)} aria-current={router.path === '/settings/about' ? 'page' : undefined} class={item(router.path === '/settings/about')}>About</a>
-            {#if app.publicEnabled}
-              <button class={item(router.path === '/public')} onclick={() => { open = false; navigate('/public'); }}><span class="flex items-center gap-2"><Eye size={16} />Public view</span></button>
-            {/if}
           </div>
         </nav>
         <div class="mt-2 border-t border-line pt-2 sm:ml-auto sm:max-w-xs">

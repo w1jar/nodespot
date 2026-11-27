@@ -16,7 +16,7 @@ Items marked **To verify** are assumptions that need confirmation on real hardwa
 
 **Targets.** Raspberry Pi 3, 4, 5 and Zero 2 W on Debian 12 (bookworm) or 13 (trixie) and Raspberry Pi OS, arm64, plus amd64. 64-bit only: armhf (32-bit) was dropped because ASL3 ships only arm64 and amd64 packages. A 32-bit install must be redone with Raspberry Pi OS Lite (64-bit); `install.sh` refuses on armhf.
 
-**Prior art.** AllScan (PHP: connects and manages favorite nodes; the main inspiration for nodespot's dashboard) and Allmon3 (ASL's monitor, widely used for public status pages). nodespot covers AllScan's role, coexists with Allmon3 and other AMI clients, aims to offer a better public status page (section 9), and goes much further on configuration.
+**Prior art.** AllScan (PHP: connects and manages favorite nodes; the main inspiration for nodespot's dashboard) and Allmon3 (ASL's monitor, widely used for public status pages). nodespot covers AllScan's role, coexists with Allmon3 and other AMI clients, and goes much further on configuration.
 
 ## 2. Scope and non-goals
 
@@ -79,7 +79,7 @@ Allow/deny lists live in AstDB and are managed through AMI database actions (UI 
 - WebSocket (terminal): a browser cannot send the CSRF header on a handshake, so the page POSTs (session cookie plus the custom header) for a one-time ticket (30 seconds, single use, tied to the user and the login session) and passes it as `?ticket=`. The upgrade also requires the cookie, the admin role and an `Origin` that matches the host (a missing one is refused). The CSP names the host's `ws://` and `wss://` in `connect-src`.
 - Login rate limiting.
 - Optional HTTPS: a self-signed certificate generated at install, or a user-supplied certificate.
-- Default port 8080, configurable, so nodespot coexists with Allmon3 and Cockpit. With Apache off, Settings, System can move nodespot to port 80 (a systemd drop-in with `CAP_NET_BIND_SERVICE`, a 60 s revert timer if the new address is not opened) and the ASL services switch can stop and disable Cockpit, Apache and Allmon3 (never uninstall). The optional public status page is served on the same port without login (section 9.3).
+- Default port 8080, configurable, so nodespot coexists with Allmon3 and Cockpit. With Apache off, Settings, System can move nodespot to port 80 (a systemd drop-in with `CAP_NET_BIND_SERVICE`, a 60 s revert timer if the new address is not opened) and the ASL services switch can stop and disable Cockpit, Apache and Allmon3 (never uninstall).
 
 ### 3.4 Privilege separation
 
@@ -297,8 +297,6 @@ v1 ships in two milestones. The first covers what AllScan does today (dashboard,
 - First-run setup wizard.
 - System page: Asterisk restart, log tail, disk.
 
-**Then:** public status page, phase 1: live, read-only status of the node's own local nodes (keying, connected links, registration). See 9.3.
-
 ### 9.2 Later
 
 - USB radio audio tuning UI (RX/TX levels; live meters if feasible).
@@ -308,26 +306,9 @@ v1 ships in two milestones. The first covers what AllScan does today (dashboard,
 - Layout migration tool.
 - Voter / RTCM.
 - Plugins (e.g. M17 gateway management).
-- Public status page, phase 2: activity history (last heard, busiest times, connection history, uptime), embeddable widget, optional map.
 - **Want:** multi-node / multi-host status (one page showing nodes on several servers, as Allmon3 can) and fleet management.
 - Backup/restore export.
 - i18n.
-
-### 9.3 Public status page
-
-A replacement for the public Allmon3 pages, built on the same AMI live data as the dashboard.
-
-**Status: phase 1 and recent activity are implemented.** History beyond recent activity, a widget API and a map are phase 2.
-
-- **Single port.** Decision: no separate listener. The public view lives in the same SPA, on the admin port. When the owner enables it (Settings > Public page, default off) and the visitor has no session, `/` shows the read-only view with a "Log in" button; when disabled the login page is shown as before. Logged-in users get the dashboard plus a "Public view" preview. The app decides with the unauthenticated `GET /api/public/info` (`enabled`, `title`, `loggedIn`), which also lets visitors skip the session check (no 401).
-- **Data endpoints.** `GET /api/public/status` (JSON) and `GET /api/public/events` (SSE: snapshot on connect, then only changes, ping every 20 s, closed after 6 h). Unauthenticated, 404 while disabled, no cookies. Every other `/api` route keeps requiring a session (tested).
-- **Read-only and minimal.** Content is built from dedicated structs (`internal/public`), not the admin structs: node number and node-list info, keying, stale flag, links (node, kind, info, direction, mode, connected, keyed, since key/unkey), link count, optional network list and optional recent activity. Never IP addresses (a scrub also removes IP-like text from node-list fields and link names), never system information, favorites, users or settings. "Show callsigns" off hides link, network and activity identities (numbers and kind remain; the owner's own node info stays).
-- **Owner-controlled.** Stored in the settings table (`public.*`): enabled, title, nodes (default all), show callsigns / network / activity (default on), allow embedding (default off), trust proxy (default off). Changes apply to connected clients immediately.
-- **Abuse protection.** Per-address token bucket (2 req/s, burst 10, shared by info/status/events) answers 429; at most 4 SSE connections per address (429) and 200 in total (503). Without "trust proxy" the address is the TCP peer; with it, the last `X-Forwarded-For` entry (the one added by the trusted proxy). IPv6 clients are grouped by /64. While public SSE clients are connected the monitor polls fast (1 s), like for admin clients.
-- **Framing.** All responses carry `frame-ancestors 'none'` and `X-Frame-Options: DENY`, except `/embed` (the same SPA, chrome-less) while the public page and "allow embedding" are both on: there `frame-ancestors *`. The login page can therefore never be framed (no clickjacking).
-- **Security trade-off.** Because it shares the port, enabling the public page and exposing the panel to the internet also exposes the login page (login is rate-limited; strong passwords are required). The page recommends a tunnel or reverse proxy (Cloudflare Tunnel, Caddy) rather than router port forwarding. A separate listener (own port, nothing from `/api`) was the first design and was dropped in favor of one port and one firewall rule.
-- **Recent activity.** The monitor updates feed `internal/activity`, which records a row `(local node, link or "local", start, duration, kerchunk)` in the `activity` table when a link or the local receiver unkeys. Keyups under 0.5 s are ignored as glitches, under 1.5 s flagged as kerchunks; local monitor links are ignored; unknown state (stale) discards open keyups. Retention 7 days and at most 10,000 rows (pruned at start, daily and every 100 inserts). The page shows the last 25 for the shown nodes; `GET /api/activity` is the admin-side listing.
-- **Later.** Busiest times, connection history and uptime, a widget API, an optional map (phase 2); multi-host status is a future want.
 
 ## 10. Packaging and updates
 
@@ -381,7 +362,6 @@ docs/
 | Reload semantics | Which settings take effect with `module reload app_rpt.so`, `iax2 reload`, `dialplan reload`, usb channel driver reload, versus full restart? Verify on hardware; record per key in the schema. |
 | `asl3-menu` and `custom/` | How does `asl3-menu` consume `custom/` and the `;MENU:` comments? Should nodespot coexist with it, and what happens if both edit the same file? |
 | AMI clients | Exact config locations and formats of Allmon3 (believed `/etc/allmon3/`), AllScan and Supermon; whether `allmon.ini.php` is Allmon2/Supermon format as believed. Update their credentials automatically or only warn? |
-| Public page exposure | Recommended deployment (Cloudflare Tunnel, Caddy, port forward) and defaults for what is public. |
 | Node list source | Source, format, size, and update cadence of the ASL node list for lookup; local caching and offline behavior. |
 | armhf support | Resolved: ASL3 publishes arm64 and amd64 only, so armhf was dropped (no new armhf builds; the armhf packages already in the apt repository stay indexed, frozen, so existing 32-bit installs see no errors but get no updates; the in-app update page says to reinstall 64-bit). |
 | Minimum ASL3 version | Which ASL3 releases (and `app_rpt` output formats) are supported. |

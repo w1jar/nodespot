@@ -6,7 +6,7 @@ Status: implemented in 1.1.10 (package `internal/favstats`, API in `docs/API.md`
 
 - The on/off switch is a "Scan" checkbox (a toggle button since beta.11) in the Favorites header on the dashboard (operators and admins, like the other favorites controls; viewers see "Scan on" and the values). Setting `favstats.enabled`, default off, `PUT /api/favorites/scan`. Its tooltip says "Show activity for favorite nodes from stats.allstarlink.org". The header also shows "updated Ns ago", or "rate limited, retrying" during a backoff.
 - The rate is not a UI setting: `[favstats] rate` in `nodespot.conf` (default 20 requests per minute, 1..25; 10 in beta.11 and beta.12, 20 again since beta.13), and `[favstats] url` overrides the base URL.
-- Activity is a separate snapshot (`GET /api/favorites/stats`) plus the SSE event `favstats`; the favorites objects are unchanged. Nothing is exposed on the public page.
+- Activity is a separate snapshot (`GET /api/favorites/stats`) plus the SSE event `favstats`; the favorites objects are unchanged.
 - Token bucket: capacity 4, refill at the configured rate, requests at least 2 s apart. Backoff doubles from 15 s to 5 min, honors Retry-After, and ends on the next success. A 404 for one node drops that node's values without backing off.
 - Keyed state uses the API's own `keyed` flag only for a node's first sample; afterwards it is derived from counter changes between distinct reports (`stats.data.time`, which the service refreshes about every 30 s). A poll that returns the same report again repeats the previous keyed state and changes no counters. The elapsed time is the difference of the two report times (poll time when a report time is missing). An implausible delta is a TX time increase larger than the elapsed time plus 2 s. A favorite linked to a local node shows keyed from the local link state immediately (the scan lags by up to 30 s). Keyed is cleared once the node's data is older than 15 minutes (like Active).
 - Only `apprptuptime`, `totaltxtime`, `totalkeyups`, `keyed`, `links` (counted) and the top-level `node` object's `Status` / `access_webtransceiver` are decoded; `linkedNodes` is never read. The decoder tolerates numbers as well as strings, and a `node` that is not an object.
@@ -94,7 +94,6 @@ API:
 - Optional `activity` on favorites: `{rxPct, linkCnt, active, webTx, keyed, lastSeen}`.
 - New SSE event `favstats` (changes only).
 - `GET /api/favorites/stats` snapshot.
-- Never exposed on the public page.
 
 Settings:
 - "Favorites activity scan" on/off. Default off, because it is new outbound traffic. Help text says the node's IP queries stats.allstarlink.org for each favorite node number.

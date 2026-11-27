@@ -47,7 +47,7 @@ Versions are plain `X.Y.Z`; the first release is 1.0.0. Every tag is first a bet
 ## Layout cheat sheet
 
 - `cmd/nodespot` (server, `nodespot admin ...` CLI), `cmd/nodespot-helper` (root helper, fixed ops over a unix socket).
-- `cmd/nodespot-node` (the native node daemon, `internal/native/...`), `internal/`: `api`, `auth`, `store` (SQLite), `backup`, `public` (public page), `updates`, `helper`, `debver`, `diag`, `schedules` (`docs/SCHEDULES.md`), `webui` (embedded UI). `nodespot --demo` runs a simulated node.
+- `cmd/nodespot-node` (the native node daemon, `internal/native/...`), `internal/`: `api`, `auth`, `store` (SQLite), `backup`, `updates`, `helper`, `debver`, `diag`, `schedules` (`docs/SCHEDULES.md`), `webui` (embedded UI). `nodespot --demo` runs a simulated node.
 - `web/` (Svelte 5 + Vite + Tailwind; `npm run dev:mock` for a mock API), `packaging/` (nfpm, systemd units, postinst, install.sh, publish-apt.sh), `tools/capture-ami.sh`.
 - Commands: `make web`, `make build`, `make debs`, `make test`, `make demo`.
 

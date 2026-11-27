@@ -8,8 +8,7 @@
   import { agoText } from '../lib/nowcalling';
   import type { HeardItem } from '../lib/lastheard';
 
-  // `readonly` (the public page): a callsign is a plain QRZ link, no menu.
-  let { rows, testid = undefined, readonly = false }: { rows: HeardItem[]; testid?: string; readonly?: boolean } = $props();
+  let { rows, testid = undefined }: { rows: HeardItem[]; testid?: string } = $props();
 
   const MENU_W = 208, MARGIN = 8;
   let openKey = $state(''), pos = $state({ left: 0, top: 0 });
@@ -73,11 +72,9 @@
       {#each rows as r, i (r.key + i)}
         <tr title={r.title}>
           <td class="whitespace-nowrap pr-3 font-mono">
-            {#if readonly && r.qrz}
-              <a class="-ml-2 inline-flex min-h-11 items-center rounded px-2 font-mono text-accent underline decoration-dotted underline-offset-2 hover:bg-surface-2" href={r.qrz} target="_blank" rel="noopener noreferrer" aria-label="{r.call}: QRZ lookup">{r.call}</a>
-            {:else if !readonly && (r.qrz || r.radioid)}
+            {#if r.qrz || r.radioid}
               <button type="button" class="-ml-2 inline-flex min-h-11 items-center rounded px-2 font-mono text-accent underline decoration-dotted underline-offset-2 hover:bg-surface-2" aria-haspopup="true" aria-expanded={openKey === r.key} aria-label="{r.call}: look up" onclick={(e) => toggle(r, e)}>{r.call}</button>
-            {:else}<span class="inline-flex min-h-11 items-center">{r.call}</span>{/if}
+            {:else}<span class="inline-flex min-h-11 items-center">{r.call}</span>{/if}{#if r.count && r.count > 1}<span class="ml-1 font-sans text-xs text-muted" data-testid="heard-count" title="{r.count} transmissions">×{r.count}</span>{/if}
             {#if r.person}<span class="-mt-2.5 mb-1 block max-w-[14rem] truncate font-sans text-xs text-muted sm:max-w-xs" title={r.person} data-testid="heard-person">{r.person}</span>{/if}
           </td>
           <td class="hidden pr-3 sm:table-cell">{r.mode}</td>

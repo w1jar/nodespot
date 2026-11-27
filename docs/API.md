@@ -114,7 +114,7 @@ Favorites are per mode (`mode`, default `allstar`) and may be pinned to the dash
 | POST | `/api/favorites` | `{"node", "label"?, "group"?}` | `201` `Favorite` (label defaults to the node-list callsign/description) |
 | PUT | `/api/favorites/{id}` | `{"node"?, "label"?, "group"?, "pinned"?}` | `200` `Favorite` (`pinned` is changed with the same permission as the other fields: operator or admin; viewers can read it) |
 | DELETE | `/api/favorites/{id}` | | `204` |
-| GET | `/api/favorites/stats` | | `200` `FavStats` snapshot (login required, all roles; never part of the public page) |
+| GET | `/api/favorites/stats` | | `200` `FavStats` snapshot (login required, all roles) |
 | PUT | `/api/favorites/scan` | `{"enabled": bool}` | `200` `FavStats` (operator or admin). `400` without `enabled`. Stored as setting `favstats.enabled`, default off |
 | POST | `/api/favorites/reorder` | `{"ids": [int, ...]}` | `204` (positions follow array order) |
 | GET | `/api/favorites/import/allscan` | | `{"found": bool, "path": str, "items": [{"node","label"}]}` preview from an existing AllScan install |
@@ -183,7 +183,7 @@ Snapshot = {
 
 A mode field with `"hostList": "bm"` or `"dmr-other"` in `GET /api/modes` is a text field the UI offers that list for (docs/NATIVE_NODE.md "Host lists and master pickers").
 
-**Talker and last-heard lookup.** The node reports a talker (`mode.talker` in `GET /api/node`, the SSE event `node` and each mode's `status` in `GET /api/modes`) and the rows of `GET /api/heard` with only what the network sent; a BrandMeister call often has only `id`. The API fills the empty `callsign`, `name` and `place` from the radioid.net list (by DMR ID, then by callsign) and then the cache of hamdb.org, the same lookup as Now calling. It never waits (the radioid.net index caches the IDs it read; a callsign hamdb.org has not answered yet is only queued), never overwrites what the network sent, and skips AllStar and the echo test. `place` is "City, ST" for a US caller and "City, State, Country" otherwise. A talker nobody knows stays as sent (the UI shows "ID …"). The public view's place uses the same rule.
+**Talker and last-heard lookup.** The node reports a talker (`mode.talker` in `GET /api/node`, the SSE event `node` and each mode's `status` in `GET /api/modes`) and the rows of `GET /api/heard` with only what the network sent; a BrandMeister call often has only `id`. The API fills the empty `callsign`, `name` and `place` from the radioid.net list (by DMR ID, then by callsign) and then the cache of hamdb.org, the same lookup as Now calling. It never waits (the radioid.net index caches the IDs it read; a callsign hamdb.org has not answered yet is only queued), never overwrites what the network sent, and skips AllStar and the echo test. `place` is "City, ST" for a US caller and "City, State, Country" otherwise. A talker nobody knows stays as sent (the UI shows "ID …").
 
 ## System (all roles)
 
@@ -562,64 +562,11 @@ Validation (`422 invalid_field`, the message names the field, never a value): ca
 
 nodespot downloads the five lists itself, once a day, only while digital modes are enabled. `value` is what a pick writes: the master address (dmr), the 5-digit reflector id (ysf), the TG (p25, nxdn) or the reflector designator `M17-XXX` (m17; `name` is the same, `address` and `port` the reflector's, `detail` is empty). The M17 list has no modules: the tune is `value` plus a space and the module the operator picks, for example `M17-XXX C`. Favorites (`POST /api/dv/favorites`) take the same value for `mode` `M17`, module included.
 
-## Public status view
-
-Optional, off by default (admin setting). Served on the main port. While disabled the three public endpoints answer `404 {"code":"not_found"}`. They need no session and no CSRF header (GET only), set no cookies, and are rate-limited per client address (`429 {"code":"rate_limited"}` with `Retry-After`). The data comes from dedicated structs: it never contains IP addresses, system information, favorites or users.
-
-| Method | Path | Response |
-|---|---|---|
-| GET | `/api/public/info` | `{"enabled": bool, "title": str, "loggedIn": bool}`. Always answers; `title` is empty while disabled; `loggedIn` says whether the request carries a valid session. |
-| GET | `/api/public/status` | `PublicSnapshot` |
-| GET | `/api/public/events` | SSE (below). `429` over the per-address cap (4 connections), `503` over the global cap (200). |
-
-```json
-PublicSnapshot = {
-  "title": "N0AAD AllStarLink node 2001",   // setting, else "<callsign> AllStarLink node <n>", else "AllStarLink node status"
-  "now": 1794725912,                          // server time, unix seconds
-  "callsigns": true, "showNetwork": true, "showActivity": true, "showDV": false,
-  "nodes": [{
-    "node": "2001", "info": {"callsign","description","location"} | null,
-    "stale": false, "txKeyed": false, "rxKeyed": false, "numLinks": 27,
-    "links": [{"node": "50241", "kind": "allstar", "info": {...} /* omitted when callsigns are hidden */,
-               "direction": "OUT", "mode": "T"|"R"|"L"|"C", "connected": 64, "keyed": false,
-               "sinceKey": 12 | null, "sinceUnkey": 3 | null}],
-    "network": [{"node": "1021", "callsign": "N0AAA" /* omitted when hidden */}]   // omitted when disabled or empty
-  }],
-  "activity": [{"node": "2001", "link": "50241" | "local", "callsign"?: "N0AAF", "at": 1794725900, "duration": 7, "kerchunk": false}],   // newest first, at most 25; omitted when disabled
-  "dv": {"now": DVCall | null, "heard": [DVCall]}   // only while showDV is on; omitted otherwise
-}
-DVCall = {"mode": "DMR"|"YSF"|"P25"|"NXDN"|"M17", "callsign"?, "target"?: "TG 91" | "YSF-TEST", "slot"?: 2, "at": 1794725900,
-          "name"?, "location"?}   // callsign, name and location omitted when callsigns are hidden
-```
-
-`dv` is an allowlist and exists only while the admin setting `showDV` ("Show digital modes activity", default off) is on; with it off no digital modes data is sent. `heard` has at most 10 calls, newest first; private calls are dropped. `name` and `location` come from the local radioid list or the HamDB cache only: a public request never causes a lookup. It never contains a master or server host, login state, bridge node or link state, DMR ID, identity or settings, address or version. The bridge node's own rows in `activity` carry `label` (its display name).
-
-Ages (`connected`, `sinceKey`, `sinceUnkey`) are as of `now`; the page advances them locally. Link nodes that are not node numbers, callsigns or EchoLink numbers (an address, for example) are published as `"unknown"`.
-
-SSE events: `snapshot` (`PublicSnapshot`; on connect, after a stale/recovered transition, and when an admin changes the settings), `node` (one node without `network`), `network` (`{"node", "network": [...]}`), `activity` (`{"now", "activity": [...]}`), `dv` (`{"now", "dv": {...}}`, only while `showDV` is on; coalesced to at most about one per second). A comment line (`: ping`) is sent every 20 s and a stream is closed after 6 hours (the page reconnects). If SSE is unavailable the page polls `/api/public/status` every 10 s.
-
-### Public page settings (admin)
-
-`PublicSettings = {"enabled", "title", "nodes": [str], "showCallsigns", "showNetwork", "showActivity", "showDV", "allowEmbedding", "trustProxy", "defaultTitle", "localNodes": [{"node","info"}], "clients": int}`. Defaults: disabled, empty title (automatic), `nodes: []` (all local nodes), callsigns/network/activity on, digital modes activity (`showDV`) off, embedding off, trust proxy off. Stored as settings `public.*`.
-
-| Method | Path | Body | Response |
-|---|---|---|---|
-| GET | `/api/public` | | `200` `PublicSettings` (admin) |
-| PUT | `/api/public` | any subset of `enabled`, `title` (at most 80 characters, no control characters), `nodes` (local node numbers; all of them or `[]` means all), `showCallsigns`, `showNetwork`, `showActivity`, `showDV`, `allowEmbedding`, `trustProxy` | `200` `PublicSettings`; `400 {"code":"bad_request"}` for invalid input. Applies immediately to connected visitors; disabling closes their streams. |
-
-`trustProxy`: use the last `X-Forwarded-For` entry as the client address for the rate limit and connection caps (only behind a reverse proxy or tunnel that sets it; otherwise clients could forge it).
-
-**Embedding.** `/embed` serves the same app as a chrome-less public view. Only `/embed` gets `Content-Security-Policy: frame-ancestors *` (and no `X-Frame-Options`), and only while the page is enabled and `allowEmbedding` is on. All other paths, the login page included, send `frame-ancestors 'none'` and `X-Frame-Options: DENY`.
-
-### Activity (all roles)
-
-`GET /api/activity?node=&limit=` returns recorded transmissions, newest first (`limit` 1-500, default 50; `node` filters by local node): `[{"id", "node", "link": "50241"|"local", "info": NodeInfo|null, "start": RFC3339, "duration": 7.4 /* seconds */, "kerchunk": false}]`. The server records a row when a link or the local receiver unkeys (keyups under 0.5 s are ignored, under 1.5 s are flagged `kerchunk`); rows older than 7 days are deleted daily and the table is capped at 10,000 rows.
-
 ### Favorites activity scan
 
 `FavStats = {"enabled": bool, "rate": int, "effRate": int, "backoff": bool, "retryAt": RFC3339 | null, "backoffReason": "rate-limit" | "service-error" | "network-error" | "", "updated": RFC3339 | null, "checking": "<node>" | "", "next": "<node>" | "", "nextAt": RFC3339 | null, "checked": int, "total": int, "checkedAt": {"<node>": RFC3339}, "stats": {"<node>": Activity}, "removed": ["<node>"]}` (`removed` is always `[]` in the snapshot; `checking` is the node being requested now (kept for compatibility), `next` the node that will be requested next (same ordering as the poller; `""` when off, nobody is watching, nothing is eligible or all are in their skip period), `nextAt` when the next request is due, `total` the eligible favorites, `checked` how many have an answer in the current pass, `checkedAt` each node's last attempt including offline ones; `updated` is kept for compatibility) with `Activity = {"rxPct": int | null, "linkCnt": int, "active": bool, "webTx": bool, "keyed": bool, "txAvg": int, "lastSeen": RFC3339}`. See `docs/FAVSCAN.md`.
 
-One server-side poller queries `https://stats.allstarlink.org/api/stats/<node>` (base URL: `[favstats] url`) for each distinct favorite in 2000..999999 (regular node numbers; EchoLink numbers 3000000..3999999 and private numbers below 2000 are skipped and show no values) that is not one of this machine's nodes, round robin, one request at a time. It runs only while the scan is on and at least one logged-in SSE client is connected (public-page visitors do not count); values are kept 10 minutes after the last viewer leaves. Requests are evenly paced, one every 60/rate seconds from the first one (`[favstats] rate`, default 20 per minute = one every 3 s, at most 25; never closer than 3 s) and paused with exponential backoff (15 s up to 5 min, `Retry-After` honored) after HTTP 429 or an error. The rate is adaptive: each 429 halves the rate in use (`effRate`, not below 3 per minute) and every 20 consecutive successful requests raise it by 1 per minute, up to `rate`. A 429 never replaces or clears a node's values. Nodes never queried go first, then the one queried longest ago. `retryAt` is when the current backoff ends (`null` otherwise). `[favstats] log = true` logs one line per request (node, status, duration, rate, gap, Retry-After) and each rate change to the journal. `rxPct` is `round(100*totaltxtime/apprptuptime)` and is `null` unless uptime is over 60 s and TX time over 10 s. `keyed` is derived from changes of `totalkeyups` / `totaltxtime` between polls (the API's own `keyed` flag is only used for the first sample); counter resets and implausible jumps count as no activity. `txAvg` is a moving average of the recent TX share. `active` / `webTx` are the node's own `Status == "Active"` and `access_webtransceiver`. `backoff` is true while polling is paused and `backoffReason` says why (`rate-limit` = HTTP 429, `service-error` = HTTP 5xx, `network-error` = timeout or connection error; `""` otherwise); `updated` is the time of the last successful poll. Only the fields above are read from the response; it is never stored, logged or forwarded.
+One server-side poller queries `https://stats.allstarlink.org/api/stats/<node>` (base URL: `[favstats] url`) for each distinct favorite in 2000..999999 (regular node numbers; EchoLink numbers 3000000..3999999 and private numbers below 2000 are skipped and show no values) that is not one of this machine's nodes, round robin, one request at a time. It runs only while the scan is on and at least one logged-in SSE client is connected; values are kept 10 minutes after the last viewer leaves. Requests are evenly paced, one every 60/rate seconds from the first one (`[favstats] rate`, default 20 per minute = one every 3 s, at most 25; never closer than 3 s) and paused with exponential backoff (15 s up to 5 min, `Retry-After` honored) after HTTP 429 or an error. The rate is adaptive: each 429 halves the rate in use (`effRate`, not below 3 per minute) and every 20 consecutive successful requests raise it by 1 per minute, up to `rate`. A 429 never replaces or clears a node's values. Nodes never queried go first, then the one queried longest ago. `retryAt` is when the current backoff ends (`null` otherwise). `[favstats] log = true` logs one line per request (node, status, duration, rate, gap, Retry-After) and each rate change to the journal. `rxPct` is `round(100*totaltxtime/apprptuptime)` and is `null` unless uptime is over 60 s and TX time over 10 s. `keyed` is derived from changes of `totalkeyups` / `totaltxtime` between polls (the API's own `keyed` flag is only used for the first sample); counter resets and implausible jumps count as no activity. `txAvg` is a moving average of the recent TX share. `active` / `webTx` are the node's own `Status == "Active"` and `access_webtransceiver`. `backoff` is true while polling is paused and `backoffReason` says why (`rate-limit` = HTTP 429, `service-error` = HTTP 5xx, `network-error` = timeout or connection error; `""` otherwise); `updated` is the time of the last successful poll. Only the fields above are read from the response; it is never stored, logged or forwarded.
 
 ## Server-Sent Events: `GET /api/events`
 

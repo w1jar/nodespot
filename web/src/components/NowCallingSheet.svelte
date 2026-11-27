@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The Now Calling details sheet, shared by the app and the public page. The caller passes the rows and links; `children` adds more (the app's Recent list).
+  // The Now Calling details sheet. The caller passes the rows and links; `children` adds more (the app's Recent list).
   import type { Snippet } from 'svelte';
   import type { SheetRow } from '../lib/nowcalling';
   import X from '@lucide/svelte/icons/x';

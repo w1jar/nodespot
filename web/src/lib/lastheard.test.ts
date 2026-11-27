@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { callItems, heardItems, mergeHeard, pubHeardItems, targetCell } from './lastheard.ts';
+import { callItems, collapseHeard, heardItems, mergeHeard, targetCell } from './lastheard.ts';
 import type { Heard, NowCall } from './types';
 
 const h = (o: Partial<Heard> = {}): Heard => ({ mode: 'bm', callsign: 'N0CALL', target: '91', start: '2026-11-20T10:00:00Z', end: '2026-11-20T10:00:05Z', ...o });
@@ -41,15 +41,6 @@ test('mergeHeard: newest first, the same call from both sources once, limited', 
   assert.deepEqual(mergeHeard(undefined, undefined), []);
 });
 
-test('pubHeardItems: nothing unless the page shows heard calls; never a radioid link', () => {
-  const snap = { showHeard: true, heard: [{ mode: 'bm', callsign: 'N0CALL', target: '91', at: 100, duration: 3 }, { mode: 'ysf', target: 'YSF-TEST', at: 200, duration: 2 }] };
-  const rows = pubHeardItems(snap);
-  assert.deepEqual(rows.map((r) => r.call), ['YSF caller', 'N0CALL']);
-  assert.ok(rows.every((r) => r.radioid === ''));
-  assert.deepEqual(pubHeardItems({ ...snap, showHeard: false }), []);
-  assert.deepEqual(pubHeardItems(null), []);
-});
-
 test('callItems: the place is "City, ST" for US callers and "City, Country" otherwise, else the location', () => {
   const [us] = callItems([c({ kind: 'bm', call: 'N0CALL', first: 'Pat', city: 'Springfield', state: 'Illinois', country: 'United States' })]);
   assert.match(us.person, /Springfield, IL/);
@@ -59,4 +50,31 @@ test('callItems: the place is "City, ST" for US callers and "City, Country" othe
   assert.match(loc.person, /Sampleburg, ST/);
   const [as] = callItems([c({ kind: 'allstar', desc: 'Hub (fake)', city: 'Springfield', state: 'Illinois' })]);
   assert.equal(as.person, 'Hub (fake)');
+});
+
+test('mergeHeard: the same AllStar transmission from both sources is one row, the resolved one', () => {
+  const heard = [h({ mode: 'allstar', callsign: '1997', name: 'Fav Hub', target: '1997', start: '2026-11-20T10:05:01Z', end: '2026-11-20T10:05:09Z' })];
+  const recent = [c({ call: 'N1CALL', target: '1997', desc: 'Example Hub', node: '1997', start: '2026-11-20T10:05:00Z', end: '2026-11-20T10:05:09Z' })];
+  const rows = mergeHeard(recent, heard);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].call, 'N1CALL');
+  assert.equal(rows[0].person, 'Example Hub');
+  // Far apart in time: two transmissions.
+  const later = [h({ mode: 'allstar', callsign: '1997', target: '1997', start: '2026-11-20T10:09:00Z', end: '2026-11-20T10:09:05Z' })];
+  assert.equal(mergeHeard(recent, later).length, 2);
+});
+
+test('collapseHeard: consecutive repeats become one row with a count; another station in between breaks the run', () => {
+  const rows = mergeHeard(undefined, [
+    h({ mode: 'allstar', callsign: 'N1CALL', target: '1997', start: '2026-11-20T10:00:00Z', end: '2026-11-20T10:00:05Z' }),
+    h({ mode: 'allstar', callsign: 'N1CALL', target: '1997', start: '2026-11-20T10:01:00Z', end: '2026-11-20T10:01:05Z' }),
+    h({ mode: 'allstar', callsign: 'N1CALL', target: '1997', start: '2026-11-20T10:02:00Z', end: '2026-11-20T10:02:05Z' }),
+    h({ mode: 'allstar', callsign: 'N2CALL', target: '1997', start: '2026-11-20T10:03:00Z', end: '2026-11-20T10:03:05Z' }),
+    h({ mode: 'allstar', callsign: 'N1CALL', target: '1997', start: '2026-11-20T10:04:00Z', end: '2026-11-20T10:04:05Z' }),
+  ]);
+  assert.deepEqual(rows.map((r) => [r.call, r.count]), [['N1CALL', undefined], ['N2CALL', undefined], ['N1CALL', 3]]);
+  assert.equal(rows[2].at, Date.parse('2026-11-20T10:02:05Z'));
+  const one = [rows[0]];
+  assert.equal(collapseHeard(one)[0].count, undefined);
+  assert.equal(collapseHeard([rows[0], { ...rows[0], target: 'Node 2000' }]).length, 2);
 });

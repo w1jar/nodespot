@@ -322,7 +322,7 @@ Before the tone is allowed: AMI connected, device `present`, node known to app_r
 | Asterisk rewriting `simpleusb.conf` (formatting, comments, templates) | Diff shown after save; history record via helper; bench test in section 8; fall back to the config-editor pipeline if the rewrite is unacceptable |
 | Tone or `Y` on a device with no channel | Pre-flight checks 6.4; suspected NULL-owner path in the driver, test on hardware before enabling the tone button |
 | AMI user lacks `command` permission or the connection is shared with others | `GET /api/radio` reports `no_command_permission` with the exact fix text |
-| Public exposure | Nothing from this feature goes to the public page; viewer role gets no access; device paths and serials appear only for operator/admin |
+| Exposure | Viewer role gets no access; device paths and serials appear only for operator/admin |
 | SD-card wear from AMI temp files | Meter capped at 2 Hz, a single poller, auto-stop, 5 minute cap |
 | Regulatory | Station identification and license conditions are the operator's responsibility; the confirmation text says so and the tone is never sent without it |
 

@@ -49,13 +49,13 @@ Remote control needs each node's AMI on TCP 5038. AMI logins and commands are pl
 
 ## 4. Proposed design if revived
 
-A read-only multi-node public page, built on nodespot's existing Public view. That view is `GET /api/public/status` and `GET /api/public/events` (SSE), with `GET /api/public/info`. They need no login and return 404 unless an admin enables them. Admin settings are `GET/PUT /api/public` (`internal/api/handlers_public.go`, `web/src/components/PublicSettings.svelte`).
+A read-only multi-node page. nodespot no longer has a public (logged-out) status page, so this would need a new read-only endpoint on each peer, behind its own opt-in setting.
 
 - The admin lists peer nodes that run nodespot, one URL per peer, for example `https://node2001.example/`.
 - The page gets each peer's own public status over HTTP(S).
 - Local nodes on the same host come from the local Asterisk, as today.
 - No AMI over the network. No remote control.
-- Each peer decides what it publishes through its own Public view settings (callsigns, network, activity).
+- Each peer decides what it publishes through its own opt-in setting.
 - Layout: one card or table per node, like Supermon's link page.
 
 ### Fetch options
@@ -75,4 +75,3 @@ The leaning is server-side, because of CORS and viewer privacy. It is not decide
 - Server-side or browser fetch?
 - Peers that do not run nodespot: use stats.allstarlink.org as a fallback source?
 - Refresh rate and caching. SSE per peer, or polling?
-- Does the page live at the existing public URL, or at a new one?

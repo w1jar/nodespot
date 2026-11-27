@@ -9,12 +9,12 @@ import (
 func TestHubDropsSlowClients(t *testing.T) {
 	var last atomic.Int64
 	h := newHub(func(n int) { last.Store(int64(n)) })
-	slow := h.add(true)
-	fast := h.add(false)
+	slow := h.add()
+	fast := h.add()
 	if h.count() != 2 || last.Load() != 2 {
 		t.Fatal("count")
 	}
-	msg := sseMsg{priv: []byte("p"), pub: []byte("v")}
+	msg := sseMsg{all: []byte("p")}
 	start := time.Now()
 	// The fast client keeps up; the slow one never reads.
 	for i := 0; i < clientBuffer; i++ {

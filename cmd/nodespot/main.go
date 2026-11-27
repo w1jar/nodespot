@@ -263,8 +263,7 @@ func run(cfgPath string, dev, demoMode bool) error {
 		HostLists: hl, RadioID: rid, HamDB: hdb, FavStats: favScan, Schedules: sched, Version: version,
 		UI: webui.Handler(), AllowedOrigins: origins, Logger: logger,
 		Log: ring, Config: cfg, ConfigPath: cfgPath, Firewall: firewall,
-		PublicDefaultEnabled: demoMode,
-		Backup:               bk, Restart: restart,
+		Backup: bk, Restart: restart,
 	})
 	bg(func() { srv.Run(ctx) })
 	bg(func() { cleanupSessions(ctx, st) })

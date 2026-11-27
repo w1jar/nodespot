@@ -13,11 +13,11 @@ function files(dir: URL, rel = ''): string[] {
   return out;
 }
 
-for (const f of ['Dashboard', 'Modes', 'public/PublicView', 'NowCalling', 'Schedules']) {
+for (const f of ['Dashboard', 'Modes', 'NowCalling', 'Schedules']) {
   test(f + ' exists', () => assert.ok(files(root).includes(f + '.svelte')));
 }
 
-for (const f of ['LastHeardTable', 'NowCalling', 'NowCallingSheet', 'public/PublicView'].map((x) => x + '.svelte')) {
+for (const f of ['LastHeardTable', 'NowCalling', 'NowCallingSheet'].map((x) => x + '.svelte')) {
   test(f + ' each keys include the index', () => {
     const src = readFileSync(new URL(f, root), 'utf8');
     const each = src.match(/\{#each [^}]*\([^}]*\)\}/g) ?? [];

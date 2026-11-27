@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -343,5 +344,66 @@ func TestVocoderStatusJobStarted(t *testing.T) {
 	r["systemctl list-units"] = resp{}
 	if st, _ = o.VocoderStatus(context.Background()); st.Job != "" || st.JobStarted != "" {
 		t.Fatalf("%+v", st)
+	}
+}
+
+func TestWaitVocoderInstall(t *testing.T) {
+	ctx := context.Background()
+	started := func(context.Context) (VocoderStatus, error) { return VocoderStatus{Job: "running"}, nil }
+	seq := func(sts ...VocoderStatus) func(context.Context) (VocoderStatus, error) {
+		i := 0
+		return func(context.Context) (VocoderStatus, error) {
+			st := sts[min(i, len(sts)-1)]
+			i++
+			return st, nil
+		}
+	}
+	run := func(install, status func(context.Context) (VocoderStatus, error)) (string, error) {
+		var buf bytes.Buffer
+		err := waitVocoderInstall(ctx, &buf, install, status, time.Millisecond, time.Minute)
+		return buf.String(), err
+	}
+
+	out, err := run(started, seq(VocoderStatus{Job: "running", JobLog: "a\n"},
+		VocoderStatus{Job: "running", JobLog: "a\nb\n"},
+		VocoderStatus{Job: "done", JobLog: "a\nb\nvocoder installed\n", Installed: true, Active: true}))
+	if err != nil || out != "installing the vocoder (md380-emu); this can take a few minutes\na\nb\nvocoder installed\n" {
+		t.Errorf("success: %q %v", out, err)
+	}
+
+	already := func(context.Context) (VocoderStatus, error) { return VocoderStatus{Installed: true, Active: true}, nil }
+	if out, err = run(already, nil); err != nil || !strings.Contains(out, "already installed") {
+		t.Errorf("already: %q %v", out, err)
+	}
+
+	_, err = run(started, seq(VocoderStatus{Job: "failed", JobLog: "E: unable to locate package\n"}))
+	if err == nil || !strings.Contains(err.Error(), "unable to locate package") {
+		t.Errorf("failed job: %v", err)
+	}
+	if _, err = run(started, seq(VocoderStatus{Job: "done", JobLog: "ok\n"})); err == nil {
+		t.Error("done but not active accepted")
+	}
+	if _, err = run(started, seq(VocoderStatus{})); err == nil || !strings.Contains(err.Error(), "vanished") {
+		t.Errorf("lost job: %v", err)
+	}
+
+	for name, in := range map[string]error{
+		"unsupported": fmt.Errorf("%w: %s", ErrVocoderUnsupported, `Debian "bullseye" is not supported (bookworm and trixie are)`),
+		"clock":       ErrVocoderClockUnset,
+	} {
+		bad := func(context.Context) (VocoderStatus, error) { return VocoderStatus{}, in }
+		_, err = run(bad, nil)
+		if err == nil || strings.Contains(err.Error(), "not_supported") || strings.Contains(err.Error(), "clock_unset") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err = run(func(context.Context) (VocoderStatus, error) { return VocoderStatus{}, ErrBusy }, nil); err == nil || !strings.Contains(err.Error(), "busy") {
+		t.Errorf("busy: %v", err)
+	}
+
+	var buf bytes.Buffer
+	err = waitVocoderInstall(ctx, &buf, started, seq(VocoderStatus{Job: "running"}), time.Millisecond, 5*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "did not finish") {
+		t.Errorf("timeout: %v", err)
 	}
 }
