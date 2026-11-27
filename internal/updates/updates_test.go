@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,14 +35,31 @@ func (f *fh) UpdateApply(context.Context) (helper.Status, error) {
 	return f.st, f.err
 }
 
-func latestServer(t *testing.T, body string, hits *atomic.Int32, queries *[]string) *httptest.Server {
+// queryLog records the query strings the test server saw. The server's
+// handler goroutines write it while the test reads it, so it is locked.
+type queryLog struct {
+	mu sync.Mutex
+	q  []string
+}
+
+func (l *queryLog) add(s string) { l.mu.Lock(); l.q = append(l.q, s); l.mu.Unlock() }
+func (l *queryLog) reset()       { l.mu.Lock(); l.q = nil; l.mu.Unlock() }
+func (l *queryLog) get() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.q...)
+}
+
+func latestServer(t *testing.T, body string, hits *atomic.Int32, queries *queryLog) *httptest.Server {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The query is recorded before the hit is counted, so a test that
+		// waits for a hit count sees every query of those hits.
+		if queries != nil {
+			queries.add(r.URL.RawQuery)
+		}
 		if hits != nil {
 			hits.Add(1)
-		}
-		if queries != nil {
-			*queries = append(*queries, r.URL.RawQuery)
 		}
 		if r.URL.Path != "/latest.json" && r.URL.Path != "/latest-beta.json" {
 			http.NotFound(w, r)
@@ -110,16 +128,16 @@ func TestHTTPLatestCases(t *testing.T) {
 
 func TestCacheBusterOnlyForManualCheck(t *testing.T) {
 	var hits atomic.Int32
-	var q []string
-	ts := latestServer(t, `{"version":"0.3.0"}`, &hits, &q)
+	var ql queryLog
+	ts := latestServer(t, `{"version":"0.3.0"}`, &hits, &ql)
 	f := HTTPLatest(ts.URL, nil)
 	f(context.Background(), "stable", false)
 	f(context.Background(), "stable", true)
-	if len(q) != 2 || q[0] != "" || !strings.HasPrefix(q[1], "t=") || len(q[1]) < 10 {
+	if q := ql.get(); len(q) != 2 || q[0] != "" || !strings.HasPrefix(q[1], "t=") || len(q[1]) < 10 {
 		t.Fatalf("queries: %q", q)
 	}
 	// Manager.Check is the manual check: buster; Run is the background check: none
-	q = nil
+	ql.reset()
 	m := New(&fh{st: helper.Status{Installed: "0.2.0", Job: "idle"}}, "0.2.0", f)
 	if _, err := m.Check(context.Background()); err != nil {
 		t.Fatal(err)
@@ -134,7 +152,7 @@ func TestCacheBusterOnlyForManualCheck(t *testing.T) {
 	}
 	cancel()
 	<-done
-	if len(q) < 2 || !strings.HasPrefix(q[0], "t=") || q[1] != "" {
+	if q := ql.get(); len(q) < 2 || !strings.HasPrefix(q[0], "t=") || q[1] != "" {
 		t.Fatalf("queries: %q", q)
 	}
 }
