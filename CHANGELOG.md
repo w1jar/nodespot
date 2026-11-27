@@ -6,6 +6,7 @@ Release notes are taken from the section of the tag being released
 ## [0.0.1] - 2026-11-27
 
 ### Changed
+- The browser tab title shows the station callsign: "N0CALL · Settings", "N0CALL · Modes", and just "N0CALL" on the dashboard. It follows the callsign when it is saved. Signed out, or with no callsign set, it stays "nodespot" ("nodespot · Settings"); the public page keeps its own title.
 - Audio tuning, step 1: the instantaneous verdict and the live numbers are replaced by a live bar and a held "Last transmission" card with one plain sentence (Sounds good / Too quiet / Distorting) and a collapsed Details. The node now publishes `radio.lastRx` (also on `GET /api/radio/input`) per transmission, measured after the static gain and before the AGC; kerchunks under 0.5 s of speech do not replace it.
 - The radio level sliders move in the sound chip's own steps and show dB when the chip has a dB table. `rxVolume` and `txVolume` fractions snap to that step grid, so values read back exactly.
 - BrandMeister: with the node's `-debug` flag the log shows the login result, each subscription sent (session type and number), `tx start`/`tx end` and `rx start`/`rx end` of every call (session type, source, destination, packets) and, at most once a minute per type, server failure codes, reports, a close and packet types the client does not handle.
