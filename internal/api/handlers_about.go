@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/config"
-	"github.com/artw1/aslcp/internal/diag"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/config"
+	"github.com/w1jar/nodespot/internal/diag"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // AboutJSON is the API object of GET /api/about.
@@ -67,7 +67,7 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request, u sto
 	rep := s.buildReport(ctx)
 	s.d.Logger.Printf("diagnostics downloaded by %s", u.Username)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="aslcp-diagnostics-%s.txt"`, rep.Now.Format("2006-01-02")))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="nodespot-diagnostics-%s.txt"`, rep.Now.Format("2006-01-02")))
 	_, _ = w.Write([]byte(rep.Render()))
 }
 

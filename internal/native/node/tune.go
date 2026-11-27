@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // TuneFile is the name of the file, next to the node config, that holds
@@ -227,6 +227,12 @@ func (e *Engine) migrate() {
 				tuneChanged = true
 			}
 		}
+	}
+	if c.Station.AudioTuned == nil && c.Station.legacyTuned() {
+		// A config from before the tuning record that already has audio
+		// levels was set up: never remind it.
+		e.markTuned(c, false)
+		cfgChanged = true
 	}
 	e.mu.Unlock()
 	if tuneChanged {

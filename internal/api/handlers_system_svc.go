@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // SvcHost is the part of the helper behind the ASL services switch and the
@@ -41,7 +41,7 @@ func (s *Server) svcHost(w http.ResponseWriter) SvcHost {
 func (s *Server) svcError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, helper.ErrPort80Held):
-		writeErr(w, http.StatusConflict, "port80_held", "ASLCP is using port 80. Move ASLCP to another port first.")
+		writeErr(w, http.StatusConflict, "port80_held", "nodespot is using port 80. Move nodespot to another port first.")
 	case errors.Is(err, helper.ErrSvcNotInstalled):
 		writeErr(w, http.StatusNotFound, "not_installed", "that service is not installed on this node")
 	case errors.Is(err, helper.ErrPort80Busy):
@@ -49,9 +49,9 @@ func (s *Server) svcError(w http.ResponseWriter, err error) {
 	case errors.Is(err, helper.ErrPort80Unchecked):
 		writeErr(w, http.StatusConflict, "port80_unchecked", "cannot check whether port 80 is free (ss is not available)")
 	case errors.Is(err, helper.ErrAlreadyPort80):
-		writeErr(w, http.StatusConflict, "already_port80", "ASLCP already uses port 80")
+		writeErr(w, http.StatusConflict, "already_port80", "nodespot already uses port 80")
 	case errors.Is(err, helper.ErrNotOnPort80):
-		writeErr(w, http.StatusConflict, "not_port80", "ASLCP is not on port 80")
+		writeErr(w, http.StatusConflict, "not_port80", "nodespot is not on port 80")
 	default:
 		s.systemError(w, err)
 	}
@@ -121,7 +121,7 @@ type webPortPut struct {
 	Action string `json:"action"` // move | back | confirm
 }
 
-// handleWebPortPut: move and back restart ASLCP, so their audit row is
+// handleWebPortPut: move and back restart nodespot, so their audit row is
 // written before the helper call (the answer may never arrive over the old
 // connection). confirm is written after it.
 func (s *Server) handleWebPortPut(w http.ResponseWriter, r *http.Request, u store.User) {

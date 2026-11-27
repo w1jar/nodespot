@@ -3,7 +3,7 @@
   import type { SysLogs, SysServices } from '../../lib/types';
   import Refresh from '@lucide/svelte/icons/refresh-cw';
 
-  let units = $state<string[]>([]), unit = $state('aslcp-node'), lines = $state(200), since = $state('');
+  let units = $state<string[]>([]), unit = $state('nodespot-node'), lines = $state(200), since = $state('');
   let logs = $state<SysLogs | null>(null), logErr = $state(''), logBusy = $state(false);
   let svc = $state<SysServices | null>(null), svcErr = $state('');
 

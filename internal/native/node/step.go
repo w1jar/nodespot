@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // stepParams are the station settings the 20 ms step uses, derived from
@@ -13,25 +13,39 @@ import (
 type stepParams struct {
 	hang      time.Duration
 	txTimeout time.Duration
-	courtesy  bool
-	agc       audio.AGCParams
+	rxAGC     audio.AGCParams // radio to network
+	txAGC     audio.AGCParams // network to radio
 	modeAGC   bool
 	radioAGC  bool
 	id        idParams
 	callsign  string
 	cw        audio.CWOptions
 	voice     string
+
+	rxGainDb, txGainDb float64
+	flatAudio          bool // software pre- and de-emphasis
+	plFilter           bool
+	rxOnDelay          time.Duration
+	txOnDelay          time.Duration // key-up delay before network audio
+	hangTail           time.Duration // extra time added to hang
 }
 
-func paramsFor(c *Config) stepParams {
+// paramsFor derives the step settings; sa818 says the radio interface has an
+// SA818 (which decides the PL filter default).
+func paramsFor(c *Config, sa818 bool) stepParams {
 	st := c.Station
 	p := stepParams{
 		hang:      st.Advanced.Hang(),
 		txTimeout: st.Advanced.TxTimeout(),
-		courtesy:  st.Advanced.Courtesy(),
 		callsign:  st.Callsign,
 		cw:        st.ID.CW(),
 		voice:     st.ID.VoiceFile,
+
+		rxGainDb: st.Advanced.RxGainDB, txGainDb: st.Advanced.TxGainDB,
+		flatAudio: st.Advanced.FlatAudio,
+		plFilter:  st.Advanced.PL(sa818),
+		rxOnDelay: st.Advanced.RxOnDelay(), hangTail: st.Advanced.TxOffDelay(),
+		txOnDelay: st.Advanced.TxOnDelay(),
 		id: idParams{
 			on:       st.ID.IDOn() && st.Callsign != "",
 			interval: st.ID.Interval(),
@@ -39,13 +53,14 @@ func paramsFor(c *Config) stepParams {
 			endQuiet: st.ID.EndQuiet(),
 		},
 	}
-	p.agc, p.modeAGC, p.radioAGC = st.Advanced.AGC()
+	p.rxAGC, p.txAGC, p.modeAGC, p.radioAGC = st.Advanced.AGC()
 	return p
 }
 
 // simplex is the radio-side state the step keeps. Guarded by Engine.mu.
 type simplex struct {
 	ptt       bool
+	pttAt     time.Time // when PTT last keyed
 	hangUntil time.Time
 	// pttStuck: unkeying failed, so the transmitter may still be keyed
 	// although ptt is false. Every step tries to unkey again.
@@ -55,6 +70,9 @@ type simplex struct {
 	rfStart  time.Time // a local transmission into the receiver began
 	rfSentTo mode.Mode // the mode that received its audio
 	rfLocked bool      // timed out: ignore the carrier until it drops
+	// rfOn: a local transmission is being received and forwarded to the
+	// active mode (for the status).
+	rfOn bool
 
 	netStart time.Time // the network started keying the transmitter
 	txLocked bool      // timed out: ignore the network until it stops
@@ -65,11 +83,35 @@ type simplex struct {
 	netPlaying bool
 	prebufAt   time.Time // when the spurt's first frame was seen waiting
 
-	tone audio.Source // courtesy tone playing
-	id   audio.Source // ID playing
-	idT  idTimer
+	// netDropped counts frames of the active mode's audio the node threw
+	// away rather than played: the receiver had priority (a local station
+	// transmitting) or the transmit timeout had locked the network out.
+	// It restarts when the active mode changes.
+	netDropped uint64
+
+	id  audio.Source // ID playing
+	idT idTimer
+
+	// tone is the transmit test tone (TestTone), nil when none; it starts
+	// once the transmitter has been keyed for the key-up delay and is
+	// dropped at toneLimit whatever happens.
+	tone      audio.Source
+	toneLimit time.Time
 
 	modeAGC, radioAGC *audio.AGC
+	// rxAcc sums up the local transmission in progress; lastRx is the
+	// summary of the last one long enough to judge, kept until the next.
+	rxAcc  *audio.RxAccum
+	lastRx *audio.RxSummary
+	// auto is the receive auto-set in progress (see autoset.go).
+	auto *autoRun
+	// Station audio conditioning: PL high-pass and de-emphasis on the way
+	// from the radio, pre-emphasis on the way to it.
+	rxPL     *audio.HighPass
+	rxDeemph *audio.Emphasis
+	txPre    *audio.Emphasis
+
+	cosSince time.Time // the carrier has been present since (zero: absent)
 
 	// rx is the receive level over the last 100 ms, taken from every frame
 	// the sound chip delivers (before the AGC); rxAt is when the last one
@@ -117,6 +159,7 @@ func (e *Engine) Step(now time.Time) {
 		e.retryUnkey(now)
 	}
 
+	e.autosetTick(now)
 	// Radio side: a local station transmitting into our receiver. While
 	// we transmit the receiver hears nothing of use (simplex).
 	carrier := e.o.Radio.Carrier()
@@ -124,22 +167,38 @@ func (e *Engine) Step(now time.Time) {
 		s.cos = carrier
 		e.publishOn(EventCOS, carrier, now)
 	}
-	rfActive := carrier && !s.ptt
+	// The carrier counts as a received signal after it has been present for
+	// the receive-on delay. While we transmit it is not trusted, and the
+	// delay starts again from the moment we unkey.
+	switch {
+	case !carrier:
+		s.cosSince = time.Time{}
+	case s.ptt, s.cosSince.IsZero():
+		s.cosSince = now
+	}
+	rfActive := carrier && !s.ptt && now.Sub(s.cosSince) >= p.rxOnDelay
 	if !carrier {
 		s.rfLocked = false
 	}
 	e.stepRF(now, m, rfActive)
+	if on := rfActive && !s.rfLocked && m != nil; on != s.rfOn {
+		s.rfOn = on
+		e.publishOn(EventRx, on, now)
+	}
 
 	// Network side: the active mode's audio for the radio.
 	var nf audio.Frame
 	haveNet, netTalking := false, false
 	if m != nil {
 		if rfActive {
-			drain(m.Recv()) // the receiver has priority
+			s.netDropped += uint64(drain(m.Recv())) // the receiver has priority
 			s.netPlaying, s.prebufAt = false, time.Time{}
 		} else {
 			e.prebuffer(now, m)
-			if s.netPlaying {
+			// After the network keys the transmitter its audio waits for
+			// the key-up delay, so the first word goes out on the air.
+			keyedUp := p.txOnDelay <= 0 || (s.ptt && now.Sub(s.pttAt) >= p.txOnDelay)
+			if s.netPlaying && (keyedUp || s.txLocked) {
 				select {
 				case nf = <-m.Recv():
 					haveNet = true
@@ -153,6 +212,7 @@ func (e *Engine) Step(now time.Time) {
 		s.netStart, s.txLocked = time.Time{}, false
 		s.netPlaying, s.prebufAt = false, time.Time{}
 		s.modeAGC.Reset()
+		s.txPre.Reset()
 	}
 	wantNet := netTalking && !rfActive && !s.txLocked
 	if wantNet {
@@ -164,35 +224,49 @@ func (e *Engine) Step(now time.Time) {
 			e.logf(now, "transmit timeout: the network has keyed the radio for %s", p.txTimeout)
 		}
 	}
+	if haveNet && !wantNet {
+		s.netDropped++ // locked out by the transmit timeout
+	}
 
 	// Mix what goes on the air.
 	var out audio.Frame
 	if wantNet && haveNet {
 		out = nf
+		audio.ApplyGain(&out, p.txGainDb)
+		if p.flatAudio {
+			s.txPre.Process(&out)
+		}
 		if p.modeAGC {
-			s.modeAGC.Process(&out, p.agc)
+			s.modeAGC.Process(&out, p.txAGC)
 		}
 	}
-	if rfActive {
-		s.tone = nil
-	}
-	tonePlaying := false
+	// The test tone: it gives way to a local station or the network.
+	toneOn := false
 	if s.tone != nil {
-		var tf audio.Frame
-		if s.tone.Next(&tf) {
-			mix(&out, &tf)
-			tonePlaying = true
-		} else {
-			s.tone = nil
+		switch {
+		case rfActive || netTalking:
+			e.endTone(now, "the test tone stopped: the radio or the network became busy")
+		case now.After(s.toneLimit):
+			e.endTone(now, "")
+		case s.ptt && now.Sub(s.pttAt) >= p.txOnDelay:
+			var f audio.Frame
+			if s.tone.Next(&f) {
+				mix(&out, &f)
+				toneOn = true
+			} else {
+				e.endTone(now, "")
+			}
+		default:
+			toneOn = true // keying up
 		}
 	}
-	if wantNet || tonePlaying {
+	if wantNet || toneOn {
 		s.idT.transmitted(now, p.id)
 	}
 
 	// The station ID: RF only.
 	if s.id == nil {
-		inTail := s.ptt && !wantNet && !tonePlaying
+		inTail := s.ptt && !wantNet && !toneOn
 		if why := s.idT.due(now, p.id, s.ptt, inTail, rfActive); why != idNone {
 			if src := e.idSource(now); src != nil {
 				if !s.ptt {
@@ -216,9 +290,9 @@ func (e *Engine) Step(now time.Time) {
 	}
 
 	// PTT.
-	content := wantNet || tonePlaying || idPlaying
+	content := wantNet || idPlaying || toneOn
 	if content {
-		s.hangUntil = now.Add(p.hang)
+		s.hangUntil = now.Add(p.hang + p.hangTail)
 	}
 	want := !rfActive && (content || (s.ptt && now.Before(s.hangUntil)))
 	if want != s.ptt {
@@ -263,6 +337,9 @@ func (e *Engine) stepRF(now time.Time, m mode.Mode, rfActive bool) {
 	if s.rfStart.IsZero() {
 		s.rfStart = now
 		s.radioAGC.Reset()
+		s.rxAcc.Reset()
+		s.rxPL.Reset()
+		s.rxDeemph.Reset()
 	}
 	if now.Sub(s.rfStart) >= p.txTimeout {
 		s.rfLocked = true
@@ -285,11 +362,23 @@ func (e *Engine) stepRF(now time.Time, m mode.Mode, rfActive bool) {
 		}
 		s.rx.Add(&f)
 		s.rxAt = now
+		e.autosetFrame(&f)
+		// The audio is conditioned the same way with no mode to send it
+		// to, so the tuning page can measure it.
+		if p.plFilter {
+			s.rxPL.Process(&f)
+		}
+		if p.flatAudio {
+			s.rxDeemph.Process(&f)
+		}
+		audio.ApplyGain(&f, p.rxGainDb)
+		pre := f
+		if p.radioAGC {
+			s.radioAGC.Process(&f, p.rxAGC)
+		}
+		s.rxAcc.Add(&pre, &f, s.radioAGC.GainDb(), p.rxAGC.MaxGainDb, p.radioAGC)
 		if m == nil {
 			continue
-		}
-		if p.radioAGC {
-			s.radioAGC.Process(&f, p.agc)
 		}
 		m.Send(f)
 		s.rfSentTo = m
@@ -310,19 +399,20 @@ func (e *Engine) drainRX(c <-chan audio.Frame, now time.Time) {
 }
 
 // endRF finishes a local transmission: the mode that got its audio hears
-// the end, and the courtesy tone follows on the radio.
+// the end. The radio is not keyed for it.
 func (e *Engine) endRF(now time.Time, m mode.Mode) {
 	s := &e.sx
+	e.autosetRFEnd()
+	if sum, ok := s.rxAcc.Summary(now); ok {
+		s.lastRx = &sum
+	}
+	s.rxAcc.Reset()
 	sent := s.rfSentTo
-	locked := s.rfLocked
 	s.rfStart, s.rfSentTo = time.Time{}, nil
 	if sent == nil {
 		return
 	}
 	sent.EndTx()
-	if e.params.courtesy && sent == m && !locked {
-		s.tone = audio.CourtesyTone()
-	}
 }
 
 // idSource builds the ID audio, or nil with a logged reason.
@@ -355,7 +445,9 @@ func (e *Engine) setPTT(on bool, now time.Time) {
 		e.sx.pttStuck = false
 	}
 	e.sx.ptt = on
-	if !on {
+	if on {
+		e.sx.pttAt = now
+	} else {
 		e.sx.netStart = time.Time{}
 	}
 	e.publishOn(EventPTT, on, now)
@@ -385,7 +477,10 @@ func (e *Engine) dropPTT() {
 		e.sx.ptt = false
 		e.publishOn(EventPTT, false, e.now())
 	}
-	e.sx.tone, e.sx.id = nil, nil
+	e.sx.id = nil
+	if e.sx.tone != nil {
+		e.endTone(e.now(), "")
+	}
 }
 
 func (e *Engine) publishOn(k EventKind, on bool, now time.Time) {
@@ -399,12 +494,15 @@ func (e *Engine) logf(now time.Time, format string, args ...any) {
 	e.hub.publish(ev)
 }
 
-func drain(c <-chan audio.Frame) {
+// drain empties c and returns how many frames it held.
+func drain(c <-chan audio.Frame) int {
+	n := 0
 	for {
 		select {
 		case <-c:
+			n++
 		default:
-			return
+			return n
 		}
 	}
 }

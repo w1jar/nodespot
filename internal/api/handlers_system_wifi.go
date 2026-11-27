@@ -5,8 +5,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // WifiHost is the WiFi part of the helper (sys_wifi.go). It is a separate

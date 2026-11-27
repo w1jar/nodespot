@@ -12,7 +12,7 @@
   }
 </script>
 <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4">
-  <div class="mb-6 flex items-center gap-2"><Radio class="text-accent" size={28} /><h1 class="text-2xl font-bold tracking-tight">ASLCP</h1></div>
+  <div class="mb-6 flex items-center gap-2"><Radio class="text-accent" size={28} /><h1 class="text-2xl font-bold tracking-tight">nodespot</h1></div>
   <form class="card space-y-4 p-5" onsubmit={submit}>
     <h2 class="text-lg font-semibold">Sign in</h2>
     <div><label class="label" for="u">Username</label><input id="u" class="input" bind:value={username} autocomplete="username" required /></div>

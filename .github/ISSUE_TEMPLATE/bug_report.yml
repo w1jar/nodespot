@@ -1,17 +1,17 @@
 name: Bug report
-description: Something in ASLCP does not work as expected
+description: Something in nodespot does not work as expected
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. Tip: **Settings, About, Report a bug** in ASLCP opens this form with the versions and hardware filled in.
-        Security problems: do not use this form, see [SECURITY.md](https://github.com/w1jar/aslcp/blob/main/SECURITY.md).
+        Thanks for reporting. Tip: **Settings, About, Report a bug** in nodespot opens this form with the versions and hardware filled in.
+        Security problems: do not use this form, see [SECURITY.md](https://github.com/w1jar/nodespot/blob/main/SECURITY.md).
   - type: input
     id: version
     attributes:
-      label: ASLCP version
-      description: Settings, About, or `aslcp --version`.
+      label: nodespot version
+      description: Settings, About, or `nodespot --version`.
       placeholder: "0.1.1"
     validations:
       required: true
@@ -64,7 +64,7 @@ body:
     attributes:
       label: Logs
       description: |
-        Paste the output of `journalctl -u aslcp -n 100 --no-pager`, or attach the diagnostics file from Settings, About, Download diagnostics (drag the .txt file into this box).
+        Paste the output of `journalctl -u nodespot -n 100 --no-pager`, or attach the diagnostics file from Settings, About, Download diagnostics (drag the .txt file into this box).
       render: shell
   - type: checkboxes
     id: privacy

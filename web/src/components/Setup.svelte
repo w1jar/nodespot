@@ -25,7 +25,7 @@
   }
 </script>
 <main class="mx-auto flex min-h-dvh {choice === 'restore' ? 'max-w-2xl' : 'max-w-sm'} flex-col justify-center px-4 py-8">
-  <div class="mb-6 flex items-center gap-2"><Radio class="text-accent" size={28} /><h1 class="text-2xl font-bold tracking-tight">ASLCP setup</h1></div>
+  <div class="mb-6 flex items-center gap-2"><Radio class="text-accent" size={28} /><h1 class="text-2xl font-bold tracking-tight">nodespot setup</h1></div>
   <div class="mb-3 grid grid-cols-2 gap-1 rounded-md border border-line bg-surface-2/40 p-1" role="tablist" aria-label="Setup choice">
     <button type="button" role="tab" aria-selected={choice === 'create'} class="btn {choice === 'create' ? 'btn-primary' : 'border-transparent bg-transparent'}" onclick={() => (choice = 'create')}>Create admin</button>
     <button type="button" role="tab" aria-selected={choice === 'restore'} class="btn {choice === 'restore' ? 'btn-primary' : 'border-transparent bg-transparent'}" onclick={() => (choice = 'restore')}>Restore from a backup</button>
@@ -34,12 +34,12 @@
   <div class="card space-y-4 p-5">
     <p class="text-sm text-muted">Setting up a replacement for an existing node? Restore its backup instead of creating a new administrator. The setup code is required (see below).</p>
     <div><label class="label" for="rc">Setup code</label><input id="rc" class="input font-mono" bind:value={code} autocomplete="off" required /></div>
-    <p class="text-xs text-muted">Show it on the server with <code class="font-mono">sudo aslcp admin setup-code</code> (also in <code class="font-mono">/var/lib/aslcp/setup-code</code>), or use the setup link the installer printed.</p>
+    <p class="text-xs text-muted">Show it on the server with <code class="font-mono">sudo nodespot admin setup-code</code> (also in <code class="font-mono">/var/lib/nodespot/setup-code</code>), or use the setup link the installer printed.</p>
     <RestoreFlow mode="setup" {code} />
   </div>
   {:else}
   <form class="card space-y-4 p-5" onsubmit={submit}>
-    <p class="text-sm text-muted">Create the first administrator.{#if showCode} Use the setup link the installer printed, or enter the code shown by <code class="font-mono">sudo aslcp admin setup-code</code>. You can also run <code class="font-mono">sudo aslcp admin create</code> on the server.{/if}</p>
+    <p class="text-sm text-muted">Create the first administrator.{#if showCode} Use the setup link the installer printed, or enter the code shown by <code class="font-mono">sudo nodespot admin setup-code</code>. You can also run <code class="font-mono">sudo nodespot admin create</code> on the server.{/if}</p>
     {#if showCode}
       <div><label class="label" for="c">Setup code</label><input id="c" class="input font-mono" bind:value={code} autocomplete="off" required /></div>
     {:else}

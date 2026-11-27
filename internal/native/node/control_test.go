@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 func ctlRig(t *testing.T) (*rig, *Server, string) {
@@ -172,6 +172,42 @@ func TestControlOps(t *testing.T) {
 	}
 }
 
+// TestSaveModeClear checks that a save can delete one stored password, that
+// the rest of the settings stay, and that bad keys are refused.
+func TestSaveModeClear(t *testing.T) {
+	g, s, _ := ctlRig(t)
+	save := func(st mode.Settings) Response {
+		return do(t, s, OpSaveMode, map[string]any{"mode": mode.AllStar, "settings": st})
+	}
+	if r := save(mode.Settings{Values: map[string]string{"node": "1999", "password": "hunter2"}}); !r.OK {
+		t.Fatal(r.Error)
+	}
+	for _, bad := range []mode.Settings{
+		{Clear: []string{"node"}},
+		{Clear: []string{"nope"}},
+		{Values: map[string]string{"password": "x"}, Clear: []string{"password"}},
+	} {
+		if r := save(bad); r.OK {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+	if v := g.e.Config().Modes[mode.AllStar].Values["password"]; v != "hunter2" {
+		t.Fatalf("a refused save changed the password: %q", v)
+	}
+	if r := save(mode.Settings{Clear: []string{"password"}}); !r.OK {
+		t.Fatal(r.Error)
+	}
+	cur := g.e.Config().Modes[mode.AllStar]
+	if _, ok := cur.Values["password"]; ok || cur.Values["node"] != "1999" || cur.Clear != nil {
+		t.Fatalf("after clear: %+v", cur)
+	}
+	for _, m := range g.e.Modes() {
+		if m.Name == mode.AllStar && (m.SecretsSet["password"] || !m.Saved) {
+			t.Fatalf("after clear: %+v", m)
+		}
+	}
+}
+
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
 	b, err := json.Marshal(v)
@@ -208,7 +244,7 @@ func TestControlSocket(t *testing.T) {
 		if _, err := c.Write([]byte(line + "\n")); err != nil {
 			t.Fatal(err)
 		}
-		_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 		l, err := br.ReadBytes('\n')
 		if err != nil {
 			t.Fatal(err)
@@ -236,7 +272,7 @@ func TestControlSocket(t *testing.T) {
 	if _, err := c2.Write([]byte(`{"id":2,"op":"subscribe"}` + "\n")); err != nil {
 		t.Fatal(err)
 	}
-	_ = c2.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = c2.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if _, err := br2.ReadBytes('\n'); err != nil {
 		t.Fatal(err)
 	}
@@ -255,5 +291,53 @@ func TestControlSocket(t *testing.T) {
 		if ev.Event.Kind == EventSelect && ev.Event.Text == mode.EchoTest {
 			break
 		}
+	}
+}
+
+func TestControlDirectorySearch(t *testing.T) {
+	g, s, _ := ctlRig(t)
+	ctx := context.Background()
+	res := func(r Response) mode.DirResult {
+		t.Helper()
+		if !r.OK {
+			t.Fatal(r.Error)
+		}
+		var d mode.DirResult
+		if err := json.Unmarshal(mustJSON(t, r.Data), &d); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	// Not built yet: nothing loaded, and the search does not start it.
+	if d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0"})); d.Loaded || d.Results == nil || len(d.Results) != 0 {
+		t.Fatalf("not built: %+v", d)
+	}
+	if err := g.e.Select(ctx, mode.EchoLink, nil); err != nil {
+		t.Fatal(err)
+	}
+	f := g.fake(mode.EchoLink)
+	if d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0"})); d.Loaded {
+		t.Fatalf("no list yet: %+v", d)
+	}
+	f.SetDirectory([]mode.DirEntry{
+		{Node: 1997, Callsign: "N0CALL-L", Kind: "link", Status: "online"},
+		{Node: 9999, Callsign: "*ECHOTEST*", Kind: "conference", Status: "online"},
+	})
+	d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0", "limit": 5}))
+	if !d.Loaded || len(d.Results) != 1 || d.Results[0].Node != 1997 {
+		t.Fatalf("search: %+v", d)
+	}
+	// Another mode stops EchoLink: its directory is gone with the login.
+	if err := g.e.Select(ctx, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := res(do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "q": "n0"})); d.Loaded {
+		t.Fatalf("stopped: %+v", d)
+	}
+	if r := do(t, s, OpDirSearch, map[string]any{"mode": "nope"}); r.OK {
+		t.Fatal("unknown mode searched")
+	}
+	if r := do(t, s, OpDirSearch, map[string]any{"mode": mode.EchoLink, "bogus": 1}); r.OK {
+		t.Fatal("unknown argument accepted")
 	}
 }

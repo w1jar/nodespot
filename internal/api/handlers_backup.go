@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/backup"
-	"github.com/artw1/aslcp/internal/backupsvc"
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/backup"
+	"github.com/w1jar/nodespot/internal/backupsvc"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // resultOpenFor is how long the last restore result can be read without a

@@ -3,7 +3,7 @@ package node
 import (
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 // idReason says why an ID was sent.

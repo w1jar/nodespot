@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/config"
-	"github.com/artw1/aslcp/internal/diag"
+	"github.com/w1jar/nodespot/internal/config"
+	"github.com/w1jar/nodespot/internal/diag"
 )
 
 func TestAbout(t *testing.T) {
@@ -58,7 +58,7 @@ func TestDiagnostics(t *testing.T) {
 	if ct := hdr.Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
 		t.Errorf("content-type %q", ct)
 	}
-	if cd := hdr.Get("Content-Disposition"); !strings.HasPrefix(cd, `attachment; filename="aslcp-diagnostics-`) || !strings.HasSuffix(cd, `.txt"`) {
+	if cd := hdr.Get("Content-Disposition"); !strings.HasPrefix(cd, `attachment; filename="nodespot-diagnostics-`) || !strings.HasSuffix(cd, `.txt"`) {
 		t.Errorf("disposition %q", cd)
 	}
 	out := string(body)
@@ -67,7 +67,7 @@ func TestDiagnostics(t *testing.T) {
 			t.Errorf("diagnostics contains %q", bad)
 		}
 	}
-	for _, good := range []string{"ASLCP:    test", "N0CALL", "allstar", "Entries: 4", "== Server log", "<redacted>", "<ipv4>", "[node]"} {
+	for _, good := range []string{"nodespot:    test", "N0CALL", "allstar", "Entries: 4", "== Server log", "<redacted>", "<ipv4>", "[node]"} {
 		if !strings.Contains(out, good) {
 			t.Errorf("diagnostics lacks %q\n%s", good, out)
 		}

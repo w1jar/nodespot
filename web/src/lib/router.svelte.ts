@@ -11,7 +11,7 @@ function parse(): { path: string; query: string } {
 function redirectMoved() {
   const p = parse();
   const to = movedPath(p.path);
-  if (to) location.replace('#' + to + (p.query ? '?' + p.query : ''));
+  if (to) location.replace('#' + to + (p.query ? (to.includes('?') ? '&' : '?') + p.query : ''));
 }
 redirectMoved();
 export const router = $state<{ path: string; query: string }>(parse());

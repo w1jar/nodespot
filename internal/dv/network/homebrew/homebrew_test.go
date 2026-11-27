@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/dmr"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/dmr"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 const (
@@ -166,7 +166,7 @@ func (m *fakeMaster) waitCount(tag string, n int) {
 
 func waitFor(t *testing.T, what string, f func() bool) {
 	t.Helper()
-	dl := time.Now().Add(5 * time.Second)
+	dl := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for !f() {
 		if time.Now().After(dl) {
 			t.Fatalf("timeout waiting for %s", what)
@@ -225,10 +225,14 @@ func (s *recSink) nVoice() int { s.mu.Lock(); defer s.mu.Unlock(); return len(s.
 func (s *recSink) nEnd() int   { s.mu.Lock(); defer s.mu.Unlock(); return len(s.ends) }
 func (s *recSink) nHdr() int   { s.mu.Lock(); defer s.mu.Unlock(); return len(s.hdrs) }
 
+// fastOpts pings and retries fast, with a login step timeout, a keepalive
+// loss (missed_pongs) and an RX timeout long enough that a stall under -race
+// on a loaded runner does not drop the session or end a call mid-test. The
+// tests about those timeouts set their own.
 func fastOpts(extra map[string]string) map[string]string {
 	o := map[string]string{
-		"ping_interval_ms": "20", "login_timeout_ms": "60", "backoff_min_ms": "10",
-		"backoff_max_ms": "80", "rx_timeout_ms": "80",
+		"ping_interval_ms": "20", "login_timeout_ms": "1000", "backoff_min_ms": "10",
+		"backoff_max_ms": "80", "rx_timeout_ms": "300", "missed_pongs": "25",
 	}
 	for k, v := range extra {
 		o[k] = v
@@ -281,7 +285,7 @@ func TestLoginSuccessAndConfigPacket(t *testing.T) {
 	if string(c[38:55]) != "0.00000000.000000" || c[97] != '4' || string(c[16:25]) != "000000000" || string(c[34:36]) != "01" {
 		t.Fatalf("RPTC position/slots/power %q", c[16:98])
 	}
-	if got := string(c[len(c)-80 : len(c)-75]); got != "ASLCP" {
+	if got := string(c[len(c)-80 : len(c)-72]); got != "nodespot" {
 		t.Fatalf("software %q", got)
 	}
 	if o := m.all("RPTO")[0]; string(o[8:]) != "TS2=1997;" {
@@ -309,7 +313,11 @@ func TestBadPasswordRetriesWithBackoff(t *testing.T) {
 func TestLoginTimeoutBackoff(t *testing.T) {
 	m := newMaster(t)
 	m.setSilent(true)
-	_, s, _, _ := start(t, ctl.ModeDMR, m, testPW, nil)
+	// The gaps are the step timeout plus a doubling backoff: 70, 110 and
+	// 190 ms. The first and third are far enough apart that scheduling
+	// jitter on a loaded runner cannot invert them.
+	_, s, _, _ := start(t, ctl.ModeDMR, m, testPW, map[string]string{
+		"login_timeout_ms": "30", "backoff_min_ms": "40", "backoff_max_ms": "1000"})
 	waitFor(t, "3 attempts", func() bool { m.mu.Lock(); defer m.mu.Unlock(); return m.rptlSeen >= 4 })
 	if !s.hasLogin(ctl.LoginFailed) {
 		t.Fatal("no failed state")
@@ -317,7 +325,7 @@ func TestLoginTimeoutBackoff(t *testing.T) {
 	m.mu.Lock()
 	ts := m.times["RPTL"]
 	m.mu.Unlock()
-	// gap grows: attempt gaps include 60ms timeout + backoff 10,20,40...
+	// gap grows: attempt gaps include 30ms timeout + backoff 40,80,160...
 	g1, g3 := ts[1].Sub(ts[0]), ts[3].Sub(ts[2])
 	if g3 <= g1 {
 		t.Fatalf("backoff did not grow: %v %v", g1, g3)
@@ -329,7 +337,9 @@ func TestLoginTimeoutBackoff(t *testing.T) {
 
 func TestKeepaliveAndLoss(t *testing.T) {
 	m := newMaster(t)
-	_, s, _, _ := start(t, ctl.ModeDMR, m, testPW, nil)
+	// three missed pongs drop the session; pings far enough apart that a
+	// slow pong on a loaded runner is not one of them
+	_, s, _, _ := start(t, ctl.ModeDMR, m, testPW, map[string]string{"ping_interval_ms": "100", "missed_pongs": "3"})
 	waitFor(t, "ok", func() bool { return s.hasLogin(ctl.LoginOK) })
 	m.waitCount("RPTPING", 3)
 	if p := m.all("RPTPING")[0]; len(p) != 11 || binary.BigEndian.Uint32(p[7:]) != testRID {
@@ -530,8 +540,16 @@ func TestTXCall(t *testing.T) {
 		ds := dmrdTo(m, 0)
 		return len(ds) > base && ds[len(ds)-1].DType == dtTerminator && ds[len(ds)-1].FrameTyp == ftDataSync
 	})
-	ds := dmrdTo(m, 0)[base:]
-	stream := ds[0].Stream
+	// The tune kerchunk can still be on the wire when base is read, so
+	// keep only the packets of the call's own stream (the last one).
+	all := dmrdTo(m, 0)[base:]
+	stream := all[len(all)-1].Stream
+	var ds []dmrd
+	for _, d := range all {
+		if d.Stream == stream {
+			ds = append(ds, d)
+		}
+	}
 	rx := dmr.NewRX()
 	var got []dmr.AMBE
 	voiceBursts := 0
@@ -692,7 +710,9 @@ func TestRXTGIFStillFiltersSlot(t *testing.T) {
 
 func TestRXOtherSlotDoesNotCutCall(t *testing.T) {
 	m := newMaster(t)
-	_, s, _, _ := start(t, ctl.ModeDMR, m, testPW, nil)
+	// an RX timeout well past the pause below, so only the stray stream
+	// could end the call
+	_, s, _, _ := start(t, ctl.ModeDMR, m, testPW, map[string]string{"rx_timeout_ms": "5000"})
 	waitFor(t, "ok", func() bool { return s.hasLogin(ctl.LoginOK) })
 	sendCall(m, 1, 80, 759, 6, false) // call in progress on slot 1
 	waitFor(t, "hdr", func() bool { return s.nHdr() == 1 })

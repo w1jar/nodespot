@@ -2,13 +2,15 @@
   import { api } from '../lib/api';
   import { app, refreshFavorites } from '../lib/store.svelte';
   import { toast, toastError } from '../lib/toast.svelte';
-  import { modeTitle, sortModes, targetLabel } from '../lib/modes';
+  import { modeTitle, pickerModes, targetLabel } from '../lib/modes';
+  import { settings } from '../lib/settings.svelte';
   import type { Favorite } from '../lib/types';
   import Dialog from './Dialog.svelte';
 
   let { open = $bindable(false), fav = null, initialMode = '', initialTarget = '' }: { open: boolean; fav?: Favorite | null; initialMode?: string; initialTarget?: string } = $props();
   let mode = $state(''), target = $state(''), label = $state(''), group = $state(''), busy = $state(false);
-  const usable = $derived(sortModes(app.modes.filter((m) => m.configured)));
+  // Hidden modes are not offered, except the one an edited favorite (or the page that opened the dialog) already uses.
+  const usable = $derived(pickerModes(app.modes, settings.hiddenModes, [fav?.mode ?? '', ...[initialMode, app.node?.active ?? ''].filter((n) => app.modes.some((m) => m.name === n && m.configured))].filter(Boolean)));
   const info = $derived(app.modes.find((m) => m.name === mode));
   const groups = $derived([...new Set(app.favorites.filter((f) => f.mode === mode).map((f) => f.group).filter(Boolean))]);
   let wasOpen = false;

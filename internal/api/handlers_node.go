@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/hostlists"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/hostlists"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/nodelist"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // The node (docs/NATIVE_NODE.md): its status, its modes and their
@@ -40,7 +41,14 @@ func (s *Server) nodeRoutes() {
 	m.HandleFunc("PUT /api/radio", s.authed(store.RoleAdmin, s.handleRadioPut))
 	m.HandleFunc("GET /api/radio/info", s.authed(store.RoleAdmin, s.handleRadioInfo))
 	m.HandleFunc("POST /api/radio/program", s.authed(store.RoleAdmin, s.handleRadioProgram))
+	m.HandleFunc("GET /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetGet))
+	m.HandleFunc("POST /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetStart))
+	m.HandleFunc("DELETE /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetCancel))
+	m.HandleFunc("POST /api/radio/tuning/dismiss", s.authed(store.RoleAdmin, s.handleTuningDismiss))
+	m.HandleFunc("POST /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestTone))
+	m.HandleFunc("DELETE /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestToneStop))
 	m.HandleFunc("GET /api/hostlists", s.authed(store.RoleOperator, s.handleHostLists))
+	m.HandleFunc("GET /api/hostlists/status", s.authed(store.RoleOperator, s.handleHostListsStatus))
 	m.HandleFunc("POST /api/hostlists/refresh", s.authed(store.RoleAdmin, s.handleHostListsRefresh))
 }
 
@@ -76,7 +84,7 @@ func (s *Server) nodeErr(w http.ResponseWriter, err error) {
 
 // handleNodeGet serves the cached status.
 func (s *Server) handleNodeGet(w http.ResponseWriter, _ *http.Request, _ store.User) {
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 func (s *Server) handleNodeReload(w http.ResponseWriter, r *http.Request, u store.User) {
@@ -93,7 +101,7 @@ func (s *Server) handleNodeReload(w http.ResponseWriter, r *http.Request, u stor
 	s.audit(u, "node.reload", nil)
 	s.adopt(st)
 	s.refreshModes(r.Context())
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleModesGet lists the modes. Viewers and operators get what the Modes
@@ -117,12 +125,12 @@ func (s *Server) modesJSON(l []node.ModeInfo, admin bool) []node.ModeInfo {
 	if l == nil {
 		l = []node.ModeInfo{}
 	}
-	if admin {
-		return l
-	}
 	out := make([]node.ModeInfo, len(l))
 	for i, m := range l {
-		m.Fields, m.Settings, m.SecretsSet = nil, mode.Settings{}, nil
+		m.Status = s.enrichStatus(m.Status)
+		if !admin {
+			m.Fields, m.Settings, m.SecretsSet = nil, mode.Settings{}, nil
+		}
 		out[i] = m
 	}
 	return out
@@ -218,7 +226,7 @@ func (s *Server) handleStationPut(w http.ResponseWriter, r *http.Request, u stor
 	}
 	s.audit(u, "station.save", map[string]any{"callsign": in.Callsign})
 	s.adopt(st)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // targetInput is the target of POST /api/select and /api/connect: an ID
@@ -322,7 +330,7 @@ func (s *Server) handleSelect(w http.ResponseWriter, r *http.Request, u store.Us
 	s.audit(u, "node.select", detail)
 	s.adopt(st)
 	s.manualSchedules(m, "select by "+u.Username)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleConnect links the active mode to a target.
@@ -350,7 +358,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request, u store.U
 	s.audit(u, "node.connect", map[string]any{"mode": st.Active, "target": t.ID})
 	s.adopt(st)
 	s.manualSchedules(st.Active, "connect by "+u.Username)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleDisconnect drops the active mode's link (the mode stays active).
@@ -368,7 +376,7 @@ func (s *Server) handleDisconnect(w http.ResponseWriter, r *http.Request, u stor
 	s.audit(u, "node.disconnect", map[string]any{"mode": st.Active})
 	s.adopt(st)
 	s.manualSchedules(st.Active, "disconnect by "+u.Username)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleHeard serves the node's last heard list across modes, newest first
@@ -396,6 +404,7 @@ func (s *Server) handleHeard(w http.ResponseWriter, r *http.Request, _ store.Use
 	if l == nil {
 		l = []mode.Heard{}
 	}
+	s.enrichHeard(l)
 	writeJSON(w, 200, l)
 }
 
@@ -431,8 +440,8 @@ func (s *Server) handleRadioInput(w http.ResponseWriter, r *http.Request, _ stor
 	writeJSON(w, 200, l)
 }
 
-// handleRadioPut sets the sound chip's levels {rxVolume, txVolume} (0 to 1;
-// an absent one is kept); the node saves them.
+// handleRadioPut sets the sound chip's levels {rxVolume, txVolume} (0 to 1)
+// and receive boost {rxBoost} (an absent one is kept); the node saves them.
 func (s *Server) handleRadioPut(w http.ResponseWriter, r *http.Request, u store.User) {
 	if !s.nodeReady(w) {
 		return
@@ -440,6 +449,7 @@ func (s *Server) handleRadioPut(w http.ResponseWriter, r *http.Request, u store.
 	var in struct {
 		RxVolume *float64 `json:"rxVolume"`
 		TxVolume *float64 `json:"txVolume"`
+		RxBoost  *bool    `json:"rxBoost"`
 	}
 	if !decode(w, r, &in, false) {
 		return
@@ -450,18 +460,18 @@ func (s *Server) handleRadioPut(w http.ResponseWriter, r *http.Request, u store.
 			return
 		}
 	}
-	if in.RxVolume == nil && in.TxVolume == nil {
-		writeErr(w, 400, "bad_request", "set rxVolume or txVolume")
+	if in.RxVolume == nil && in.TxVolume == nil && in.RxBoost == nil {
+		writeErr(w, 400, "bad_request", "set rxVolume, txVolume or rxBoost")
 		return
 	}
 	ctx, cancel := nodeCtx(r)
 	defer cancel()
-	l, err := s.d.Node.RadioTune(ctx, in.RxVolume, in.TxVolume)
+	l, err := s.d.Node.RadioTune(ctx, in.RxVolume, in.TxVolume, in.RxBoost)
 	if err != nil {
 		s.nodeErr(w, err)
 		return
 	}
-	s.audit(u, "radio.tune", map[string]any{"rxVolume": in.RxVolume, "txVolume": in.TxVolume})
+	s.audit(u, "radio.tune", map[string]any{"rxVolume": in.RxVolume, "txVolume": in.TxVolume, "rxBoost": in.RxBoost})
 	writeJSON(w, 200, l)
 }
 
@@ -496,7 +506,121 @@ func (s *Server) handleRadioProgram(w http.ResponseWriter, r *http.Request, u st
 	}
 	s.audit(u, "radio.program", nil)
 	s.adopt(st)
-	writeJSON(w, 200, s.nw.json())
+	writeJSON(w, 200, s.nodeJSON())
+}
+
+// handleTuningDismiss dismisses the "tune your audio" reminder for the radio
+// interface in use (it comes back if the hardware changes) and answers the
+// node status.
+func (s *Server) handleTuningDismiss(w http.ResponseWriter, r *http.Request, u store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.RadioTuningDismiss(ctx)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	s.audit(u, "radio.tuning.dismiss", nil)
+	s.adopt(st)
+	writeJSON(w, 200, s.nodeJSON())
+}
+
+// handleAutosetGet answers the state of the receive auto-set.
+func (s *Server) handleAutosetGet(w http.ResponseWriter, r *http.Request, _ store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.AutosetStatus(ctx)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, st)
+}
+
+// handleAutosetStart starts the receive auto-set and answers its state
+// ({state:"waiting"}); the page polls GET until it is done or failed. The
+// node refuses (409) with no radio, a sound chip without a receive level
+// control, or a run already going.
+func (s *Server) handleAutosetStart(w http.ResponseWriter, r *http.Request, u store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.AutosetRx(ctx, false)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	s.audit(u, "radio.autoset", nil)
+	writeJSON(w, 200, st)
+}
+
+// handleAutosetCancel stops a running receive auto-set (none is not an error).
+func (s *Server) handleAutosetCancel(w http.ResponseWriter, r *http.Request, _ store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.AutosetRx(ctx, true)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	writeJSON(w, 200, st)
+}
+
+// handleTestTone keys the radio with the 1 kHz test tone {seconds?} (1 to
+// 10, default 5). The node refuses it (409) while it transmits, while the
+// radio receives and while the active mode is talking. It answers the node
+// status, whose radio.testTone is true while the tone plays.
+func (s *Server) handleTestTone(w http.ResponseWriter, r *http.Request, u store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	var in struct {
+		Seconds float64 `json:"seconds"`
+	}
+	if !decode(w, r, &in, true) {
+		return
+	}
+	if in.Seconds != 0 && (in.Seconds < 1 || in.Seconds > node.MaxTestTone.Seconds()) {
+		writeErr(w, 400, "bad_request", "seconds must be 1 to 10")
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.TestTone(ctx, in.Seconds, false)
+	if err != nil {
+		s.nodeErr(w, err) // a refusal is 409 node_refused with the node's reason
+		return
+	}
+	s.audit(u, "radio.test_tone", map[string]any{"seconds": in.Seconds})
+	s.adopt(st)
+	writeJSON(w, 200, s.nodeJSON())
+}
+
+// handleTestToneStop ends the test tone early (no error when none plays).
+func (s *Server) handleTestToneStop(w http.ResponseWriter, r *http.Request, _ store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.TestTone(ctx, 0, true)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	s.adopt(st)
+	writeJSON(w, 200, s.nodeJSON())
 }
 
 // handleHostLists serves a host list for the pickers: ?mode=dmr, ysf, p25,
@@ -539,18 +663,58 @@ func (s *Server) handleHostLists(w http.ResponseWriter, r *http.Request, _ store
 	writeJSON(w, 200, l)
 }
 
-// handleHostListsRefresh fetches the lists now (at most once every ten
-// minutes).
+// hostListsStatus is the state of every downloaded list: the Pi-Star host
+// lists (lists, busy, nextManual) and the AllStar node list (nodelist).
+type hostListsStatus struct {
+	hostlists.Status
+	Nodelist *nodelist.Status `json:"nodelist,omitempty"`
+}
+
+func (s *Server) hostListsStatus() hostListsStatus {
+	var out hostListsStatus
+	if s.d.HostLists != nil {
+		out.Status = s.d.HostLists.Status()
+	} else {
+		out.Lists = map[string]hostlists.ListStatus{}
+	}
+	if s.d.Nodelist != nil {
+		ns := s.d.Nodelist.Status()
+		out.Nodelist = &ns
+	}
+	return out
+}
+
+// handleHostListsStatus reports the count, update time and last error of
+// every list (GET /api/hostlists/status; the AllStar node list is
+// "nodelist").
+func (s *Server) handleHostListsStatus(w http.ResponseWriter, _ *http.Request, _ store.User) {
+	writeJSON(w, 200, s.hostListsStatus())
+}
+
+// handleHostListsRefresh fetches the host lists and the AllStar node list now.
+// The host lists allow it at most once every ten minutes; a refusal is 409
+// with the reason and nothing is fetched. A download that fails is not a
+// refusal: the answer is 200 with the error in that list's status.
 func (s *Server) handleHostListsRefresh(w http.ResponseWriter, r *http.Request, u store.User) {
 	if s.d.HostLists == nil {
 		writeErr(w, http.StatusServiceUnavailable, "hostlists_unavailable", "the host lists are not available")
 		return
 	}
-	if err := s.d.HostLists.Refresh(r.Context()); err != nil {
+	err := s.d.HostLists.Refresh(r.Context())
+	if errors.Is(err, hostlists.ErrBusy) || errors.Is(err, hostlists.ErrTooSoon) || errors.Is(err, hostlists.ErrDisabled) {
 		s.audit(u, "hostlists.refresh.refused", map[string]any{"error": err.Error()})
 		writeErr(w, http.StatusConflict, "hostlists_busy", err.Error())
 		return
 	}
-	s.audit(u, "hostlists.refresh", nil)
-	writeJSON(w, 200, s.d.HostLists.Status())
+	detail := map[string]any{}
+	if err != nil {
+		detail["error"] = err.Error()
+	}
+	if s.d.Nodelist != nil {
+		if nerr := s.d.Nodelist.Refresh(r.Context()); nerr != nil {
+			detail["nodelistError"] = nerr.Error()
+		}
+	}
+	s.audit(u, "hostlists.refresh", detail)
+	writeJSON(w, 200, s.hostListsStatus())
 }

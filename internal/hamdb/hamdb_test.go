@@ -50,8 +50,8 @@ func (f *fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(f.status)
 		return
 	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/") // v1, CALL, json, aslcp
-	if len(parts) != 4 || parts[0] != "v1" || parts[2] != "json" || parts[3] != "aslcp" {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/") // v1, CALL, json, nodespot
+	if len(parts) != 4 || parts[0] != "v1" || parts[2] != "json" || parts[3] != "nodespot" {
 		http.NotFound(w, r)
 		return
 	}
@@ -118,7 +118,7 @@ func TestLookupFetchesAndCaches(t *testing.T) {
 	if w := r.step(); w >= 0 || r.f.count() != 1 {
 		t.Fatalf("w=%v hits=%d", w, r.f.count())
 	}
-	if r.f.hits[0] != "/v1/N0CALL/json/aslcp" || r.f.agents[0] != "ASLCP/9.9.9" {
+	if r.f.hits[0] != "/v1/N0CALL/json/nodespot" || r.f.agents[0] != "nodespot/9.9.9" {
 		t.Fatalf("%v %v", r.f.hits, r.f.agents)
 	}
 }

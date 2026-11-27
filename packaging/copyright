@@ -1,11 +1,11 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: aslcp
-Source: https://github.com/w1jar/aslcp
+Upstream-Name: nodespot
+Source: https://github.com/w1jar/nodespot
 Comment: The licence texts of the bundled third-party components (listed
- below) are in /usr/share/doc/aslcp/THIRD-PARTY-NOTICES.
+ below) are in /usr/share/doc/nodespot/THIRD-PARTY-NOTICES.
 
 Files: *
-Copyright: 2026 The ASLCP Authors
+Copyright: 2026 The nodespot Authors
 License: GPL-3.0+
 
 License: GPL-3.0+
@@ -25,7 +25,7 @@ License: GPL-3.0+
  On Debian systems, the complete text of the GNU General Public
  License version 3 can be found in /usr/share/common-licenses/GPL-3.
 
-Files: usr/bin/aslcp usr/bin/aslcp-helper
+Files: usr/bin/nodespot usr/bin/nodespot-helper
 Copyright: 2009-2025 The Go Authors
            2012 The Go Authors (github.com/remyoudompheng/bigfft)
            2009, 2014 Google Inc. (github.com/google/uuid)
@@ -37,12 +37,12 @@ Comment: Go modules compiled into the binaries: golang.org/x/{crypto,term,sys,ex
  modernc.org/{sqlite,libc,mathutil,memory}, github.com/google/uuid,
  github.com/remyoudompheng/bigfft. Full texts: THIRD-PARTY-NOTICES.
 
-Files: usr/bin/aslcp usr/bin/aslcp-helper
+Files: usr/bin/nodespot usr/bin/nodespot-helper
 Copyright: 2005-2008 Dustin Sallings
 License: MIT
 Comment: github.com/dustin/go-humanize. Full text: THIRD-PARTY-NOTICES.
 
-Files: usr/bin/aslcp
+Files: usr/bin/nodespot
 Copyright: Marijn Haverbeke and others (CodeMirror, Lezer, style-mod,
            w3c-keyname, crelt, find-cluster-break)
            2016-2025 Svelte Contributors
@@ -52,23 +52,23 @@ Comment: npm packages in the embedded web UI bundle: @codemirror/*, @lezer/*,
  style-mod, w3c-keyname, crelt, @marijn/find-cluster-break, svelte.
  Full texts: THIRD-PARTY-NOTICES.
 
-Files: usr/bin/aslcp
+Files: usr/bin/nodespot
 Copyright: 2026 Lucide Icons and Contributors
 License: ISC
 Comment: npm package @lucide/svelte in the web UI bundle. Full text:
  THIRD-PARTY-NOTICES.
 
-Files: usr/libexec/aslcp/aslcp-dv
+Files: usr/libexec/nodespot/nodespot-dv
 Copyright: David Rowe and the other Codec2 contributors
 License: GPL-3.0+
 Comment: Go port of Codec2 3200 (internal/dv/codec2), derived from Codec2-mod
  (https://github.com/M17-Project/Codec2-mod, commit
  7c334283794fa6304dc014f12df70afc8393143a), which is licensed under the
  LGPL-2.1. It is used under section 3 of the LGPL-2.1 as GPL-3.0+, the
- licence of ASLCP; the LGPL-2.1 text is in
+ licence of nodespot; the LGPL-2.1 text is in
  /usr/share/common-licenses/LGPL-2.1. See THIRD-PARTY-NOTICES.
 
-Files: usr/libexec/aslcp/aslcp-dv
+Files: usr/libexec/nodespot/nodespot-dv
 Copyright: 2003-2010 Mark Borgerding
 License: BSD-3-Clause
 Comment: KISS FFT, as bundled in Codec2-mod and ported to Go. Full text:

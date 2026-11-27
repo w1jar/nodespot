@@ -129,7 +129,7 @@ func TestRefreshAndLogoff(t *testing.T) {
 	fd.mu.Unlock()
 	clk.step(t, 5*time.Minute)
 	fd.waitLogons(t, 4)
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for d.Status().LoggedIn {
 		if time.Now().After(deadline) {
 			t.Fatal("status still logged in after a refused renewal")

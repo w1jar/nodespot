@@ -49,3 +49,14 @@ test('pubHeardItems: nothing unless the page shows heard calls; never a radioid 
   assert.deepEqual(pubHeardItems({ ...snap, showHeard: false }), []);
   assert.deepEqual(pubHeardItems(null), []);
 });
+
+test('callItems: the place is "City, ST" for US callers and "City, Country" otherwise, else the location', () => {
+  const [us] = callItems([c({ kind: 'bm', call: 'N0CALL', first: 'Pat', city: 'Springfield', state: 'Illinois', country: 'United States' })]);
+  assert.match(us.person, /Springfield, IL/);
+  const [intl] = callItems([c({ kind: 'bm', call: 'N1CALL', first: 'Sam', city: 'Exampleton', state: 'Ontario', country: 'Canada' })]);
+  assert.match(intl.person, /Exampleton, Canada/);
+  const [loc] = callItems([c({ kind: 'ysf', call: 'N1CALL', first: 'Sam', location: 'Sampleburg, ST' })]);
+  assert.match(loc.person, /Sampleburg, ST/);
+  const [as] = callItems([c({ kind: 'allstar', desc: 'Hub (fake)', city: 'Springfield', state: 'Illinois' })]);
+  assert.equal(as.person, 'Hub (fake)');
+});

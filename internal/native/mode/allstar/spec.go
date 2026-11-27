@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/register"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/register"
 )
 
 // Setting keys.

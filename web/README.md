@@ -1,4 +1,4 @@
-# ASLCP web UI
+# nodespot web UI
 
 Svelte 5 (runes) + Vite + TypeScript + Tailwind CSS v4 single-page app. Talks to the Go server through the HTTP/SSE API in `../docs/API.md`.
 
@@ -6,7 +6,7 @@ Svelte 5 (runes) + Vite + TypeScript + Tailwind CSS v4 single-page app. Talks to
 
 ```sh
 npm ci
-npm run dev        # Vite on :5173, proxies /api to http://localhost:8080 (the Go server; override with ASLCP_BACKEND)
+npm run dev        # Vite on :5173, proxies /api to http://localhost:8080 (the Go server; override with NODESPOT_BACKEND)
 npm run dev:mock   # no backend needed: in-memory API + simulated keying (mock/plugin.ts)
 npm run check      # svelte-check / TypeScript
 ```

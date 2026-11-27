@@ -5,10 +5,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
-	"github.com/artw1/aslcp/internal/system"
-	"github.com/artw1/aslcp/internal/updates"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
+	"github.com/w1jar/nodespot/internal/system"
+	"github.com/w1jar/nodespot/internal/updates"
 )
 
 // SystemJSON is System plus the cached "update available" flag.
@@ -89,18 +89,18 @@ func (s *Server) handleUpdatesChannel(w http.ResponseWriter, r *http.Request, u 
 
 // Power is the part of the helper that restarts the panel and the machine.
 type Power interface {
-	RestartASLCP(ctx context.Context) error
+	RestartNodespot(ctx context.Context) error
 	Reboot(ctx context.Context) error
 }
 
 // UpdatesBadge is the admin-only SSE event "updates": counts only, never
 // package names.
 type UpdatesBadge struct {
-	Aslcp        bool   `json:"aslcp"`
-	AslcpVersion string `json:"aslcpVersion"`
-	OS           int    `json:"os"`
-	Security     int    `json:"security"`
-	Reboot       bool   `json:"reboot"`
+	Nodespot        bool   `json:"nodespot"`
+	NodespotVersion string `json:"nodespotVersion"`
+	OS              int    `json:"os"`
+	Security        int    `json:"security"`
+	Reboot          bool   `json:"reboot"`
 }
 
 func (s *Server) updatesBadge() UpdatesBadge {
@@ -108,7 +108,7 @@ func (s *Server) updatesBadge() UpdatesBadge {
 	if s.d.Updates == nil {
 		return b
 	}
-	b.Aslcp, b.AslcpVersion = s.d.Updates.Pending()
+	b.Nodespot, b.NodespotVersion = s.d.Updates.Pending()
 	if s.d.Updates.OS != nil {
 		c := s.d.Updates.OS.Counts()
 		b.OS, b.Security, b.Reboot = c.Count, c.Security, c.Reboot
@@ -177,17 +177,17 @@ func (s *Server) handleReboot(w http.ResponseWriter, r *http.Request, u store.Us
 	writeJSON(w, http.StatusAccepted, map[string]bool{"ok": true})
 }
 
-func (s *Server) handleRestartASLCP(w http.ResponseWriter, r *http.Request, u store.User) {
+func (s *Server) handleRestartNodespot(w http.ResponseWriter, r *http.Request, u store.User) {
 	if s.d.Power == nil {
 		s.updatesError(w, updates.ErrUnavailable)
 		return
 	}
-	if err := s.d.Power.RestartASLCP(r.Context()); err != nil {
+	if err := s.d.Power.RestartNodespot(r.Context()); err != nil {
 		s.updatesError(w, err)
 		return
 	}
-	s.d.Logger.Printf("ASLCP restart requested by %s", u.Username)
-	s.audit(u, "aslcp.restart", nil)
+	s.d.Logger.Printf("nodespot restart requested by %s", u.Username)
+	s.audit(u, "nodespot.restart", nil)
 	writeJSON(w, http.StatusAccepted, map[string]bool{"ok": true})
 }
 

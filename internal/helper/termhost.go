@@ -23,9 +23,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// term-host: `aslcp-helper term-host --id <hex> --sock <path> --rows R --cols C
+// term-host: `nodespot-helper term-host --id <hex> --sock <path> --rows R --cols C
 // [--owner N]`. It is the main process of the transient unit
-// aslcp-term-<id>.service, runs as root without a sandbox, and owns the
+// nodespot-term-<id>.service, runs as root without a sandbox, and owns the
 // pseudo terminal for the whole life of the session: it opens the PTY, starts
 // login(1) on the slave as its child (new session, controlling terminal), and
 // keeps the master. Because the master lives in the session's own cgroup, a
@@ -53,7 +53,7 @@ var termHostEnv = []string{
 // RunTermHost is the entry point of the term-host subcommand; it returns the
 // process exit status. It refuses to run unless the uid is 0.
 func RunTermHost(args []string) int {
-	logger := log.New(os.Stderr, "aslcp-term-host: ", 0)
+	logger := log.New(os.Stderr, "nodespot-term-host: ", 0)
 	if os.Geteuid() != 0 {
 		logger.Print("must run as root")
 		return 1

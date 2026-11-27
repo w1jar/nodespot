@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // The structs below are what the public page receives. They are deliberately

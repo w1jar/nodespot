@@ -2,6 +2,7 @@
   import { app, isAdmin, stationSetupOpen } from './lib/store.svelte';
   import { router, navigate } from './lib/router.svelte';
   import { settingsRoute } from './lib/sysnav';
+  import { pageTitle } from './lib/title';
   import { groups, visibleGroups, defaultFor } from './components/settings/sections';
   import Header from './components/Header.svelte';
   import HotspotBanner from './components/HotspotBanner.svelte';
@@ -15,6 +16,13 @@
 
   // Operators and viewers open only About and Account; any other settings page falls back to the Dashboard.
   const settingsOpen = $derived(settingsRoute(router.path, visibleGroups(groups, isAdmin()).map((g) => ({ id: g.id, tabs: (g.tabs ?? []).map((t) => t.id) })), defaultFor(isAdmin()), isAdmin()) !== null);
+
+  // The one place that sets the tab title (the public page sets its own). Follows the callsign live.
+  const pageName = $derived(router.path === '/schedules' ? 'Schedules' : settingsOpen ? 'Settings' : router.path === '/modes' ? 'Modes' : '');
+  $effect(() => {
+    if (!app.ready || app.embed || router.path === '/public' || (!app.user && app.publicEnabled && router.path !== '/login')) return;
+    document.title = app.user ? pageTitle(app.node?.callsign, pageName) : pageTitle('');
+  });
 
   $effect(() => {
     if (!app.ready || app.embed) return;

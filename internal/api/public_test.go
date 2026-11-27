@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/public"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/public"
 )
 
 var ipLike = regexp.MustCompile(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}`)
@@ -115,7 +115,7 @@ func TestPublicDisabledByDefault(t *testing.T) {
 	}
 	select {
 	case <-s.closed:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("stream not closed on disable")
 	}
 	expectErr(t, e, "", "GET", "/api/public/status", nil, 404, "not_found")

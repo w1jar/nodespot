@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
 )
 
 func TestDefaultsWhenMissing(t *testing.T) {

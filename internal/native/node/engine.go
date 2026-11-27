@@ -9,12 +9,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/radio"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 var sprintf = fmt.Sprintf
@@ -78,9 +79,11 @@ type Engine struct {
 	modes    map[string]*instance
 	buildErr map[string]string
 	tunes    map[string]Tune // what each mode reconnects to (see Tune)
+	autoStat AutosetStatus   // the last receive auto-set outcome
 	active   *instance
 	since    time.Time
 	info     radio.Info
+	capture  atomic.Bool // the sound chip has a receive level control (see hasCaptureControl)
 	sx       simplex
 	started  time.Time
 
@@ -123,7 +126,7 @@ func New(cfg *Config, o Options) (*Engine, error) {
 		o.RadioAbsent = !info.Present
 	}
 	e := &Engine{
-		info: info, o: o, log: o.Log, cfg: cfg, params: paramsFor(cfg),
+		info: info, o: o, log: o.Log, cfg: cfg, params: paramsFor(cfg, info.Interface.SA818),
 		modes: map[string]*instance{}, buildErr: map[string]string{}, tunes: map[string]Tune{},
 	}
 	if p := o.tunePath(); p != "" {
@@ -134,6 +137,8 @@ func New(cfg *Config, o Options) (*Engine, error) {
 		e.tunes = t
 	}
 	e.sx.modeAGC, e.sx.radioAGC = audio.NewAGC(), audio.NewAGC()
+	e.sx.rxAcc = audio.NewRxAccum()
+	e.sx.rxPL, e.sx.rxDeemph, e.sx.txPre = audio.NewPLFilter(), audio.NewDeemphasisNode(), audio.NewPreemphasisNode()
 	e.ctx, e.stop = context.WithCancel(context.Background())
 	return e, nil
 }
@@ -479,9 +484,9 @@ func (e *Engine) selectLocked(ctx context.Context, n string, t *mode.Target, per
 // Called with mu when the active mode changes.
 func (e *Engine) resetRadioLocked() {
 	e.sx.rfSentTo = nil
-	e.sx.tone = nil
 	e.sx.netStart, e.sx.txLocked = time.Time{}, false
 	e.sx.netPlaying, e.sx.prebufAt = false, time.Time{}
+	e.sx.netDropped = 0
 	e.sx.modeAGC.Reset()
 }
 
@@ -513,6 +518,40 @@ func (e *Engine) Connect(ctx context.Context, t mode.Target) error {
 	return e.Select(ctx, in.name, &t)
 }
 
+// ErrNoDirectory is returned by SearchDirectory for a mode without a
+// station directory.
+var ErrNoDirectory = errors.New("the mode has no station directory")
+
+// SearchDirectory searches the station directory of mode n (EchoLink). A
+// mode that is not built or not running has nothing loaded: the result has
+// Loaded false and no entries. It never starts a mode or a login.
+func (e *Engine) SearchDirectory(ctx context.Context, n, q string, limit int) (mode.DirResult, error) {
+	n = strings.ToLower(strings.TrimSpace(n))
+	if _, ok := mode.Lookup(n); !ok {
+		return mode.DirResult{}, fmt.Errorf("unknown mode %q", n)
+	}
+	e.mu.Lock()
+	in := e.modes[n]
+	running := in != nil && in.running
+	e.mu.Unlock()
+	empty := mode.DirResult{Results: []mode.DirEntry{}}
+	if in == nil {
+		return empty, nil
+	}
+	s, ok := in.m.(mode.Searcher)
+	if !ok {
+		return mode.DirResult{}, ErrNoDirectory
+	}
+	if !running {
+		return empty, nil
+	}
+	r, err := s.SearchDirectory(ctx, q, limit)
+	if r.Results == nil {
+		r.Results = []mode.DirEntry{}
+	}
+	return r, err
+}
+
 // persistActive saves the active selection. Called with opMu.
 func (e *Engine) persistActive(sel *Selection) error {
 	e.mu.Lock()
@@ -536,7 +575,7 @@ func (e *Engine) commit(c *Config, apply bool) error {
 	}
 	e.mu.Lock()
 	e.cfg = c.Clone()
-	e.params = paramsFor(c)
+	e.params = paramsFor(c, e.info.Interface.SA818)
 	e.mu.Unlock()
 	if apply {
 		e.applyModes(c)

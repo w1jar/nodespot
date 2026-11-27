@@ -2,9 +2,10 @@
   // Overview: the station (radio, PTT/COS, levels, ID), the active mode and target, who is talking,
   // pinned favorites, schedules and one Last heard list across all modes.
   import { api } from '../lib/api';
-  import { app, canOperate, clock } from '../lib/store.svelte';
+  import { app, canOperate, clock, refreshNode } from '../lib/store.svelte';
+  import { TUNE_HREF, showTuneBanner } from '../lib/tuning';
   import { toast, toastError } from '../lib/toast.svelte';
-  import { modeTitle, stateText, targetBody, targetText } from '../lib/modes';
+  import { favoriteActive, modeTitle, pinnedFavorites, stateText, targetBody, targetText } from '../lib/modes';
   import { agoText, who } from '../lib/nowcalling';
   import { mergeHeard } from '../lib/lastheard';
   import type { Favorite, RadioLevels, Reading } from '../lib/types';
@@ -13,13 +14,15 @@
   import Footer from './Footer.svelte';
   import RadioTower from '@lucide/svelte/icons/radio-tower';
   import Mic from '@lucide/svelte/icons/mic';
-  import Pin from '@lucide/svelte/icons/pin';
+  import Unplug from '@lucide/svelte/icons/unplug';
+  import PinFace from './PinFace.svelte';
+  import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 
   const op = $derived(canOperate());
   const node = $derived(app.node);
   const feed = $derived(mergeHeard(app.nowcalling?.recent, app.heard));
-  const pins = $derived(app.favorites.filter((f) => f.pinned));
+  const pins = $derived(pinnedFavorites(app.favorites));
 
   // The sound chip's levels, polled while the page is open (admin only: the endpoint is not open to viewers).
   let lv = $state<RadioLevels | null>(null);
@@ -37,17 +40,31 @@
     const a: { key: string; text: string; href: string }[] = [];
     if (node && !node.running) a.push({ key: 'node', text: `The node is not running${node.error ? `: ${node.error}` : ''}`, href: '/settings/system/node' });
     if (node?.mode?.state === 'error') a.push({ key: 'mode', text: `${modeTitle(node.active ?? '', app.modes)}: ${node.mode.error || node.mode.detail || 'error'}`, href: '/modes' });
-    if (node?.registration && !node.registration.registered && node.active === 'allstar') a.push({ key: 'reg', text: `AllStarLink registration: ${node.registration.lastError || 'not registered yet'}`, href: '/settings/modes/allstar' });
+    if (node?.registration && !node.registration.registered && node.active === 'allstar') a.push({ key: 'reg', text: `AllStarLink registration: ${node.registration.lastError || 'not registered yet'}`, href: '/modes?mode=allstar' });
     return a;
   });
 
+  const tuneBanner = $derived(showTuneBanner(app.user?.role, node));
+  async function dismissTune() {
+    if (busy) return;
+    busy = 'tune';
+    try { await api.dismissTuning(); await refreshNode(); } catch (e) { toastError(e); } finally { busy = ''; }
+  }
+
   let busy = $state('');
+  async function unlink() {
+    if (busy || !op) return;
+    busy = 'unlink';
+    try { await api.disconnect(); toast('Disconnected'); } catch (e) { toastError(e); } finally { busy = ''; }
+  }
   async function tap(f: Favorite) {
     if (busy || !op) return;
     busy = String(f.id);
-    try { await api.select(f.mode, targetBody(f.target)); toast(`${modeTitle(f.mode, app.modes)}: connecting to ${f.label || f.target}`); } catch (e) { toastError(e); } finally { busy = ''; }
+    try { await api.select(f.mode, targetBody(f.target, f.label && f.label !== f.target ? { name: f.label } : {})); toast(`${modeTitle(f.mode, app.modes)}: connecting to ${f.label || f.target}`); } catch (e) { toastError(e); } finally { busy = ''; }
   }
   const talker = $derived(node?.mode?.talker);
+  /** A local station is transmitting into the receiver and its audio goes to the active mode. */
+  const localTx = $derived(!!node?.radio.rxActive && !!node?.active);
   const idText = $derived.by(() => {
     const i = node?.id;
     if (!i) return '';
@@ -62,6 +79,16 @@
     <p class="py-10 text-center text-sm text-muted" role="status">Loading node status…</p>
   {:else}
     <SchedulesCard />
+    {#if tuneBanner}
+      <section class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm" aria-label="Tune your audio" data-testid="tune-banner">
+        <SlidersHorizontal size={15} class="shrink-0 text-warn" aria-hidden="true" />
+        <p class="min-w-0 flex-1 basis-48">Your radio audio hasn't been tuned yet.</p>
+        <div class="flex shrink-0 items-center gap-2">
+          <a class="btn btn-primary btn-sm" href={TUNE_HREF} data-testid="tune-now">Tune now</a>
+          <button type="button" class="btn btn-sm" disabled={!!busy} data-testid="tune-dismiss" onclick={dismissTune}>Dismiss</button>
+        </div>
+      </section>
+    {/if}
     {#if alerts.length}
       <section class="space-y-1" aria-label="Alerts" data-testid="alerts">
         {#each alerts as a (a.key)}
@@ -97,10 +124,16 @@
           <a class="min-w-0 flex-1 truncate text-base font-semibold hover:underline" href="#/modes">{node.active ? modeTitle(node.active, app.modes) : 'None active'}</a>
           {#if node.active}<span class="badge {node.mode?.state === 'connected' ? 'text-ok' : node.mode?.state === 'error' ? 'text-danger' : 'text-warn'}">{stateText(node.mode?.state)}</span>{/if}
         </div>
-        <div class="truncate text-sm {node.mode?.target ? 'font-mono' : 'text-muted'}">{node.mode?.target ? targetText(node.mode.target) : node.active ? 'No target' : 'Pick a mode on the Modes page.'}</div>
-        <div class="flex items-center gap-1.5 text-sm" data-testid="talker" aria-live="polite">
-          <Mic size={14} class="shrink-0 {talker ? 'text-danger' : 'text-muted'}" aria-hidden="true" />
-          {#if talker}<span class="min-w-0 truncate"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
+        <div class="flex items-center gap-2">
+          <div class="min-w-0 flex-1 truncate text-sm {node.mode?.target ? 'font-mono' : 'text-muted'}" data-testid="mode-target">{node.mode?.target ? targetText(node.mode.target) : node.active ? 'No target' : 'Pick a mode on the Modes page.'}</div>
+          {#if op && node.mode?.target && (node.mode.state === 'connected' || node.mode.state === 'connecting')}
+            <button type="button" class="btn btn-sm btn-bad-outline shrink-0" disabled={!!busy} data-testid="tile-unlink" onclick={unlink}><Unplug size={12} aria-hidden="true" />Disconnect</button>
+          {/if}
+        </div>
+        <div class="-mx-2 flex items-center gap-1.5 rounded border border-transparent px-2 py-1 text-sm {localTx && node.active ? 'talk-live talk-local' : talker || app.nowcalling?.current ? 'talk-live' : ''}" data-testid="talker" data-live={localTx && node.active ? 'local' : talker || app.nowcalling?.current ? 'remote' : undefined} aria-live="polite">
+          <Mic size={14} class="shrink-0 {localTx && node.active ? 'talk-mic text-accent' : talker || app.nowcalling?.current ? 'talk-mic text-danger' : 'text-muted'}" aria-hidden="true" />
+          {#if localTx && node.active}<span class="min-w-0 truncate" data-testid="local-tx"><b>Local station</b> · sending to {modeTitle(node.active, app.modes)}</span>
+          {:else if talker}<span class="min-w-0 truncate"><b class="font-mono">{talker.callsign || (talker.id ? `ID ${talker.id}` : 'Someone')}</b>{#if talker.name} · {talker.name}{/if}{#if talker.place} · <span class="text-muted">{talker.place}</span>{/if}</span>
           {:else if app.nowcalling?.current}<span class="min-w-0 truncate"><b class="font-mono">{who(app.nowcalling.current)}</b></span>
           {:else}<span class="text-muted">Nobody is talking</span>{/if}
         </div>
@@ -112,9 +145,9 @@
         <h2 class="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">Pinned</h2>
         <div class="flex flex-wrap gap-2" data-testid="pins">
           {#each pins as p (p.id)}
-            {@const here = node.active === p.mode && node.mode?.target?.id === p.target}
-            <button type="button" class="btn btn-pin {here ? 'btn-accent-outline' : ''}" disabled={!op || !!busy} aria-pressed={here} aria-label="Connect {modeTitle(p.mode, app.modes)} to {p.label || p.target}" onclick={() => tap(p)}>
-              <Pin size={12} aria-hidden="true" /><span class="badge">{modeTitle(p.mode, app.modes)}</span><span>{p.label || p.target}</span>
+            {@const here = favoriteActive(p, node.active, node.mode?.target)}
+            <button type="button" class="btn btn-pin max-w-full {here ? 'btn-accent-outline' : ''}" disabled={!op || !!busy} aria-pressed={here} aria-label="Connect {modeTitle(p.mode, app.modes)} to {p.label || p.target}" title="Switch to {modeTitle(p.mode, app.modes)} and connect to {p.target}" data-pin={p.id} onclick={() => tap(p)}>
+              <PinFace active={here} dotId="pin-active" tag={modeTitle(p.mode, app.modes)} label={p.label || p.target} sub={p.label && p.label !== p.target ? p.target : ''} />
             </button>
           {/each}
         </div>

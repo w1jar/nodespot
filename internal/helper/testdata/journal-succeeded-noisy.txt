@@ -1,26 +1,26 @@
-aslcp-upgrade.service: Deactivated successfully.
-Finished aslcp-upgrade.service - /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confold aslcp.
-aslcp-upgrade.service: Consumed 15.090s CPU time.
-aslcp-upgrade.service: Failed to open /run/systemd/transient/aslcp-upgrade.service: No such file or directory
-Starting aslcp-upgrade.service - /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confold aslcp...
+nodespot-upgrade.service: Deactivated successfully.
+Finished nodespot-upgrade.service - /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confold nodespot.
+nodespot-upgrade.service: Consumed 15.090s CPU time.
+nodespot-upgrade.service: Failed to open /run/systemd/transient/nodespot-upgrade.service: No such file or directory
+Starting nodespot-upgrade.service - /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confold nodespot...
 Reading package lists...
 Building dependency tree...
 Reading state information...
 The following packages will be upgraded:
-  aslcp
+  nodespot
 1 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
 Need to get 4,812 kB of archives.
-Get:1 https://artw1.github.io/aslcp stable/main arm64 aslcp arm64 0.2.1 [4,812 kB]
+Get:1 https://w1jar.github.io/nodespot stable/main arm64 nodespot arm64 0.2.1 [4,812 kB]
 apt-listchanges: Reading changelogs...
 Fetched 4,812 kB in 1s (3,867 kB/s)
 (Reading database ... (Reading database ... 5%(Reading database ... 100%(Reading database ... 132342 files and directories currently installed.)
-Preparing to unpack .../archives/aslcp_0.2.1_arm64.deb ...
-Unpacking aslcp (0.2.1) over (0.2.0) ...
-Setting up aslcp (0.2.1) ...
-pam_unix(runuser:session): session opened for user aslcp(uid=112) by (uid=0)
-pam_unix(runuser:session): session closed for user aslcp
-aslcp-upgrade.service: Deactivated successfully.
-Finished aslcp-upgrade.service - /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confold aslcp.
-aslcp-upgrade.service: Consumed 14.935s CPU time.
-aslcp-upgrade.service: Failed to open /run/systemd/transient/aslcp-upgrade.service: No such file or directory
-aslcp-upgrade.service: Failed to open /run/systemd/transient/aslcp-upgrade.service: No such file or directory
+Preparing to unpack .../archives/nodespot_0.2.1_arm64.deb ...
+Unpacking nodespot (0.2.1) over (0.2.0) ...
+Setting up nodespot (0.2.1) ...
+pam_unix(runuser:session): session opened for user nodespot(uid=112) by (uid=0)
+pam_unix(runuser:session): session closed for user nodespot
+nodespot-upgrade.service: Deactivated successfully.
+Finished nodespot-upgrade.service - /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y --only-upgrade -o Dpkg::Options::=--force-confold nodespot.
+nodespot-upgrade.service: Consumed 14.935s CPU time.
+nodespot-upgrade.service: Failed to open /run/systemd/transient/nodespot-upgrade.service: No such file or directory
+nodespot-upgrade.service: Failed to open /run/systemd/transient/nodespot-upgrade.service: No such file or directory

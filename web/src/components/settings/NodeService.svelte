@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The aslcp-node systemd unit: the process that holds the radio and the one active mode.
+  // The nodespot-node systemd unit: the process that holds the radio and the one active mode.
   import { api } from '../../lib/api';
   import { app } from '../../lib/store.svelte';
   import { toast, toastError } from '../../lib/toast.svelte';

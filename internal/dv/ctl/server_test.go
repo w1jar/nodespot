@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/ctl/ctltest"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/ctl/ctltest"
 )
 
 type stub struct {

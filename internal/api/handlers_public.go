@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/public"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/public"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // PublicSettingsJSON is the API object of GET/PUT /api/public (admin).
@@ -103,7 +103,7 @@ func (s *Server) publicInput() public.Input {
 }
 
 func callIn(c nowcalling.Call) public.CallIn {
-	out := public.CallIn{Mode: c.Kind, Call: c.Call, Node: c.Node, Target: c.Target, Name: c.Name, Place: joinPlace(c.City, c.State)}
+	out := public.CallIn{Mode: c.Kind, Call: c.Call, Node: c.Node, Target: c.Target, Name: c.Name, Place: placeText(c.City, c.State, c.Country)}
 	if out.Place == "" {
 		out.Place = c.Location
 	}

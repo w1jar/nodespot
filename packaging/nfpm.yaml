@@ -1,22 +1,22 @@
 # nfpm package definition (https://nfpm.goreleaser.com). Driven by `make deb`,
 # which exports:
-#   VERSION    Debian version (git tag without the leading "v", or 0.0.0~git<sha>)
+#   VERSION    Debian version (git tag without the leading "v", or 0.0.0+dev.N.g<sha> without any tag)
 #   ARCH       Debian architecture: arm64 or amd64
 #   (@BUILD_DIR@ in contents is replaced by the Makefile with the directory
 #   holding the cross-compiled binaries; nfpm does not expand env vars there.)
-name: aslcp
+name: nodespot
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
 version_schema: none
 section: net
 priority: optional
-maintainer: ASLCP <noreply@users.noreply.github.com>
-homepage: https://w1jar.github.io/aslcp/
+maintainer: nodespot <noreply@users.noreply.github.com>
+homepage: https://w1jar.github.io/nodespot/
 description: |
   Native radio node with a web control panel.
   One radio, one network mode at a time (AllStarLink, EchoLink or a digital
-  mode), chosen and watched from a browser. The node (aslcp-node) runs on its
+  mode), chosen and watched from a browser. The node (nodespot-node) runs on its
   own, without Asterisk; the panel talks to it over a local socket. A small
   root helper performs package updates and backups on request.
 
@@ -26,65 +26,65 @@ depends:
   - git
 
 contents:
-  - src: "@BUILD_DIR@/aslcp"
-    dst: /usr/bin/aslcp
+  - src: "@BUILD_DIR@/nodespot"
+    dst: /usr/bin/nodespot
     file_info:
       mode: 0755
-  - src: "@BUILD_DIR@/aslcp-helper"
-    dst: /usr/libexec/aslcp/aslcp-helper
+  - src: "@BUILD_DIR@/nodespot-helper"
+    dst: /usr/libexec/nodespot/nodespot-helper
     file_info:
       mode: 0755
-  - src: "@BUILD_DIR@/aslcp-node"
-    dst: /usr/libexec/aslcp/aslcp-node
+  - src: "@BUILD_DIR@/nodespot-node"
+    dst: /usr/libexec/nodespot/nodespot-node
     file_info:
       mode: 0755
-  - src: packaging/aslcp.conf
-    dst: /etc/aslcp/aslcp.conf
+  - src: packaging/nodespot.conf
+    dst: /etc/nodespot/nodespot.conf
     type: config|noreplace
     file_info:
       mode: 0644
-  - src: packaging/systemd/aslcp.service
-    dst: /lib/systemd/system/aslcp.service
+  - src: packaging/systemd/nodespot.service
+    dst: /lib/systemd/system/nodespot.service
     file_info:
       mode: 0644
-  - src: packaging/systemd/aslcp-helper.socket
-    dst: /lib/systemd/system/aslcp-helper.socket
+  - src: packaging/systemd/nodespot-helper.socket
+    dst: /lib/systemd/system/nodespot-helper.socket
     file_info:
       mode: 0644
-  - src: packaging/systemd/aslcp-helper.service
-    dst: /lib/systemd/system/aslcp-helper.service
+  - src: packaging/systemd/nodespot-helper.service
+    dst: /lib/systemd/system/nodespot-helper.service
     file_info:
       mode: 0644
-  - src: packaging/systemd/aslcp-node.service
-    dst: /lib/systemd/system/aslcp-node.service
+  - src: packaging/systemd/nodespot-node.service
+    dst: /lib/systemd/system/nodespot-node.service
     file_info:
       mode: 0644
-  - src: packaging/udev/60-aslcp-node.rules
-    dst: /lib/udev/rules.d/60-aslcp-node.rules
+  - src: packaging/udev/60-nodespot-node.rules
+    dst: /lib/udev/rules.d/60-nodespot-node.rules
     file_info:
       mode: 0644
-  - src: packaging/systemd/aslcp-wifi-watchdog.service
-    dst: /lib/systemd/system/aslcp-wifi-watchdog.service
+  - src: packaging/systemd/nodespot-wifi-watchdog.service
+    dst: /lib/systemd/system/nodespot-wifi-watchdog.service
     file_info:
       mode: 0644
-  - src: packaging/systemd/aslcp-wifi-watchdog.timer
-    dst: /lib/systemd/system/aslcp-wifi-watchdog.timer
+  - src: packaging/systemd/nodespot-wifi-watchdog.timer
+    dst: /lib/systemd/system/nodespot-wifi-watchdog.timer
     file_info:
       mode: 0644
-  - src: packaging/firewalld/aslcp.xml
-    dst: /usr/lib/firewalld/services/aslcp.xml
+  - src: packaging/firewalld/nodespot.xml
+    dst: /usr/lib/firewalld/services/nodespot.xml
     file_info:
       mode: 0644
   - src: packaging/copyright
-    dst: /usr/share/doc/aslcp/copyright
+    dst: /usr/share/doc/nodespot/copyright
     file_info:
       mode: 0644
   - src: packaging/THIRD-PARTY-NOTICES
-    dst: /usr/share/doc/aslcp/THIRD-PARTY-NOTICES
+    dst: /usr/share/doc/nodespot/THIRD-PARTY-NOTICES
     file_info:
       mode: 0644
   - src: packaging/README.package
-    dst: /usr/share/doc/aslcp/README
+    dst: /usr/share/doc/nodespot/README
     file_info:
       mode: 0644
 

@@ -4,9 +4,6 @@ import type { Component } from 'svelte';
 
 type Loader = () => Promise<{ default: Component<any> }>;
 
-/** The mode settings pages, in the order of the modes list. */
-const MODE_TABS: [string, string][] = [['allstar', 'AllStar'], ['echolink', 'EchoLink'], ['bm', 'BrandMeister'], ['dmr', 'DMR'], ['tgif', 'TGIF'], ['ysf', 'YSF'], ['p25', 'P25'], ['nxdn', 'NXDN'], ['m17', 'M17']];
-
 export interface SettingsTab {
   /** URL part: #/settings/<group>/<id>. Lowercase letters, digits and hyphens. */
   id: string;
@@ -15,7 +12,7 @@ export interface SettingsTab {
   title?: string;
   /** The component draws its own heading, so the shell adds none. */
   bare?: boolean;
-  /** Props for the page component (the mode pages get their mode name). */
+  /** Props for the page component. */
   props?: Record<string, unknown>;
   /** Lazy, so a page's code loads only when it is opened. */
   load: Loader;
@@ -37,10 +34,9 @@ export const groups: SettingsGroup[] = [
   { id: 'station', label: 'Station', admin: true, tabs: [
     { id: 'station', label: 'Station', title: 'Station', bare: true, load: () => import('./Station.svelte') },
     { id: 'radio', label: 'Radio', bare: true, load: () => import('./RadioTune.svelte') },
-  ] },
-  { id: 'modes', label: 'Modes', admin: true, tabs: [
-    ...MODE_TABS.map(([id, label]) => ({ id, label, bare: true, props: { mode: id }, load: () => import('./ModePage.svelte') })),
+    { id: 'audio', label: 'Audio', bare: true, load: () => import('./AudioTune.svelte') },
     { id: 'lookup', label: 'Caller lookup', bare: true, load: () => import('./CallerLookup.svelte') },
+    { id: 'hostlists', label: 'Host lists', bare: true, load: () => import('./HostLists.svelte') },
   ] },
   { id: 'access', label: 'Access', admin: true, pages: [() => import('./Users.svelte'), () => import('../PublicSettings.svelte')] },
   { id: 'system', label: 'System', admin: true, tabs: [
@@ -48,7 +44,7 @@ export const groups: SettingsGroup[] = [
     { id: 'updates', label: 'Updates', bare: true, load: () => import('./Updates.svelte') },
     { id: 'network', label: 'Network', load: () => import('./Network.svelte') },
     { id: 'wifi', label: 'WiFi', load: () => import('./Wifi.svelte') },
-    { id: 'web-port', label: 'Web port', title: 'Web port of ASLCP', load: () => import('./WebPort.svelte') },
+    { id: 'web-port', label: 'Web port', title: 'Web port of nodespot', load: () => import('./WebPort.svelte') },
     { id: 'node', label: 'Node service', load: () => import('./NodeService.svelte') },
     { id: 'terminal', label: 'Terminal', load: () => import('./Terminal.svelte') },
   ] },

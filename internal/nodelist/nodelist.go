@@ -33,6 +33,8 @@ type Status struct {
 	Updated *time.Time `json:"updated"`
 	Source  string     `json:"source"`
 	Error   *string    `json:"error"`
+	// Busy is true while a download runs.
+	Busy bool `json:"busy,omitempty"`
 }
 
 // Options configure a DB.
@@ -248,7 +250,7 @@ func (d *DB) download(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "aslcp-nodelist")
+	req.Header.Set("User-Agent", "nodespot-nodelist")
 	resp, err := d.opt.Client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
@@ -418,6 +420,9 @@ func (d *DB) Status() Status {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	s := Status{Count: len(d.list), Source: d.source}
+	d.refreshMu.Lock()
+	s.Busy = d.refreshing
+	d.refreshMu.Unlock()
 	if !d.updated.IsZero() {
 		u := d.updated
 		s.Updated = &u

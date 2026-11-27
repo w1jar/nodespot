@@ -181,7 +181,7 @@ func TestSetTimezoneAndNTP(t *testing.T) {
 func TestPoweroff(t *testing.T) {
 	r := map[string]resp{"systemctl --no-block poweroff": {}}
 	idleJob(r)
-	r["journalctl -u aslcp-osupgrade"] = resp{}
+	r["journalctl -u nodespot-osupgrade"] = resp{}
 	o, f := sysOpsWith(r)
 	if res, err := o.HostPoweroff(context.Background()); err != nil || !res.OK {
 		t.Fatalf("%v %v", res, err)
@@ -193,8 +193,8 @@ func TestPoweroff(t *testing.T) {
 
 func TestLogsRead(t *testing.T) {
 	ctx := context.Background()
-	o, f := sysOpsWith(map[string]resp{"journalctl": {out: "2026-11-20T09:00:00-0600 node2001 aslcp-node[1]: hello\n"}})
-	for _, tc := range []struct{ unit, since string }{{"sshd", ""}, {"aslcp-node;ls", ""}, {"-n", ""}, {"", ""}, {"aslcp-node.service", ""}, {"aslcp-node", "forever"}, {"aslcp-node", "--since=x"}} {
+	o, f := sysOpsWith(map[string]resp{"journalctl": {out: "2026-11-20T09:00:00-0600 node2001 nodespot-node[1]: hello\n"}})
+	for _, tc := range []struct{ unit, since string }{{"sshd", ""}, {"nodespot-node;ls", ""}, {"-n", ""}, {"", ""}, {"nodespot-node.service", ""}, {"nodespot-node", "forever"}, {"nodespot-node", "--since=x"}} {
 		if _, err := o.LogsRead(ctx, tc.unit, 100, tc.since); err == nil {
 			t.Errorf("%+v accepted", tc)
 		}
@@ -208,11 +208,11 @@ func TestLogsRead(t *testing.T) {
 		since string
 		want  string
 	}{
-		{"aslcp-node", 0, "", "journalctl -u aslcp-node -n 200 --no-pager -o short-iso"},
-		{"aslcp", 5, "", "journalctl -u aslcp -n 50 --no-pager -o short-iso"},
+		{"nodespot-node", 0, "", "journalctl -u nodespot-node -n 200 --no-pager -o short-iso"},
+		{"nodespot", 5, "", "journalctl -u nodespot -n 50 --no-pager -o short-iso"},
 		{"NetworkManager", 99999, "1h", "journalctl -u NetworkManager -n 1000 --no-pager -o short-iso --since 1 hour ago"},
 		{"md380-emu", 300, "24h", "journalctl -u md380-emu -n 300 --no-pager -o short-iso --since 24 hours ago"},
-		{"aslcp-helper", 100, "boot", "journalctl -u aslcp-helper -n 100 --no-pager -o short-iso -b"},
+		{"nodespot-helper", 100, "boot", "journalctl -u nodespot-helper -n 100 --no-pager -o short-iso -b"},
 	}
 	for _, c := range cases {
 		f.calls = nil
@@ -226,7 +226,7 @@ func TestLogsRead(t *testing.T) {
 	}
 	// no journalctl: unavailable, not an error
 	o2, _ := sysOpsWith(map[string]resp{})
-	if res, err := o2.LogsRead(ctx, "aslcp-node", 100, ""); err != nil || res.Available {
+	if res, err := o2.LogsRead(ctx, "nodespot-node", 100, ""); err != nil || res.Available {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
@@ -242,7 +242,7 @@ func TestCapTail(t *testing.T) {
 }
 
 func TestLogUnitsContainRequired(t *testing.T) {
-	for _, u := range []string{"aslcp-node", "aslcp", "aslcp-helper", "NetworkManager", "systemd-networkd", "md380-emu", "aslcp-wifi-watchdog"} {
+	for _, u := range []string{"nodespot-node", "nodespot", "nodespot-helper", "NetworkManager", "systemd-networkd", "md380-emu", "nodespot-wifi-watchdog"} {
 		if !ValidLogUnit(u) {
 			t.Errorf("%s missing", u)
 		}
@@ -267,7 +267,7 @@ func TestServicesStatusArgv(t *testing.T) {
 		t.Fatalf("%+v", res)
 	}
 	c := f.calls[0]
-	for _, w := range []string{"aslcp-node.service", "cockpit.socket", "md380-emu.service", " -- "} {
+	for _, w := range []string{"nodespot-node.service", "cockpit.socket", "md380-emu.service", " -- "} {
 		if !strings.Contains(c, w) {
 			t.Errorf("%s missing from %s", w, c)
 		}

@@ -12,7 +12,7 @@
   import Power from '@lucide/svelte/icons/power';
   import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 
-  // ASLCP
+  // nodespot
   let upd = $state<UpdateInfo | null>(null), ubusy2 = $state(false), updOpen = $state(false), updErr = $state('');
   let reconnecting = $state(false), noopMsg = $state(false), nowMs = $state(Date.now());
   const checkedText = $derived(upd?.checked ? fmtAgoLong((nowMs - new Date(upd.checked).getTime()) / 1000) : 'not checked yet');
@@ -22,7 +22,7 @@
   async function loadUpd() { try { upd = await api.updates(); updErr = ''; } catch (e) { updErr = e instanceof Error ? e.message : String(e); } }
   async function checkUpd() {
     ubusy2 = true; noopMsg = false;
-    try { upd = await api.checkUpdates(); updErr = ''; nowMs = Date.now(); toast(upd.upgradable ? `Version ${upd.candidate} is available` : 'ASLCP is up to date', 'info'); } catch (e) { toastError(e); } finally { ubusy2 = false; }
+    try { upd = await api.checkUpdates(); updErr = ''; nowMs = Date.now(); toast(upd.upgradable ? `Version ${upd.candidate} is available` : 'nodespot is up to date', 'info'); } catch (e) { toastError(e); } finally { ubusy2 = false; }
   }
   async function setChannel(channel: 'stable' | 'beta') {
     if (!upd || channel === upd.channel) return;
@@ -57,7 +57,7 @@
         else if (u.job === 'failed') { app.updating = null; toast('Update failed. See the log below.', 'error'); }
         else if (u.job === 'succeeded') {
           doneAt ||= Date.now();
-          if (Date.now() - doneAt > 30000) { app.updating = null; toast(`Update to ${u.installed} installed. If ASLCP did not restart, restart the aslcp service.`, 'info'); }
+          if (Date.now() - doneAt > 30000) { app.updating = null; toast(`Update to ${u.installed} installed. If nodespot did not restart, restart the nodespot service.`, 'info'); }
         }
       } catch { if (alive) reconnecting = true; }
     };
@@ -87,7 +87,7 @@
   let osBusy = $state(false), osOpen = $state(false), rebootOpen = $state(false), osDone = $state(false);
   const osChecked = $derived(os?.checkedAt ? fmtAgoLong((nowMs - new Date(os.checkedAt).getTime()) / 1000) : 'not checked yet');
   const secCount = $derived(os ? os.packages.filter((p) => p.security).length : 0);
-  const hasAslcpPkg = $derived(!!os?.packages.some((p) => p.name === 'aslcp'));
+  const hasNodespotPkg = $derived(!!os?.packages.some((p) => p.name === 'nodespot'));
   const osRunning = $derived(os?.job === 'running');
   const aptBusy = $derived(osRunning || upd?.job === 'running' || !!app.updating);
   async function osCheck() {
@@ -97,7 +97,7 @@
   async function osApply() {
     osBusy = true; osDone = false;
     try {
-      const restartsPanel = hasAslcpPkg;
+      const restartsPanel = hasNodespotPkg;
       const u = await api.osApply(); if (u) upd = u; else await loadUpd();
       if (restartsPanel) toast('The panel restarts during this update; this page reloads when it is back', 'info');
     } catch (e) { toastError(e); await loadUpd(); } finally { osBusy = false; }
@@ -125,17 +125,17 @@
     return () => { alive = false; clearInterval(t); };
   });
   // Another admin's check or the daily check changes counts: refresh.
-  $effect(() => { app.updates.os; app.updates.security; app.updates.reboot; app.updates.aslcp; untrack(() => { loadUpd(); }); });
+  $effect(() => { app.updates.os; app.updates.security; app.updates.reboot; app.updates.nodespot; untrack(() => { loadUpd(); }); });
 </script>
 <div class="space-y-4">
   <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-  <section class="card space-y-3 p-4" aria-label="ASLCP">
-    <h2 class="text-base font-semibold">ASLCP</h2>
+  <section class="card space-y-3 p-4" aria-label="nodespot">
+    <h2 class="text-base font-semibold">nodespot</h2>
     {#if !upd}
       <p class="text-sm text-muted">{updErr || 'Loading…'}</p>
     {:else if !upd.available}
       <p class="text-sm text-muted">Updates from the web interface are not available: {upd.reason ?? 'unknown reason'}.</p>
-      <p class="text-xs text-muted">Install ASLCP from its apt repository to get one-click updates.</p>
+      <p class="text-xs text-muted">Install nodespot from its apt repository to get one-click updates.</p>
     {:else}
       <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
         <dt class="text-muted">Installed</dt><dd class="font-mono">{upd.installed}</dd>
@@ -237,12 +237,12 @@
   </section>
   </div>
 </div>
-<Confirm bind:open={updOpen} title="Update ASLCP?" message="Update to {upd?.candidate}? ASLCP will restart; the active link drops for a moment." confirmLabel="Update" onconfirm={applyUpd} />
+<Confirm bind:open={updOpen} title="Update nodespot?" message="Update to {upd?.candidate}? nodespot will restart; the active link drops for a moment." confirmLabel="Update" onconfirm={applyUpd} />
 
 <Dialog bind:open={osOpen} title="Install {os?.packages.length ?? 0} system update{os?.packages.length === 1 ? '' : 's'}?">
   <div class="space-y-3 text-sm">
-    {#if hasAslcpPkg}
-      <p class="rounded border border-warn/60 p-2 text-warn" role="alert">The aslcp package is in this list. The panel restarts for a few seconds; this page reloads by itself.</p>
+    {#if hasNodespotPkg}
+      <p class="rounded border border-warn/60 p-2 text-warn" role="alert">The nodespot package is in this list. The panel restarts for a few seconds; this page reloads by itself.</p>
     {/if}
     <ul class="max-h-60 divide-y divide-line overflow-auto rounded border border-line text-xs" aria-label="Packages to upgrade">
       {#each os?.packages ?? [] as p}

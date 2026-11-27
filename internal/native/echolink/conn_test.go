@@ -1,13 +1,18 @@
 package echolink
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"math"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/gsm"
+	"github.com/w1jar/nodespot/internal/native/gsm"
 )
 
 // connSetup logs on to a fake directory and returns a config wired to a
@@ -19,7 +24,7 @@ type connSetup struct {
 	d   *Directory
 }
 
-func newConnSetup(t *testing.T, answer bool) *connSetup {
+func newConnSetup(t *testing.T, answer bool, opts ...func(*Config)) *connSetup {
 	t.Helper()
 	s := &connSetup{clk: newFakeClock(), fd: newFakeDirectory(t, testList), st: newFakeStation(t, "127.0.0.2", answer)}
 	cfg := testConfig(s.clk, s.fd.addr())
@@ -31,6 +36,9 @@ func newConnSetup(t *testing.T, answer bool) *connSetup {
 	cfg.RemoteControlPort = s.st.ctrlPort()
 	cfg.tick = time.Second
 	cfg.TalkHang = 2 * time.Second
+	for _, o := range opts {
+		o(&cfg)
+	}
 	d, err := Login(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -76,13 +84,16 @@ func TestConnectHandshake(t *testing.T) {
 	if sdes.callsign() != "N0CALL-L" || sdes.name() != "Test Op" || sdes.items[sdesLOC] != "Example City" {
 		t.Fatalf("our SDES: %+v", sdes.items)
 	}
-	select {
-	case p := <-s.st.audioIn:
-		if tp := parseText(p); !tp.info || tp.text != "N0CALL-L\nExample City" {
-			t.Fatalf("info packet %+v", tp)
+	// The info goes out twice: when calling and once the station answers.
+	for i := 0; i < 2; i++ {
+		select {
+		case p := <-s.st.textIn:
+			if tp := parseText(p); !tp.info || tp.text != "N0CALL-L\nExample City" {
+				t.Fatalf("info packet %+v", tp)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("info packet %d not received", i+1)
 		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("no info packet")
 	}
 	st := c.Status()
 	if st.State != StateConnected || st.PeerName != "Test Op" || st.Station.ID != 1997 {
@@ -130,7 +141,6 @@ func TestSendAudio(t *testing.T) {
 	s := newConnSetup(t, true)
 	c := s.connect(t)
 	defer c.Close()
-	<-s.st.audioIn // info packet
 
 	ref := gsm.NewEncoder()
 	for i := 0; i < 6; i++ {
@@ -162,7 +172,7 @@ func TestSendAudio(t *testing.T) {
 					}
 				}
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatalf("packet %d not received", want)
 		}
 	}
@@ -202,7 +212,7 @@ func TestReceiveAudioAndText(t *testing.T) {
 			if i > 0 && peak < 1000 {
 				t.Fatalf("frame %d is near silent (peak %d)", i, peak)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatalf("frame %d not received", i)
 		}
 	}
@@ -218,7 +228,7 @@ func TestReceiveAudioAndText(t *testing.T) {
 		t.Fatalf("chat %+v", ev)
 	}
 	st := c.Status()
-	if st.RxPackets != 1 || st.RxBad != 2 || st.Info == "" || !st.Talking {
+	if st.RxPackets != 1 || st.RxLate != 1 || st.RxBad != 1 || st.Info == "" || !st.Talking {
 		t.Fatalf("status %+v", st)
 	}
 	select {
@@ -276,11 +286,16 @@ func TestKeepaliveAndTimeouts(t *testing.T) {
 			if !errors.Is(err, ErrConnectTimeout) {
 				t.Fatalf("err = %v", err)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("Connect did not time out")
 		}
 		// It retried the SDES while waiting and said BYE at the end.
 		s.st.waitCounts(t, 3, 1)
+		// Each retry also went out from the audio port, keeping the way
+		// in for the station's audio open.
+		if n := len(s.st.textIn); n < 3 {
+			t.Fatalf("%d info packets while calling, want one per SDES", n)
+		}
 		// The slot is free again.
 		s.st.mu.Lock()
 		s.st.answer = true
@@ -311,7 +326,7 @@ func TestRemoteBye(t *testing.T) {
 	}
 	select {
 	case <-c.Done():
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("not done")
 	}
 	if err := c.Close(); err != nil {
@@ -357,5 +372,313 @@ func TestRefuseIncoming(t *testing.T) {
 	}
 	if _, byes := s.st.counts(); byes != 0 {
 		t.Fatalf("station got %d BYEs, want 0", byes)
+	}
+}
+
+// gsmPacket builds an audio packet of four tone frames with seq.
+func gsmPacket(seq uint16) []byte {
+	enc := gsm.NewEncoder()
+	var payload []byte
+	for i := 0; i < 4; i++ {
+		pcm := [gsm.FrameSamples]int16(tone(i))
+		b := enc.Encode(&pcm)
+		payload = append(payload, b[:]...)
+	}
+	return buildAudio(seq, 0, payload)
+}
+
+// waitRx waits until the connection has counted n received packets and late
+// packets.
+func waitRx(t *testing.T, c *Conn, rx, late uint64) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		st := c.Status()
+		if st.RxPackets == rx && st.RxLate == late {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("rx %d late %d, want %d and %d", st.RxPackets, st.RxLate, rx, late)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// TestReceiveRestartedSequence is the echo test bug: the parrot plays our
+// recording back with sequence numbers below those of its greeting, and
+// every packet of it was dropped as late.
+func TestReceiveRestartedSequence(t *testing.T) {
+	s := newConnSetup(t, true)
+	c := s.connect(t)
+	defer c.Close()
+
+	// The greeting: packets 0..39.
+	for seq := uint16(0); seq < 40; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 40, 0)
+	// Within the spurt, a slightly late packet and a duplicate are dropped.
+	s.st.sendAudio(t, c, gsmPacket(30))
+	s.st.sendAudio(t, c, gsmPacket(39))
+	waitRx(t, c, 40, 2)
+	s.clk.run(t, 3*time.Second, time.Second)
+	nextEvent(t, c, EventTalkStop)
+
+	// The playback starts again at 0: a new spurt, every packet taken.
+	for seq := uint16(0); seq < 10; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 50, 2)
+	nextEvent(t, c, EventTalkStart)
+
+	// Within a spurt, a jump back further than the reorder window is a
+	// new stream (a conference relaying another talker), not late audio.
+	s.st.sendAudio(t, c, gsmPacket(60000))
+	s.st.sendAudio(t, c, gsmPacket(60001))
+	waitRx(t, c, 52, 2)
+	if st := c.Status(); st.RxBad != 0 {
+		t.Fatalf("status %+v", st)
+	}
+}
+
+// syncBuf is a goroutine-safe log sink.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *syncBuf) Write(p []byte) (int, error) { b.mu.Lock(); defer b.mu.Unlock(); return b.b.Write(p) }
+func (b *syncBuf) String() string              { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+// TestTransmissionLog checks the info lines at the start and end of a
+// transmission and the debug summaries, which never carry audio.
+func TestTransmissionLog(t *testing.T) {
+	var buf syncBuf
+	s := newConnSetup(t, true, func(c *Config) {
+		c.Logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
+	c := s.connect(t)
+	defer c.Close()
+
+	for i := 0; i < 6; i++ {
+		if err := c.Send(tone(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// A second transmission logs again.
+	for i := 0; i < 4; i++ {
+		_ = c.Send(tone(i))
+	}
+	_ = c.Flush()
+	_ = c.Flush() // nothing more to end
+	s.st.sendAudio(t, c, gsmPacket(7))
+	nextEvent(t, c, EventTalkStart)
+	s.clk.run(t, 3*time.Second, time.Second)
+	nextEvent(t, c, EventTalkStop)
+
+	out := buf.String()
+	for _, want := range []string{
+		`msg="echolink: sending" station=N1CALL`,
+		`msg="echolink: sent 2 packets" station=N1CALL`,
+		`msg="echolink: sent 1 packets" station=N1CALL`,
+		`msg="echolink: tx start"`, `seq=0 bytes=144`, `seq=2 bytes=144`,
+		`msg="echolink: tx end" packets=2 last_seq=1`,
+		`msg="echolink: rx start"`, `seq=7`,
+		`msg="echolink: rx end" packets=1 late=0 dropped=0 bad=0 last_seq=7`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log lacks %q:\n%s", want, out)
+		}
+	}
+	if n := strings.Count(out, "echolink: sending"); n != 2 {
+		t.Errorf("%d sending lines, want 2", n)
+	}
+	if st := c.Status(); st.TxPackets != 3 || st.TxErrors != 0 {
+		t.Fatalf("status %+v", st)
+	}
+}
+
+// TestPlaybackRightAfterGreeting is the first echo test after connecting:
+// we key up right after the greeting, within TalkHang of its last packet,
+// and the parrot plays our recording back numbered below the greeting.
+// Our transmission starts a new stream, so none of it is dropped as late,
+// and EventTalkStop counts the whole received transmission.
+func TestPlaybackRightAfterGreeting(t *testing.T) {
+	s := newConnSetup(t, true)
+	c := s.connect(t)
+	defer c.Close()
+
+	for seq := uint16(0); seq < 40; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 40, 0)
+	nextEvent(t, c, EventTalkStart)
+	for len(c.Recv()) > 0 { // the radio plays the greeting
+		<-c.Recv()
+	}
+	for i := 0; i < 4; i++ {
+		if err := c.Send(tone(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// No clock advance: the greeting's spurt has not ended yet. The
+	// playback's first packets are within the reorder window below the
+	// greeting's last one; they used to be dropped as late.
+	for seq := uint16(30); seq < 60; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	waitRx(t, c, 70, 0)
+	s.clk.run(t, 3*time.Second, time.Second)
+	ev := nextEvent(t, c, EventTalkStop)
+	if ev.Packets != 70 || ev.Late != 0 || ev.Dropped != 0 || ev.Bad != 0 {
+		t.Fatalf("talk stop %+v", ev)
+	}
+}
+
+// TestTalkStopCounts checks that EventTalkStop counts the late packets and
+// the frames dropped because Recv was full, for that transmission only.
+func TestTalkStopCounts(t *testing.T) {
+	s := newConnSetup(t, true)
+	c := s.connect(t)
+	defer c.Close()
+
+	// 65 packets are 260 frames, 10 more than Recv holds.
+	for seq := uint16(0); seq < 65; seq++ {
+		s.st.sendAudio(t, c, gsmPacket(seq))
+	}
+	s.st.sendAudio(t, c, gsmPacket(60)) // late
+	waitRx(t, c, 65, 1)
+	s.clk.run(t, 3*time.Second, time.Second)
+	ev := nextEvent(t, c, EventTalkStop)
+	if ev.Packets != 65 || ev.Late != 1 || ev.Dropped != 10 {
+		t.Fatalf("talk stop %+v", ev)
+	}
+	if st := c.Status(); st.RxDropped != 10 {
+		t.Fatalf("status %+v", st)
+	}
+	for len(c.Recv()) > 0 {
+		<-c.Recv()
+	}
+	s.st.sendAudio(t, c, gsmPacket(70))
+	waitRx(t, c, 66, 1)
+	s.clk.run(t, 3*time.Second, time.Second)
+	if ev := nextEvent(t, c, EventTalkStop); ev.Packets != 1 || ev.Late != 0 || ev.Dropped != 0 {
+		t.Fatalf("second talk stop %+v", ev)
+	}
+}
+
+// TestAudioBeforeTheAnswer is the echo test's cut greeting: the station
+// starts its greeting as soon as our SDES arrives, before (or instead of)
+// answering it. Our first packet from the audio port must already be out
+// by then, since behind a NAT router that is what lets the station's audio
+// in, and every frame of the greeting must reach Recv, the first one
+// included.
+func TestAudioBeforeTheAnswer(t *testing.T) {
+	for _, info := range []string{"N0CALL-L\nExample City", ""} {
+		t.Run("info "+strconv.Quote(info), func(t *testing.T) {
+			s := newConnSetup(t, false, func(c *Config) { c.Info = info })
+			type result struct {
+				c   *Conn
+				err error
+			}
+			done := make(chan result, 1)
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				c, err := s.d.Connect(ctx, "N1CALL")
+				done <- result{c, err}
+			}()
+			want := info
+			if want == "" {
+				want = "N0CALL-L\nTest Op\nExample City"
+			}
+			// While we are still calling, our info has come from the
+			// audio port and our SDES from the control port.
+			select {
+			case p := <-s.st.textIn:
+				if tp := parseText(p); !tp.info || tp.text != want {
+					t.Fatalf("info packet %+v, want %q", tp, want)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("nothing sent from the audio port while calling")
+			}
+			if sdes := <-s.st.ctrlIn; !sdes.sdes {
+				t.Fatalf("control packet %+v", sdes)
+			}
+			select {
+			case r := <-done:
+				t.Fatalf("connected before the station answered: %v", r.err)
+			default:
+			}
+
+			// The greeting, answering our info's source address: the
+			// first packet is marked loud, the next two quieter.
+			s.st.mu.Lock()
+			to := s.st.audioFrom
+			s.st.mu.Unlock()
+			enc := gsm.NewEncoder()
+			for seq := uint16(500); seq < 503; seq++ {
+				amp := 3000.0
+				if seq == 500 {
+					amp = 12000
+				}
+				var payload []byte
+				for k := 0; k < 4; k++ {
+					var pcm [gsm.FrameSamples]int16
+					for i := range pcm {
+						n := float64(int(seq)*4*FrameSamples + k*FrameSamples + i)
+						pcm[i] = int16(amp * math.Sin(2*math.Pi*500*n/SampleRate))
+					}
+					b := enc.Encode(&pcm)
+					payload = append(payload, b[:]...)
+				}
+				if _, err := s.st.audio.WriteToUDPAddrPort(buildAudio(seq, 0, payload), to); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r := <-done
+			if r.err != nil {
+				t.Fatal(r.err)
+			}
+			c := r.c
+			defer c.Close()
+			nextEvent(t, c, EventConnected)
+			nextEvent(t, c, EventTalkStart)
+			var peaks []int16
+			for len(peaks) < 12 {
+				select {
+				case f := <-c.Recv():
+					var pk int16
+					for _, v := range f {
+						pk = max(pk, v)
+					}
+					peaks = append(peaks, pk)
+				case <-time.After(10 * time.Second):
+					t.Fatalf("got %d of the greeting's 12 frames", len(peaks))
+				}
+			}
+			// The first decoded frame is the codec settling; the rest of
+			// the marked packet is loud, the following ones are not.
+			for i, pk := range peaks[1:] {
+				if loud := i+1 < 4; loud != (pk > 7000) {
+					t.Fatalf("frame peaks %v: the greeting's first packet is not first", peaks)
+				}
+			}
+			if st := c.Status(); st.RxPackets != 3 || st.RxDropped != 0 || st.RxLate != 0 || st.RxBad != 0 {
+				t.Fatalf("status %+v", st)
+			}
+			// Once connected the info goes out again.
+			select {
+			case <-s.st.textIn:
+			case <-time.After(10 * time.Second):
+				t.Fatal("no info after the station answered")
+			}
+		})
 	}
 }

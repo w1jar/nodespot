@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // DiagBundler is the part of the helper that builds the diagnostics bundle.
@@ -112,7 +112,7 @@ func (s *Server) handleDiagBundle(w http.ResponseWriter, r *http.Request, u stor
 	s.audit(u, "system.diagnostics.download", map[string]any{"maskIdentity": mask})
 	h := w.Header()
 	h.Set("Content-Type", "application/gzip")
-	h.Set("Content-Disposition", `attachment; filename="aslcp-diagnostics-`+time.Now().Format("20060102-1504")+`.tar.gz"`)
+	h.Set("Content-Disposition", `attachment; filename="nodespot-diagnostics-`+time.Now().Format("20060102-1504")+`.tar.gz"`)
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, rc)

@@ -25,7 +25,7 @@
 //
 // Network options (ctl.NetConfig.Options), all optional:
 //
-//	client_version   software description text (default "aslcp-dv").
+//	client_version   software description text (default "nodespot-dv").
 //	keepalive_ms     keep-alive period (default 5000).
 //	timeout_ms       session considered lost after this silence (default 15000).
 //	login_timeout_ms one login attempt (default 5000).
@@ -39,15 +39,27 @@
 // is required. The password (the one set in BrandMeister SelfCare, hotspot
 // security) is never logged and never reported in Status.
 //
-// Tune: an empty CANCELLING (0x0902) followed by SUBSCRIPTION (0x0901) with
-// {7, target}; the type is always 7 (group), also for the parrot and private
-// targets. The server echoes both with empty payloads, which are ignored.
-// Parrot (TG 9990) is a private call: the subscription is {7, 9990}, TX uses
-// a voice header LC with FLCO 0x03 (private), destination 9990, source the
-// own DMR ID, and the playback arrives as a private call from 9990 to the own
-// DMR ID. Other private targets are handled the same way; that is not
-// confirmed by the capture. Unlink tunes TG 4000, BrandMeister's disconnect
-// talkgroup.
+// Tune: an empty CANCELLING (0x0902, "cancel all") followed by SUBSCRIPTION
+// (0x0901). A talkgroup subscribes {7 (group voice), TG}. The parrot (TG
+// 9990) and other private targets subscribe {5 (private voice), own DMR ID}:
+// a private call is routed to its destination ID, and the parrot's playback
+// is a private call from 9990 to the own DMR ID, so without that
+// subscription the master has nowhere to deliver it. Earlier versions
+// subscribed {7, 9990}, and the parrot never answered. Sources: DroidStar's
+// Open DMR Terminal client (update_odtp_subscription: "Always subscribe to
+// Private Voice Calls addressed to our own 7-digit DMR ID (for Parrot 9990
+// & direct calls)", and no group subscription for 9990), pySPOT
+// (subscribe_frame, type 5 for private), the session types 5/7 in
+// DigestPlay and go-brandmeister. The server echoes both packets with empty
+// payloads, which are ignored. TX to a private target uses a voice header LC
+// with FLCO 0x03 (unit to unit), destination the target, source the own DMR
+// ID. Unlink tunes TG 4000, BrandMeister's disconnect talkgroup.
+//
+// Debug logging: SetLogger gives the network a logger (the node passes its
+// own, so the lines show with the node's -debug flag). It logs the login,
+// each subscription sent, tx start/end, rx start/end and, at most once a
+// minute per packet type, server reports, failure codes, close and packet
+// types the client does not handle.
 package bm
 
 import (
@@ -55,15 +67,18 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"log/slog"
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/dmr"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/dmr"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 // logf writes the engine's log lines (stderr, so the journal); a variable so
@@ -122,10 +137,44 @@ type Net struct {
 	sub      *subscription // desired subscription
 	nextCall uint64
 
-	txCall   uint64
-	txActive bool
-	txBuf    []byte
-	txDst    uint32
+	txCall    uint64
+	txActive  bool
+	txBuf     []byte
+	txDst     uint32
+	txSrc     uint32
+	txPrivate bool
+	txPkts    int
+
+	dlog atomic.Pointer[slog.Logger] // debug lines; see SetLogger
+}
+
+// discard is the logger until SetLogger gives one.
+var discard = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+// SetLogger sets the logger for the debug lines (login, subscriptions, tx and
+// rx start/end, server errors). The DV mode passes the node's logger, so the
+// lines show with the node's -debug flag. nil discards them.
+func (n *Net) SetLogger(l *slog.Logger) {
+	if l == nil {
+		l = discard
+	}
+	n.dlog.Store(l)
+}
+
+func (n *Net) debug(msg string, args ...any) {
+	l := n.dlog.Load()
+	if l == nil {
+		return
+	}
+	l.Debug(msg, args...)
+}
+
+// sessionName names a session type in the logs.
+func sessionName(private bool) string {
+	if private {
+		return "private"
+	}
+	return "group"
 }
 
 type subscription struct {
@@ -152,7 +201,7 @@ func New(cfg ctl.NetConfig, id ctl.Identity) (*Net, error) {
 	n := &Net{
 		enabled: cfg.Enabled, password: cfg.Password, id: id,
 		addr:      net.JoinHostPort(cfg.Address, strconv.Itoa(port)),
-		version:   "aslcp-dv",
+		version:   "nodespot-dv",
 		keepAlive: DefaultKeepAlive, timeout: DefaultTimeout, loginTO: DefaultLoginTimeout,
 		bMin: DefaultBackoffMin, bMax: DefaultBackoffMax, rxTO: DefaultRXTimeout,
 		login: ctl.LoginOff, nextCall: 1 << 33,
@@ -256,6 +305,9 @@ func (n *Net) Run(ctx context.Context, s network.Sink) error {
 				lastMsg, lastAt = msg, time.Now()
 			}
 		}
+		if !ok && err != nil {
+			n.debug("bm: login failed", "master", n.addr, "err", err)
+		}
 		if ok {
 			backoff = n.bMin
 		}
@@ -306,6 +358,7 @@ type rxState struct {
 	dst     uint32
 	private bool
 	seq     uint32
+	pkts    int // audio packets of the call
 	last    time.Time
 	// endedAt is when the last call ended (stray audio just after it is
 	// not a new call).
@@ -330,7 +383,7 @@ func (n *Net) session(ctx context.Context, s network.Sink) (loggedIn bool, err e
 	var rx rxState
 	defer func() {
 		if rx.active {
-			s.End(rx.call)
+			n.rxEnd(s, &rx, time.Now(), "session end")
 		}
 		n.mu.Lock()
 		n.conn, n.logged, n.txActive, n.txBuf = nil, false, false, nil
@@ -370,6 +423,7 @@ func (n *Net) session(ctx context.Context, s network.Sink) (loggedIn bool, err e
 	lastRx, lastTx := start, start
 	retry := n.loginTO / 5
 	authSent := 0
+	noted := map[uint16]time.Time{} // rate limit of the unexpected packet lines
 	if err := n.sendKeepAlive(); err != nil {
 		return false, err
 	}
@@ -390,6 +444,7 @@ func (n *Net) session(ctx context.Context, s network.Sink) (loggedIn bool, err e
 					return true, errors.New("re-challenged")
 				}
 				if authSent >= 2 {
+					n.debug("bm: login refused (challenged again after the authentication)", "master", n.addr, "dmr_id", n.id.DMRID)
 					return false, errBadPassword
 				}
 				d := sha256.Sum256(append(append([]byte(nil), p.payload...), n.password...))
@@ -397,6 +452,7 @@ func (n *Net) session(ctx context.Context, s network.Sink) (loggedIn bool, err e
 				n.sendKeepAlive()
 				authSent++
 			case typClose:
+				n.debug("bm: master closed the session", "master", n.addr, "logged_in", loggedIn)
 				if !loggedIn {
 					return false, errBadPassword
 				}
@@ -406,19 +462,30 @@ func (n *Net) session(ctx context.Context, s network.Sink) (loggedIn bool, err e
 				// empty one) is the login success.
 				if !loggedIn && authSent > 0 {
 					loggedIn = true
+					n.debug("bm: logged in", "master", n.addr, "dmr_id", n.id.DMRID, "service", fmt.Sprintf("%#02x", serviceOpenTerm))
 					n.mu.Lock()
 					n.logged = true
 					if n.sub != nil {
-						n.tuneLocked(n.sub.tg)
+						n.tuneLocked(n.sub.tg, n.sub.private)
 					}
 					n.mu.Unlock()
 					n.setLogin(ctl.LoginOK, nil)
 				}
 			case typSuperHeader, typVoiceHeader, typTerminator, typAudio:
-				// typEmbedded (talker alias) and the echoes of CANCELLING and
-				// SUBSCRIPTION have no case: ignored.
 				if loggedIn {
 					n.rxPacket(s, &rx, p, now)
+				}
+			case typEmbedded, typSubscription, typCancelling, typConfiguration:
+				// talker alias and the echoes of CANCELLING and SUBSCRIPTION:
+				// ignored.
+			default:
+				// REPORT, FAILURE_CODE, BUSY_NOTICE (text payloads, as
+				// DroidStar shows them) and anything else: logged at most
+				// once a minute per type.
+				if t, ok := noted[p.typ]; !ok || now.Sub(t) >= logRepeat {
+					noted[p.typ] = now
+					n.debug("bm: unexpected packet from the master", "type", fmt.Sprintf("%#04x", p.typ),
+						"flags", p.flags, "len", len(p.payload), "text", printable(p.payload))
 				}
 			}
 		case <-tk.C:
@@ -441,8 +508,7 @@ func (n *Net) session(ctx context.Context, s network.Sink) (loggedIn bool, err e
 				lastTx = now
 			}
 			if rx.active && now.Sub(rx.last) > n.rxTO {
-				s.End(rx.call)
-				rx = rxState{endedAt: now}
+				n.rxEnd(s, &rx, now, "timeout")
 			}
 		}
 	}
@@ -466,13 +532,39 @@ func (n *Net) newCall() uint64 {
 }
 
 // startRX emits the header of a received call.
-func (n *Net) startRX(s network.Sink, rx *rxState, h network.CallHeader, now time.Time) {
+func (n *Net) startRX(s network.Sink, rx *rxState, h network.CallHeader, now time.Time, from string) {
 	if rx.active {
-		s.End(rx.call)
+		n.rxEnd(s, rx, now, "new call")
 	}
 	h.Call = n.newCall()
 	*rx = rxState{active: true, call: h.Call, src: h.SrcID, dst: h.TG, private: h.Private, last: now}
+	n.debug("bm: rx start", "session", sessionName(h.Private), "src", h.SrcID, "dst", h.TG, "from", from)
 	s.Header(h)
+}
+
+// rxEnd ends the received call.
+func (n *Net) rxEnd(s network.Sink, rx *rxState, now time.Time, why string) {
+	n.debug("bm: rx end", "session", sessionName(rx.private), "src", rx.src, "dst", rx.dst,
+		"packets", rx.pkts, "frames", rx.seq, "reason", why)
+	s.End(rx.call)
+	*rx = rxState{endedAt: now}
+}
+
+// printable is the payload as text for a log line when it is printable
+// ASCII, else empty.
+func printable(b []byte) string {
+	if len(b) > 64 {
+		b = b[:64]
+	}
+	for _, c := range b {
+		if c == 0 {
+			break
+		}
+		if c < 0x20 || c > 0x7e {
+			return ""
+		}
+	}
+	return cstr(b)
 }
 
 func (n *Net) rxPacket(s network.Sink, rx *rxState, p packet, now time.Time) {
@@ -488,7 +580,7 @@ func (n *Net) rxPacket(s network.Sink, rx *rxState, p packet, now time.Time) {
 			rx.last = now
 			return
 		}
-		n.startRX(s, rx, network.CallHeader{Src: sh.srcCall, SrcID: sh.src, TG: sh.dst, Private: sh.typ == superPrivate}, now)
+		n.startRX(s, rx, network.CallHeader{Src: sh.srcCall, SrcID: sh.src, TG: sh.dst, Private: sh.typ == sessionPrivate}, now, "super header")
 	case typVoiceHeader:
 		// A call starts from its voice header (sent three times); the IDs and
 		// the private flag come from the LC.
@@ -500,12 +592,11 @@ func (n *Net) rxPacket(s network.Sink, rx *rxState, p packet, now time.Time) {
 			rx.last = now
 			return
 		}
-		n.startRX(s, rx, network.CallHeader{SrcID: src, TG: dst, Private: priv}, now)
+		n.startRX(s, rx, network.CallHeader{SrcID: src, TG: dst, Private: priv}, now, "voice header")
 	case typTerminator:
 		// It carries the same LC as the header; the call ends.
 		if rx.active {
-			s.End(rx.call)
-			*rx = rxState{endedAt: now}
+			n.rxEnd(s, rx, now, "terminator")
 		}
 	case typAudio:
 		var fr [3]network.VoiceFrame
@@ -537,9 +628,10 @@ func (n *Net) rxPacket(s network.Sink, rx *rxState, p packet, now time.Time) {
 				tg = n.sub.tg
 			}
 			n.mu.Unlock()
-			n.startRX(s, rx, network.CallHeader{TG: tg}, now)
+			n.startRX(s, rx, network.CallHeader{TG: tg}, now, "audio")
 		}
 		rx.last = now
+		rx.pkts++
 		for i := range fr {
 			fr[i].Call, fr[i].Seq = rx.call, rx.seq
 			s.Voice(fr[i])
@@ -548,14 +640,21 @@ func (n *Net) rxPacket(s network.Sink, rx *rxState, p packet, now time.Time) {
 	}
 }
 
-// tuneLocked sends the tune sequence: an empty CANCELLING, then
-// SUBSCRIPTION {7, tg}. The type is always 7, also for the parrot and private
-// targets. The server echoes both with empty payloads.
-func (n *Net) tuneLocked(tg uint32) error {
+// tuneLocked sends the tune sequence: an empty CANCELLING (cancels every
+// subscription), then SUBSCRIPTION {7, tg} for a talkgroup or {5, own DMR
+// ID} for a private target such as the parrot (see the package comment: the
+// reply is a private call to our ID). The server echoes both with empty
+// payloads.
+func (n *Net) tuneLocked(tg uint32, private bool) error {
 	if err := n.sendLocked(typCancelling, 0, nil, 1); err != nil {
 		return err
 	}
-	return n.sendLocked(typSubscription, 0, u32s(sessionGroup, tg), 1)
+	typ, num := sessionGroup, tg
+	if private {
+		typ, num = sessionPrivate, n.id.DMRID
+	}
+	n.debug("bm: subscription sent", "session", sessionName(private), "type", typ, "number", num, "target", tg)
+	return n.sendLocked(typSubscription, 0, u32s(typ, num), 1)
 }
 
 // Tune subscribes to a talkgroup or a private target (the parrot, 9990).
@@ -563,16 +662,16 @@ func (n *Net) Tune(ctx context.Context, t ctl.Target) error {
 	if t.TG == 0 {
 		return errors.New("bm: tune needs a talkgroup")
 	}
-	// Private calls to targets other than the parrot are not confirmed by
-	// the capture; they are handled like the parrot (subscribe {7, target},
-	// TX voice header FLCO 0x03).
+	// The parrot is always a private call; other private targets are
+	// handled the same way (subscribe {5, own ID}, TX voice header FLCO
+	// 0x03 to the target).
 	sub := &subscription{tg: t.TG, private: t.Private || t.TG == ParrotTG}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.sub = sub
 	n.detail = n.detailLocked(nil)
 	if n.logged {
-		return n.tuneLocked(sub.tg)
+		return n.tuneLocked(sub.tg, sub.private)
 	}
 	return nil
 }
@@ -585,13 +684,17 @@ func (n *Net) Unlink(ctx context.Context) error {
 	n.sub = nil
 	n.detail = n.detailLocked(nil)
 	if n.logged {
-		return n.tuneLocked(DisconnectTG)
+		return n.tuneLocked(DisconnectTG, false)
 	}
 	return nil
 }
 
-// StartTX sends the voice header (three times, same sequence number). There
-// is no super header.
+// StartTX sends the voice header three times, each with its own sequence
+// number (as in the capture; DroidStar repeats one number instead, which the
+// master treats the same as far as is known). There is no super header on
+// TX: the Open DMR Terminal clients (DroidStar, pySPOT) send only the LC;
+// the super header on TX is the Simple External Application's way
+// (DigestPlay), which sends no LC.
 func (n *Net) StartTX(h network.CallHeader) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -611,6 +714,8 @@ func (n *Net) StartTX(h network.CallHeader) error {
 	}
 	private = private || dst == ParrotTG
 	n.txCall, n.txActive, n.txBuf, n.txDst = h.Call, true, n.txBuf[:0], dst
+	n.txSrc, n.txPrivate, n.txPkts = src, private, 0
+	n.debug("bm: tx start", "session", sessionName(private), "dst", dst, "src", src)
 	// Three voice headers, each with its own sequence number (as captured).
 	lc := voiceHeaderLC(private, dst, src)
 	for i := 0; i < 3; i++ {
@@ -641,6 +746,7 @@ func (n *Net) WriteVoice(f network.VoiceFrame) error {
 	}
 	err := n.sendLocked(typAudio, flagRealTime1, n.txBuf[:audioLen], 1)
 	n.txBuf = n.txBuf[:0]
+	n.txPkts++
 	return err
 }
 
@@ -659,6 +765,8 @@ func (n *Net) EndTX(call uint64) error {
 		}
 		n.sendLocked(typAudio, flagRealTime1, n.txBuf, 1)
 		n.txBuf = n.txBuf[:0]
+		n.txPkts++
 	}
+	n.debug("bm: tx end", "session", sessionName(n.txPrivate), "dst", n.txDst, "src", n.txSrc, "packets", n.txPkts)
 	return n.sendLocked(typTerminator, flagRealTime1, nil, 1)
 }

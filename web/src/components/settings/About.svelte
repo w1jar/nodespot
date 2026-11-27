@@ -15,7 +15,7 @@
 <section class="card space-y-3 p-4" aria-label="About">
   <h2 class="text-base font-semibold">About</h2>
   <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-    <dt class="text-muted">ASLCP</dt><dd class="font-mono">{about?.version || app.version || '…'}</dd>
+    <dt class="text-muted">nodespot</dt><dd class="font-mono">{about?.version || app.version || '…'}</dd>
     <dt class="text-muted">Platform</dt><dd class="break-words">{about ? platformText : '…'}</dd>
     <dt class="text-muted">OS</dt><dd class="break-words">{about ? about.platform.distro || 'n/a' : '…'}</dd>
   </dl>

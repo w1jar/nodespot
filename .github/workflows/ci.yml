@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # tags, for the package version
+          fetch-depth: 0 # full history (and tags), for the package version
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -54,7 +54,7 @@ jobs:
         run: |
           for f in dist/*.deb; do dpkg-deb -I "$f" | head -12; dpkg-deb -c "$f"; done
           for f in dist/*.deb; do
-            for p in usr/libexec/aslcp/aslcp-node lib/systemd/system/aslcp-node.service lib/udev/rules.d/60-aslcp-node.rules; do
+            for p in usr/libexec/nodespot/nodespot-node lib/systemd/system/nodespot-node.service lib/udev/rules.d/60-nodespot-node.rules; do
               dpkg-deb -c "$f" | grep -q "\./$p\$" || { echo "::error::$f lacks $p"; exit 1; }
             done
           done

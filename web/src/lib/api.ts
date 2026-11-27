@@ -1,8 +1,8 @@
 import type {
-  About, BackupInfo, BackupSelection, Favorite, HostList, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
-  InputLevel, NowCalling, PublicInfo, PublicSettings, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
+  About, BackupInfo, BackupSelection, Favorite, HostList, HostListsStatus, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
+  AutosetStatus, InputLevel, NowCalling, PublicInfo, PublicSettings, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
   Settings, Station, SysLogs, SysNetwork, SysServices, SystemInfo, Target, TerminalSessionInfo, TerminalStatus, TerminalTicket, UpdateInfo, User,
-  UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo,
+  UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo, EchoSearch,
 } from './types';
 import type { WebPortStatus } from './svcweb';
 
@@ -15,7 +15,7 @@ export function setUnauthorizedHandler(fn: () => void) { onUnauthorized = fn; }
 
 async function req<T>(method: string, path: string, body?: unknown, opts: { noAuthRedirect?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (method !== 'GET') headers['X-ASLCP'] = '1';
+  if (method !== 'GET') headers['X-nodespot'] = '1';
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let res: Response;
   try {
@@ -40,7 +40,7 @@ export async function probeServer(timeoutMs = 4000): Promise<{ status: number; i
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetch('/api/session', { headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store', signal: ac.signal });
-    return { status: res.status, instance: res.headers.get('X-ASLCP-Instance') ?? '' };
+    return { status: res.status, instance: res.headers.get('X-nodespot-Instance') ?? '' };
   } finally { clearTimeout(t); }
 }
 
@@ -71,9 +71,9 @@ async function saveDownload(res: Response, fallback: string): Promise<string> {
 async function downloadBackup(sel: BackupSelection): Promise<string> {
   let res: Response;
   try {
-    res = await fetch('/api/backup', { method: 'POST', credentials: 'same-origin', headers: { 'X-ASLCP': '1', 'Content-Type': 'application/json', Accept: 'application/gzip' }, body: JSON.stringify(sel) });
+    res = await fetch('/api/backup', { method: 'POST', credentials: 'same-origin', headers: { 'X-nodespot': '1', 'Content-Type': 'application/json', Accept: 'application/gzip' }, body: JSON.stringify(sel) });
   } catch { throw new ApiError(0, 'network', 'Cannot reach the server'); }
-  return saveDownload(res, 'aslcp-backup.tar.gz');
+  return saveDownload(res, 'nodespot-backup.tar.gz');
 }
 
 /** GET /api/system/diagnostics/bundle: the diagnostics .tar.gz, saved like a backup. */
@@ -82,7 +82,7 @@ async function downloadDiagnostics(maskIdentity: boolean): Promise<string> {
   try {
     res = await fetch(`/api/system/diagnostics/bundle?mask=${maskIdentity ? 1 : 0}`, { credentials: 'same-origin', headers: { Accept: 'application/gzip' } });
   } catch { throw new ApiError(0, 'network', 'Cannot reach the server'); }
-  return saveDownload(res, 'aslcp-diagnostics.tar.gz');
+  return saveDownload(res, 'nodespot-diagnostics.tar.gz');
 }
 
 /** POST /api/restore/upload with progress (fetch cannot report upload progress). */
@@ -94,7 +94,7 @@ function restoreUpload(file: File, auth: { password?: string; code?: string }, o
     if (auth.code !== undefined) fd.append('code', auth.code);
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/restore/upload');
-    xhr.setRequestHeader('X-ASLCP', '1');
+    xhr.setRequestHeader('X-nodespot', '1');
     xhr.setRequestHeader('Accept', 'application/json');
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
     xhr.onerror = () => reject(new ApiError(0, 'network', 'Cannot reach the server'));
@@ -140,12 +140,21 @@ export const api = {
   disconnect: () => req<NodeJSON>('POST', '/disconnect'),
   heard: (limit = 50) => req<Heard[]>('GET', `/heard?limit=${limit}`),
   radio: () => req<RadioLevels>('GET', '/radio'),
-  setRadio: (p: { rxVolume?: number; txVolume?: number }) => req<RadioLevels>('PUT', '/radio', p),
+  setRadio: (p: { rxVolume?: number; txVolume?: number; rxBoost?: boolean }) => req<RadioLevels>('PUT', '/radio', p),
+  radioAutoset: () => req<AutosetStatus>('GET', '/radio/autoset'),
+  startAutoset: () => req<AutosetStatus>('POST', '/radio/autoset'),
+  cancelAutoset: () => req<AutosetStatus>('DELETE', '/radio/autoset'),
+  /** Dismisses the "tune your audio" reminder for the radio in use (admin). */
+  dismissTuning: () => req<NodeJSON>('POST', '/radio/tuning/dismiss'),
   radioInput: () => req<InputLevel>('GET', '/radio/input'),
   radioInfo: () => req<RadioInfo>('GET', '/radio/info'),
   radioProgram: () => req<NodeJSON>('POST', '/radio/program'),
+  /** Keys the transmitter with a 1 kHz tone for `seconds` (1 to 10; unset is 5). Admin. */
+  testTone: (seconds?: number) => req<NodeJSON>('POST', '/radio/tone', seconds ? { seconds } : undefined),
+  stopTestTone: () => req<NodeJSON>('DELETE', '/radio/tone'),
   hostLists: (mode: string) => req<HostList>('GET', `/hostlists?mode=${q(mode)}`),
-  refreshHostLists: () => req<unknown>('POST', '/hostlists/refresh'),
+  hostListsStatus: () => req<HostListsStatus>('GET', '/hostlists/status'),
+  refreshHostLists: () => req<HostListsStatus>('POST', '/hostlists/refresh'),
   nodeService: () => req<NodeService>('GET', '/system/node-service'),
   restartNodeService: () => req<{ ok: boolean }>('POST', '/system/node-service/restart'),
 
@@ -164,7 +173,9 @@ export const api = {
 
   lookup: (node: string) => req<NodeInfo>('GET', `/lookup/${q(node)}`),
   search: (text: string, limit = 50) => req<NodeInfo[]>('GET', `/lookup?q=${q(text)}&limit=${limit}`),
+  echolinkSearch: (text: string, limit = 50) => req<EchoSearch>('GET', `/echolink/search?q=${q(text)}&limit=${limit}`),
   settings: () => req<Settings>('GET', '/settings'),
+  setHiddenModes: (hiddenModes: string[]) => req<Settings>('PUT', '/settings/hidden-modes', { hiddenModes }),
   system: () => req<SystemInfo>('GET', '/system'),
   about: () => req<About>('GET', '/about'),
   updates: () => req<UpdateInfo>('GET', '/updates'),
@@ -175,7 +186,7 @@ export const api = {
   setUpdateChannel: (channel: 'stable' | 'beta') => req<UpdateInfo>('PUT', '/updates/channel', { channel }),
   reboot: () => req<{ ok: boolean }>('POST', '/system/reboot'),
   poweroff: () => req<void>('POST', '/system/poweroff'),
-  restartAslcp: () => req<{ ok: boolean }>('POST', '/system/restart-aslcp'),
+  restartNodespot: () => req<{ ok: boolean }>('POST', '/system/restart-nodespot'),
   sysHost: () => req<HostStatus>('GET', '/system/host'),
   setSysHost: (p: HostPatch) => req<HostStatus>('PUT', '/system/host', p),
   sysTimezones: () => req<{ timezones: string[] }>('GET', '/system/timezones'),

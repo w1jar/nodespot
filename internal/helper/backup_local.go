@@ -47,23 +47,23 @@ func (demoRunner) Run(ctx context.Context, argv ...string) (string, int, error) 
 // config to back up ("" for a made-up one under dir).
 func NewDemoOps(dir, nodeConfig string) (*Ops, error) {
 	o := &Ops{
-		Run:        demoRunner{},
-		NodeConfig: nodeConfig,
-		SA818State: filepath.Join(dir, "etc", "aslcp", "sa818.json"),
-		AslcpConf:  filepath.Join(dir, "etc", "aslcp", "aslcp.conf"),
-		SourceList: filepath.Join(dir, "etc", "aslcp.list"),
-		OSRelease:  filepath.Join(dir, "etc", "os-release"),
-		NodeUser:   "-", // no such user: the files keep the demo's owner
-		TempDir:    dir,
+		Run:          demoRunner{},
+		NodeConfig:   nodeConfig,
+		SA818State:   filepath.Join(dir, "etc", "nodespot", "sa818.json"),
+		NodespotConf: filepath.Join(dir, "etc", "nodespot", "nodespot.conf"),
+		SourceList:   filepath.Join(dir, "etc", "nodespot.list"),
+		OSRelease:    filepath.Join(dir, "etc", "os-release"),
+		NodeUser:     "-", // no such user: the files keep the demo's owner
+		TempDir:      dir,
 	}
 	files := map[string]string{
-		o.SA818State: "{\"version\":1,\"applied_at\":\"2026-11-20T12:00:00Z\",\"settings\":{\"bandwidth\":0,\"rx_mhz\":146.52,\"tx_mhz\":146.52,\"squelch\":4}}\n",
-		o.AslcpConf:  "[server]\nlisten = 127.0.0.1:8080\n",
-		o.SourceList: "deb [signed-by=/etc/apt/keyrings/aslcp.gpg] https://example.invalid/apt stable main\n",
-		o.OSRelease:  "ID=debian\nVERSION_CODENAME=trixie\nPRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\n",
+		o.SA818State:   "{\"version\":1,\"applied_at\":\"2026-11-20T12:00:00Z\",\"settings\":{\"bandwidth\":0,\"rx_mhz\":146.52,\"tx_mhz\":146.52,\"squelch\":4}}\n",
+		o.NodespotConf: "[server]\nlisten = 127.0.0.1:8080\n",
+		o.SourceList:   "deb [signed-by=/etc/apt/keyrings/nodespot.gpg] https://example.invalid/apt stable main\n",
+		o.OSRelease:    "ID=debian\nVERSION_CODENAME=trixie\nPRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\n",
 	}
 	if nodeConfig == "" {
-		o.NodeConfig = filepath.Join(dir, "etc", "aslcp", "node.json")
+		o.NodeConfig = filepath.Join(dir, "etc", "nodespot", "node.json")
 		files[o.NodeConfig] = "{\"version\":1,\"station\":{\"callsign\":\"N0CALL\",\"radio\":{},\"id\":{},\"advanced\":{}}," +
 			"\"modes\":{\"allstar\":{\"values\":{\"node\":\"1999\",\"password\":\"demo-node-secret\"}}}}\n"
 	}

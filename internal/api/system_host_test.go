@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // fakeSys is the System tab helper; it records the calls that change things.
@@ -51,7 +51,7 @@ func (f *fakeSys) Logs(_ context.Context, unit string, lines int, since string) 
 	return helper.LogsResult{Unit: unit, Lines: lines, Since: since, Text: "line\n", Available: true}, nil
 }
 func (f *fakeSys) Services(context.Context) (helper.ServicesResult, error) {
-	return helper.ServicesResult{Available: true, Services: []helper.ServiceState{{Unit: "aslcp.service", Active: "active"}, {Unit: "aslcp-node.service", Active: "active", Sub: "running"}}}, nil
+	return helper.ServicesResult{Available: true, Services: []helper.ServiceState{{Unit: "nodespot.service", Active: "active"}, {Unit: "nodespot-node.service", Active: "active", Sub: "running"}}}, nil
 }
 func (f *fakeSys) NodeRestart(context.Context) error { f.rec("node-restart"); return f.restartErr }
 func (f *fakeSys) Network(context.Context) (helper.NetStatus, error) {
@@ -62,7 +62,7 @@ func TestSystemRoles(t *testing.T) {
 	e := newEnv(t, opts{sysHost: newFakeSys()})
 	for _, ep := range [][2]string{
 		{"GET", "/api/system/host"}, {"PUT", "/api/system/host"}, {"GET", "/api/system/timezones"}, {"POST", "/api/system/poweroff"},
-		{"GET", "/api/system/logs?unit=aslcp-node"}, {"GET", "/api/system/node-service"}, {"POST", "/api/system/node-service/restart"}, {"GET", "/api/system/services"}, {"GET", "/api/system/network"}, {"GET", "/api/audit"},
+		{"GET", "/api/system/logs?unit=nodespot-node"}, {"GET", "/api/system/node-service"}, {"POST", "/api/system/node-service/restart"}, {"GET", "/api/system/services"}, {"GET", "/api/system/network"}, {"GET", "/api/audit"},
 	} {
 		for _, role := range []string{"op", "viewer"} {
 			var body any
@@ -149,11 +149,11 @@ func TestSystemLogsServicesNetwork(t *testing.T) {
 		t.Fatalf("helper called: %s", fs.got())
 	}
 	var lr helper.LogsResult
-	if c := e.do("admin", "GET", "/api/system/logs?unit=aslcp&lines=99999&since=1h", nil, &lr); c != 200 || lr.Text != "line\n" {
+	if c := e.do("admin", "GET", "/api/system/logs?unit=nodespot&lines=99999&since=1h", nil, &lr); c != 200 || lr.Text != "line\n" {
 		t.Fatalf("%d %+v", c, lr)
 	}
-	e.do("admin", "GET", "/api/system/logs?unit=aslcp&lines=1", nil, nil)
-	if fs.got() != "logs=aslcp,1000,1h;logs=aslcp,50," {
+	e.do("admin", "GET", "/api/system/logs?unit=nodespot&lines=1", nil, nil)
+	if fs.got() != "logs=nodespot,1000,1h;logs=nodespot,50," {
 		t.Fatalf("%s", fs.got())
 	}
 	var units struct{ Units []string }

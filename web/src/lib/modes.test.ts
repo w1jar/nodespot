@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { draftOf, savePayload, missingField, dirty, targetText, targetBody, favoritesOf, recentTargets, stateText, linkStatsText, sortModes, modeTitle, needsVocoder, vocoderBusy, stationValue, stationHint, notReadyText, notReadyShort } from './modes.ts';
+import { draftOf, savePayload, missingField, dirty, targetText, targetBody, favoritesOf, recentTargets, stateText, linkStatsText, linkStatsTitle, sortModes, modeTitle, needsVocoder, vocoderBusy, stationValue, stationHint, notReadyText, notReadyShort, ECHO_CODECS, echoCodec, echoCodecValues } from './modes.ts';
 import type { ModeInfo, Favorite, Heard, NowCall } from './types';
 
 const bm: ModeInfo = {
@@ -63,6 +63,7 @@ test('the not-ready text names what is missing and says login only for passwords
   assert.equal(notReadyText({ ...base, fields: [{ ...f[0], stationDefault: 'dmrId' }, f[1]], missing: ['dmrId'] }), "Set your DMR ID in Settings → Station or on this mode's page.");
   assert.equal(notReadyText({ ...base, missing: ['password'] }), 'BrandMeister needs its password.');
   assert.equal(notReadyText({ ...base, missing: ['host'] }), 'BrandMeister needs its host.');
+  assert.equal(notReadyText({ ...base, title: 'TGIF', fields: [f[0], { ...f[1], label: 'Hotspot password' }], missing: ['password'] }), 'TGIF needs its hotspot password.');
   assert.doesNotMatch(notReadyText({ ...base, missing: ['dmrId'] }), /login/);
   assert.equal(notReadyShort({ ...base, missing: ['password'] }), 'Needs password');
   assert.equal(notReadyShort({ ...base }), 'Not set up');
@@ -136,4 +137,140 @@ test('linkStatsText is compact and hides zero extras', () => {
   const base = { rxVoiceFull: 3, rxVoiceMini: 120, txVoice: 0, vnakSent: 0, vnakRecv: 0, retransmits: 0, parseErrors: 0, dropped: 0, gaps: 0 };
   assert.equal(linkStatsText(base), 'rx 3+120 · tx 0 · VNAK 0/0 · retx 0');
   assert.equal(linkStatsText({ ...base, gaps: 1, dropped: 30, parseErrors: 2 }), 'rx 3+120 · tx 0 · VNAK 0/0 · retx 0 · gaps 1 · dropped 30 · bad 2');
+});
+
+test('linkStatsText shows EchoLink packet counters', () => {
+  const base = { proto: 'echolink', rxVoiceFull: 310, rxVoiceMini: 0, txVoice: 25, vnakSent: 0, vnakRecv: 0, retransmits: 0, parseErrors: 0, dropped: 0, gaps: 0 };
+  assert.equal(linkStatsText(base), 'rx 310 pkts · tx 25 pkts');
+  assert.equal(linkStatsText({ ...base, late: 2, dropped: 4, parseErrors: 1, txErrors: 3 }), 'rx 310 pkts · tx 25 pkts · late 2 · dropped 4 · bad 1 · send errors 3');
+  assert.equal(linkStatsText(base, 50), 'rx 310 pkts · tx 25 pkts · not played 50');
+  assert.equal(linkStatsText(base, 0), 'rx 310 pkts · tx 25 pkts');
+  assert.match(linkStatsTitle(base), /audio packets/);
+  assert.match(linkStatsTitle({ ...base, proto: undefined }), /VNAK/);
+});
+
+// ---- The Modes page helpers.
+import { visibleModes, hiddenModes, pickerModes, toggleHidden } from './modes.ts';
+import { CONFIRM_MS, pendingOutcome, pickerKind, m17Tune, m17Split, targetValue, modeChip, favoritesInOrder, movedIds, findFavorite, favoriteBlock, defaultFavName, validFavName, favoriteActive, pinnedFavorites, hasTarget, M17_MODULES } from './modes.ts';
+
+const fav = (id: number, mode: string, target: string, over: Partial<Favorite> = {}): Favorite => ({ id, mode, target, label: target, group: '', position: id, pinned: false, info: null, ...over });
+
+test('a mode switch is confirmed, waiting or not confirmed after five seconds', () => {
+  assert.equal(pendingOutcome(null, 'bm', 1000), 'none');
+  const p = { mode: 'ysf', since: 1000 };
+  assert.equal(pendingOutcome(p, 'ysf', 1100), 'confirmed');
+  assert.equal(pendingOutcome(p, 'bm', 1000 + CONFIRM_MS - 1), 'waiting');
+  assert.equal(pendingOutcome(p, 'bm', 1000 + CONFIRM_MS), 'unconfirmed');
+  assert.equal(pendingOutcome({ mode: '', since: 0 }, undefined, 10), 'confirmed');
+});
+
+test('each mode gets the right kind of target picker', () => {
+  const m = (name: string, needsHost = false) => ({ name, title: name, configured: true, active: false, needsHost }) as ModeInfo;
+  assert.equal(pickerKind(m('allstar')), 'nodes');
+  assert.equal(pickerKind(m('echolink')), 'nodes');
+  assert.equal(pickerKind(m('ysf', true)), 'hosts');
+  assert.equal(pickerKind(m('m17', true)), 'hosts');
+  assert.equal(pickerKind(m('bm')), 'plain');
+  assert.equal(pickerKind(m('echotest')), 'none');
+  assert.equal(pickerKind(undefined), 'none');
+  assert.equal(hasTarget(m('echotest')), false);
+});
+
+test('the M17 target joins the reflector and the module', () => {
+  assert.equal(M17_MODULES.length, 26);
+  assert.equal(m17Tune('m17-xxx', 'c'), 'M17-XXX C');
+  assert.equal(m17Tune(' M17-XXX  b ', 'C'), 'M17-XXX B');
+  assert.equal(m17Tune('nonsense', 'C'), '');
+  assert.deepEqual(m17Split('M17-XXX C'), { reflector: 'M17-XXX', module: 'C' });
+  assert.equal(m17Split('M17-XXX'), null);
+  assert.equal(targetValue('m17', 'M17-XXX', 'D'), 'M17-XXX D');
+  assert.equal(targetValue('bm', ' 91 ', 'D'), '91');
+});
+
+test('a mode button shows not set up, ready, or the link state of the active mode', () => {
+  const base = { name: 'bm', title: 'BM', configured: true, active: false } as ModeInfo;
+  assert.deepEqual(modeChip({ ...base, configured: false }, 'bm', 'connected'), { tone: 'unset', text: 'Set up' });
+  assert.deepEqual(modeChip(base, '', undefined), { tone: 'off', text: 'Ready' });
+  assert.deepEqual(modeChip(base, 'bm', 'connected'), { tone: 'ok', text: 'Connected' });
+  assert.deepEqual(modeChip(base, 'bm', 'connecting'), { tone: 'warn', text: 'Connecting' });
+  assert.deepEqual(modeChip(base, 'bm', 'error'), { tone: 'err', text: 'Error' });
+  assert.deepEqual(modeChip({ ...base, name: 'echotest' }, 'echotest', 'connected'), { tone: 'ok', text: 'Running' });
+  assert.deepEqual(modeChip({ ...base, error: 'x' }, 'allstar', 'connected'), { tone: 'err', text: 'Error' });
+});
+
+test('favorites keep the server order and move one place at a time', () => {
+  const all = [fav(1, 'bm', '91'), fav(2, 'ysf', 'YSF-TEST'), fav(3, 'bm', '3100'), fav(4, 'bm', '9', { pinned: true })];
+  const bm = favoritesInOrder(all, 'bm');
+  assert.deepEqual(bm.map((f) => f.id), [1, 3, 4]);
+  assert.deepEqual(movedIds(bm, 3, -1), [3, 1, 4]);
+  assert.deepEqual(movedIds(bm, 3, 1), [1, 4, 3]);
+  assert.equal(movedIds(bm, 1, -1), null);
+  assert.equal(movedIds(bm, 4, 1), null);
+  assert.equal(movedIds(bm, 99, 1), null);
+  assert.deepEqual(pinnedFavorites(all).map((f) => f.id), [4]);
+});
+
+test('saving the current target as a favorite is blocked when empty or already saved', () => {
+  const all = [fav(1, 'bm', '91')];
+  assert.equal(favoriteBlock(all, 'bm', ' '), 'Enter or connect a target first');
+  assert.equal(favoriteBlock(all, 'bm', '91'), 'Already a favorite');
+  assert.equal(favoriteBlock(all, 'ysf', '91'), '');
+  assert.equal(findFavorite(all, 'bm', ' 91 ')?.id, 1);
+});
+
+test('favorite names: default and validation', () => {
+  assert.equal(defaultFavName('91', 'World-wide'), 'World-wide');
+  assert.equal(defaultFavName('91', '91'), '91');
+  assert.equal(defaultFavName('91'), '91');
+  assert.equal(defaultFavName('x', 'y'.repeat(60)).length, 40);
+  assert.equal(validFavName('  Club  '), 'Club');
+  assert.equal(validFavName('   '), null);
+  assert.equal(validFavName('a'.repeat(41)), null);
+  assert.equal(validFavName('bad\u0007name'), null);
+});
+
+test('a favorite is active when its mode is active and the target matches', () => {
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'bm', { id: '91' }), true);
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'ysf', { id: '91' }), false);
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'bm', { id: '3100' }), false);
+  assert.equal(favoriteActive({ mode: 'bm', target: '91' }, 'bm', undefined), false);
+  assert.equal(favoriteActive({ mode: 'm17', target: 'M17-XXX C' }, 'm17', { id: 'M17-XXX' }), true);
+  assert.equal(favoriteActive({ mode: 'ysf', target: 'ysf-test' }, 'ysf', { id: 'YSF-TEST' }), true);
+});
+
+test('echo test codec: choices, saved value and the values to save', () => {
+  assert.deepEqual(ECHO_CODECS.map((o) => o.value), ['plain', 'ambe', 'imbe', 'codec2', 'gsm', 'ulaw']);
+  assert.equal(ECHO_CODECS.find((o) => o.value === 'ulaw')?.label, 'µ-law (AllStar)');
+  const m = { name: 'echotest', title: 'Echo test', configured: true, active: false, settings: { values: { codec: 'AMBE', playback_delay_ms: '1500' } } } as ModeInfo;
+  assert.equal(echoCodec(m), 'ambe');
+  assert.equal(echoCodec(undefined), 'plain');
+  assert.equal(echoCodec({ ...m, settings: { values: { codec: 'bogus' } } }), 'plain');
+  assert.deepEqual(echoCodecValues(m, 'gsm'), { codec: 'gsm', playback_delay_ms: '1500' });
+  assert.deepEqual(echoCodecValues(undefined, 'imbe'), { codec: 'imbe' });
+});
+
+test('hidden modes leave the row unless active; pickers keep the mode a favorite or schedule uses', () => {
+  const l = [{ name: 'allstar', configured: true }, { name: 'bm', configured: true }, { name: 'nxdn', configured: true }, { name: 'm17', configured: false }];
+  const names = (x: { name: string }[]) => x.map((m) => m.name);
+  assert.deepEqual(names(visibleModes(l, undefined, '')), ['allstar', 'bm', 'nxdn', 'm17'], 'a fresh install shows all');
+  assert.deepEqual(names(visibleModes(l, ['bm', 'nxdn'], '')), ['allstar', 'm17']);
+  assert.deepEqual(names(visibleModes(l, ['bm', 'nxdn'], 'bm')), ['allstar', 'bm', 'm17'], 'the active mode stays visible');
+  assert.deepEqual(names(hiddenModes(l, ['bm', 'nxdn'], 'bm')), ['nxdn']);
+  assert.deepEqual(names(hiddenModes(l, [], '')), []);
+  assert.deepEqual(names(pickerModes(l, ['bm'])), ['allstar', 'nxdn'], 'hidden and not-ready modes are not offered');
+  assert.deepEqual(names(pickerModes(l, ['bm'], ['bm'])), ['allstar', 'bm', 'nxdn'], 'an existing favorite keeps its mode');
+  assert.deepEqual(toggleHidden(['nxdn'], 'bm', true), ['bm', 'nxdn']);
+  assert.deepEqual(toggleHidden(['bm', 'nxdn'], 'bm', true), ['bm', 'nxdn']);
+  assert.deepEqual(toggleHidden(['bm', 'nxdn'], 'bm', false), ['nxdn']);
+  assert.deepEqual(toggleHidden(undefined, 'bm', false), []);
+});
+
+test('EchoLink results read as location, kind and status', async () => {
+  const { echoDetail, echoKindLabel, echoStatusLabel } = await import('./modes.ts');
+  assert.equal(echoDetail({ location: 'Springfield, ST', kind: 'link', status: 'online' }), 'Springfield, ST · Link · Online');
+  assert.equal(echoDetail({ kind: 'conference', status: 'busy' }), 'Conference · Busy');
+  assert.equal(echoDetail({ kind: 'repeater' }), 'Repeater');
+  assert.equal(echoKindLabel('nope'), 'User');
+  assert.equal(echoStatusLabel(''), '');
+  assert.equal(echoStatusLabel('away'), 'Away');
 });

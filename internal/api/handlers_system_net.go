@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 func (s *Server) systemNetRoutes() {

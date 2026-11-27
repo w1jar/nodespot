@@ -18,7 +18,7 @@ after 14 days. Push any commit to the branch to get a fresh build.
 - `en-US.ts` is the source dictionary; the key type is derived from it, so a
   misspelled key fails `npm run check`. `ru.ts` is typed complete (727 keys);
   `en-GB.ts` is a partial override (favourite, colour, behaviour, …).
-- Locale: saved per browser (`localStorage` key `aslcp-locale`), else the best
+- Locale: saved per browser (`localStorage` key `nodespot-locale`), else the best
   match of the browser languages, else en-US. Sets `<html lang>`.
 - Dates, times, numbers and relative times follow the locale (`util.ts`).
 - Language picker (`LanguageSelect.svelte`) in Settings → About, the header
@@ -36,7 +36,7 @@ alternative to ask about), передача / приём (TX / RX), позывн
 
 **Not translated (by design):** server API error messages, log output, config
 file contents, node numbers, callsigns, node descriptions, favorites group
-names, product/tech names (ASLCP, AllStarLink, Asterisk, AMI, EchoLink, apt,
+names, product/tech names (nodespot, AllStarLink, Asterisk, AMI, EchoLink, apt,
 systemd, file names), labels built from server keys (Tune and node-stats key
 names), and the pre-filled "Edit …" commit message in the config apply dialog.
 
@@ -54,11 +54,11 @@ names), and the pre-filled "Edit …" commit message in the config apply dialog.
 
 **Resume:** `git fetch origin try/i18n && git checkout try/i18n`, merge
 `main`, push; install the new CI build on the node:
-`sudo apt install ./aslcp_<version>_<arch>.deb`; go back with
-`sudo apt install --allow-downgrades aslcp=<release>`.
+`sudo apt install ./nodespot_<version>_<arch>.deb`; go back with
+`sudo apt install --allow-downgrades nodespot=<release>`.
 
 ## After 2.0
 
 Ideas for after the 2.0 line, not started.
 
-- Split aslcp-dv into its own repository: a thought experiment for now. First step: make aslcp-dv run on its own inside this repo (own config, documented and versioned control protocol, own .deb), then move it once the boundary is stable.
+- Split nodespot-dv into its own repository: a thought experiment for now. First step: make nodespot-dv run on its own inside this repo (own config, documented and versioned control protocol, own .deb), then move it once the boundary is stable.

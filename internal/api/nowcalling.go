@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/radioid"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/radioid"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // "Now calling" (docs/API.md, "Now calling"): who is talking right now on
@@ -110,32 +110,6 @@ func (s *Server) hamdbChanged() {
 	if s.nc != nil && s.nc.tr != nil {
 		s.nc.tr.Refill(s.ncHamDB)
 	}
-}
-
-// callerPerson is the name and "City, ST" of a callsign-only caller: the
-// radioid.net list first, then the cache of hamdb.org ("" when neither knows).
-func (s *Server) callerPerson(call string) (name, place string) {
-	if s.d.RadioID != nil {
-		if u, ok := s.d.RadioID.ByCallsign(call); ok {
-			return u.Name(), joinPlace(u.City, u.State)
-		}
-	}
-	if s.d.HamDB != nil {
-		if in, ok := s.d.HamDB.Lookup(call); ok {
-			return in.Name, in.Place()
-		}
-	}
-	return "", ""
-}
-
-func joinPlace(city, state string) string {
-	switch {
-	case city != "" && state != "":
-		return city + ", " + state
-	case city != "":
-		return city
-	}
-	return state
 }
 
 // ncTargetName is the label of the favorite of mode m whose target is t

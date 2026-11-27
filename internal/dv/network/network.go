@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
 )
 
 // Codec is the voice codec a network carries.

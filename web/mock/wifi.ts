@@ -9,7 +9,7 @@ const nets: Net[] = [
   { id: '00000000-0000-4000-8000-0000000000a1', name: 'ExampleNet', ssid: 'ExampleNet', priority: 100, autoconnect: true, active: true, hidden: false, secured: true },
   { id: '00000000-0000-4000-8000-0000000000a2', name: 'ExampleGuest', ssid: 'ExampleGuest', priority: 90, autoconnect: true, active: false, hidden: false, secured: true },
 ];
-const hotspot = { enabled: true, delaySeconds: 180, active: false, ssid: 'ASLCP-node-demo', address: '10.42.0.1', firewall: 'firewalld' };
+const hotspot = { enabled: true, delaySeconds: 180, active: false, ssid: 'nodespot-node-demo', address: '10.42.0.1', firewall: 'firewalld' };
 let seq = 3;
 
 const view = () => ({

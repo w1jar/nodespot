@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/gsm"
+	"github.com/w1jar/nodespot/internal/native/gsm"
 )
 
 func TestLogonCommand(t *testing.T) {

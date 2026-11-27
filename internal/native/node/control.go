@@ -8,18 +8,19 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // DefaultSocket is the control socket. There is no TCP listener: the web
 // app talks to the node through this socket only.
-const DefaultSocket = "/run/aslcp-node/control.sock"
+const DefaultSocket = "/run/nodespot-node/control.sock"
 
 // MaxRequest bounds one request line.
 const MaxRequest = 1 << 20
@@ -39,26 +40,34 @@ type Response struct {
 	Data  any    `json:"data,omitempty"`
 }
 
+// MaxDirResults bounds one directory search.
+const MaxDirResults = 200
+
 // Control ops.
 const (
-	OpStatus      = "status"       // -> Status
-	OpModes       = "modes"        // -> []ModeInfo (passwords never returned)
-	OpSaveStation = "save_station" // {station} -> Status
-	OpSaveMode    = "save_mode"    // {mode, settings} -> ModeInfo list
-	OpDeleteMode  = "delete_mode"  // {mode}
-	OpSelect      = "select"       // {mode, target?} -> Status ("" or "none": idle)
-	OpConnect     = "connect"      // {target} on the active mode -> Status
-	OpDisconnect  = "disconnect"   // -> Status
-	OpLastHeard   = "last_heard"   // {limit?} -> []mode.Heard
-	OpNowCalling  = "now_calling"  // -> *Calling (null when nobody is talking)
-	OpRadioLevels = "radio_levels" // -> radio.Levels
-	OpInputLevel  = "input_level"  // -> InputLevel
-	OpRadioTune   = "radio_tune"   // {rxVolume?, txVolume?} -> radio.Levels
-	OpRadioProg   = "radio_program"
-	OpRadioInfo   = "radio_info" // -> RadioDetail
-	OpConfig      = "config"     // -> the station settings (no mode passwords)
-	OpReload      = "reload"     // read the config file again
-	OpSubscribe   = "subscribe"  // the connection then streams Event lines
+	OpStatus        = "status"       // -> Status
+	OpModes         = "modes"        // -> []ModeInfo (passwords never returned)
+	OpSaveStation   = "save_station" // {station} -> Status
+	OpSaveMode      = "save_mode"    // {mode, settings} -> ModeInfo list
+	OpDeleteMode    = "delete_mode"  // {mode}
+	OpSelect        = "select"       // {mode, target?} -> Status ("" or "none": idle)
+	OpConnect       = "connect"      // {target} on the active mode -> Status
+	OpDisconnect    = "disconnect"   // -> Status
+	OpLastHeard     = "last_heard"   // {limit?} -> []mode.Heard
+	OpNowCalling    = "now_calling"  // -> *Calling (null when nobody is talking)
+	OpRadioLevels   = "radio_levels" // -> radio.Levels
+	OpInputLevel    = "input_level"  // -> InputLevel
+	OpRadioTune     = "radio_tune"   // {rxVolume?, txVolume?, rxBoost?} -> radio.Levels
+	OpRadioProg     = "radio_program"
+	OpRadioInfo     = "radio_info"           // -> RadioDetail
+	OpTestTone      = "test_tone"            // {seconds?, stop?} -> Status (seconds 0: 5, at most 10)
+	OpAutosetRx     = "autoset_rx"           // {cancel?} -> AutosetStatus (starts, or cancels, the receive auto-set)
+	OpAutosetStat   = "autoset_status"       // -> AutosetStatus
+	OpTuningDismiss = "radio_tuning_dismiss" // -> Status (dismisses the "tune your audio" reminder)
+	OpConfig        = "config"               // -> the station settings (no mode passwords)
+	OpReload        = "reload"               // read the config file again
+	OpDirSearch     = "directory_search"     // {mode, q, limit?} -> mode.DirResult (EchoLink's station list)
+	OpSubscribe     = "subscribe"            // the connection then streams Event lines
 )
 
 // Server serves the control API on a Unix socket.
@@ -305,21 +314,72 @@ func (s *Server) do(ctx context.Context, req Request) (any, error) {
 		var a struct {
 			RxVolume *float64 `json:"rxVolume"`
 			TxVolume *float64 `json:"txVolume"`
+			RxBoost  *bool    `json:"rxBoost"`
 		}
 		if err := args(req.Args, &a); err != nil {
 			return nil, err
 		}
-		if err := e.Tune(a.RxVolume, a.TxVolume); err != nil {
+		if err := e.Tune(a.RxVolume, a.TxVolume, a.RxBoost); err != nil {
 			return nil, err
 		}
 		return e.Levels(), nil
 	case OpRadioInfo:
 		return e.RadioInfo(), nil
+	case OpTuningDismiss:
+		if err := e.DismissTuning(); err != nil {
+			return nil, err
+		}
+		return e.Status(), nil
+	case OpAutosetStat:
+		return e.AutosetStatus(), nil
+	case OpAutosetRx:
+		var a struct {
+			Cancel bool `json:"cancel"`
+		}
+		if err := args(req.Args, &a); err != nil {
+			return nil, err
+		}
+		if a.Cancel {
+			return e.AutosetCancel(), nil
+		}
+		return e.AutosetRx()
+	case OpTestTone:
+		var a struct {
+			Seconds float64 `json:"seconds"`
+			Stop    bool    `json:"stop"`
+		}
+		if err := args(req.Args, &a); err != nil {
+			return nil, err
+		}
+		if a.Stop {
+			e.StopTestTone()
+			return e.Status(), nil
+		}
+		if math.IsNaN(a.Seconds) || a.Seconds < 0 || a.Seconds > MaxTestTone.Seconds() {
+			return nil, ErrToneLength
+		}
+		if err := e.TestTone(time.Duration(a.Seconds * float64(time.Second))); err != nil {
+			return nil, err
+		}
+		return e.Status(), nil
 	case OpRadioProg:
 		if err := e.ProgramRadio(); err != nil {
 			return nil, err
 		}
 		return e.Status(), nil
+	case OpDirSearch:
+		var a struct {
+			Mode  string `json:"mode"`
+			Q     string `json:"q"`
+			Limit int    `json:"limit"`
+		}
+		if err := args(req.Args, &a); err != nil {
+			return nil, err
+		}
+		if a.Limit <= 0 || a.Limit > MaxDirResults {
+			a.Limit = MaxDirResults
+		}
+		return e.SearchDirectory(ctx, a.Mode, a.Q, a.Limit)
 	case OpReload:
 		if err := e.Reload(ctx); err != nil {
 			return nil, err

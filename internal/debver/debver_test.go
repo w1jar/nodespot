@@ -92,3 +92,17 @@ func TestValid(t *testing.T) {
 		}
 	}
 }
+
+// Untagged builds of a repository without release tags are 0.0.0+dev.N.g<sha>
+// (see the Makefile); they must sort below the first release and in order.
+func TestUntaggedDevVersions(t *testing.T) {
+	order := []string{"0.0.0+dev.9.gabc1234", "0.0.0+dev.10.gabc1234", "0.0.1~beta.1", "0.0.1", "0.0.1+dev.3.gdef5678", "0.0.2"}
+	for i := 0; i+1 < len(order); i++ {
+		if Compare(order[i], order[i+1]) >= 0 {
+			t.Errorf("%s should sort below %s", order[i], order[i+1])
+		}
+	}
+	if !Valid("0.0.0+dev.289.g4d56890") {
+		t.Error("dev version not valid")
+	}
+}

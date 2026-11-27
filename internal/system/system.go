@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Node is the node daemon (aslcp-node) part of System.
+// Node is the node daemon (nodespot-node) part of System.
 type Node struct {
 	// Running: the control socket answered.
 	Running bool `json:"running"`

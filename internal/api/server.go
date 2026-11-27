@@ -14,21 +14,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/backupsvc"
-	"github.com/artw1/aslcp/internal/config"
-	"github.com/artw1/aslcp/internal/diag"
-	"github.com/artw1/aslcp/internal/favstats"
-	"github.com/artw1/aslcp/internal/hamdb"
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/hostlists"
-	"github.com/artw1/aslcp/internal/nodelist"
-	"github.com/artw1/aslcp/internal/public"
-	"github.com/artw1/aslcp/internal/radioid"
-	"github.com/artw1/aslcp/internal/schedules"
-	"github.com/artw1/aslcp/internal/store"
-	"github.com/artw1/aslcp/internal/system"
-	"github.com/artw1/aslcp/internal/updates"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/backupsvc"
+	"github.com/w1jar/nodespot/internal/config"
+	"github.com/w1jar/nodespot/internal/diag"
+	"github.com/w1jar/nodespot/internal/favstats"
+	"github.com/w1jar/nodespot/internal/hamdb"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/hostlists"
+	"github.com/w1jar/nodespot/internal/nodelist"
+	"github.com/w1jar/nodespot/internal/public"
+	"github.com/w1jar/nodespot/internal/radioid"
+	"github.com/w1jar/nodespot/internal/schedules"
+	"github.com/w1jar/nodespot/internal/store"
+	"github.com/w1jar/nodespot/internal/system"
+	"github.com/w1jar/nodespot/internal/updates"
 )
 
 // Deps are the server's collaborators.
@@ -299,9 +299,11 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /api/schedules/{id}", s.authed(store.RoleOperator, s.handleSchedDelete))
 	// settings
 	m.HandleFunc("GET /api/settings", s.authed(store.RoleViewer, s.handleSettingsGet))
+	m.HandleFunc("PUT /api/settings/hidden-modes", s.authed(store.RoleAdmin, s.handleHiddenModesPut))
 	// lookup, nodelist, system, events
 	m.HandleFunc("GET /api/lookup/{node}", s.authed(store.RoleViewer, s.handleLookup))
 	m.HandleFunc("GET /api/lookup", s.authed(store.RoleViewer, s.handleSearch))
+	m.HandleFunc("GET /api/echolink/search", s.authed(store.RoleViewer, s.handleEchoLinkSearch))
 	m.HandleFunc("GET /api/nodelist", s.authed(store.RoleViewer, s.handleNodelist))
 	m.HandleFunc("POST /api/nodelist/refresh", s.authed(store.RoleAdmin, s.handleNodelistRefresh))
 	m.HandleFunc("GET /api/system", s.authed(store.RoleViewer, s.handleSystem))
@@ -317,7 +319,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/updates/os/check", s.authed(store.RoleAdmin, s.handleOSCheck))
 	m.HandleFunc("POST /api/updates/os/apply", s.authed(store.RoleAdmin, s.handleOSApply))
 	m.HandleFunc("POST /api/system/reboot", s.authed(store.RoleAdmin, s.handleReboot))
-	m.HandleFunc("POST /api/system/restart-aslcp", s.authed(store.RoleAdmin, s.handleRestartASLCP))
+	m.HandleFunc("POST /api/system/restart-nodespot", s.authed(store.RoleAdmin, s.handleRestartNodespot))
 	m.HandleFunc("GET /api/events", s.authed(store.RoleViewer, s.handleEvents))
 	// public status view: no auth, 404 unless enabled by an admin
 	m.HandleFunc("GET /api/public/info", func(w http.ResponseWriter, r *http.Request) {
@@ -365,7 +367,7 @@ func (s *Server) secure(next http.Handler) http.Handler {
 		}
 		if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
 			h.Set("Cache-Control", "no-store")
-			h.Set("X-ASLCP-Instance", s.instance)
+			h.Set("X-nodespot-Instance", s.instance)
 			if reason := auth.CheckCSRF(r, s.d.AllowedOrigins); reason != "" {
 				writeErr(w, http.StatusForbidden, "csrf", reason)
 				return

@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/mode/echotest"
-	"github.com/artw1/aslcp/internal/native/mode/modetest"
-	"github.com/artw1/aslcp/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode/echotest"
+	"github.com/w1jar/nodespot/internal/native/mode/modetest"
+	"github.com/w1jar/nodespot/internal/native/radio"
 )
 
 // echoRig is an engine on a fake radio with the real echo test mode, both
@@ -97,7 +97,7 @@ func TestEchoTestThroughTheNode(t *testing.T) {
 		t.Fatal("keyed before the playback")
 	}
 
-	// A second later (the courtesy tone is off) the radio keys and plays.
+	// A second later the radio keys and plays.
 	deadline := time.Now().Add(5 * time.Second)
 	for !g.r.PTT() && time.Now().Before(deadline) {
 		g.stepBoth(5)
@@ -168,5 +168,31 @@ func TestModesNeedsAmbeFollowsTheCodec(t *testing.T) {
 	}
 	if needs(g) {
 		t.Error("codec gsm needs AMBE")
+	}
+}
+
+// Saving a new codec while the echo test is active rebuilds it on the same
+// mode, so the next recording uses the new codec, and the saved playback
+// delay survives a save that carries it along.
+func TestSaveCodecRestartsTheActiveEchoTest(t *testing.T) {
+	g := newEchoRig(t, map[string]string{"playback_delay_ms": "1500"})
+	g.sel(mode.EchoTest, nil)
+	if c := g.echo.Codec(); c != echotest.CodecPlain {
+		t.Fatalf("codec %q at the start", c)
+	}
+	vals := map[string]string{"codec": "gsm", "playback_delay_ms": "1500"}
+	if err := g.e.SaveMode(mode.EchoTest, mode.Settings{Values: vals}); err != nil {
+		t.Fatal(err)
+	}
+	if st := g.e.Status(); st.Active != mode.EchoTest {
+		t.Fatalf("active %q after the save, want the echo test", st.Active)
+	}
+	if c := g.echo.Codec(); c != echotest.CodecGSM {
+		t.Fatalf("codec %q after the save, want gsm", c)
+	}
+	for _, mi := range g.e.Modes() {
+		if mi.Name == mode.EchoTest && mi.Settings.Values["playback_delay_ms"] != "1500" {
+			t.Fatalf("saved values %v lost the playback delay", mi.Settings.Values)
+		}
 	}
 }

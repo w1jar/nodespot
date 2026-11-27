@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Ported to Go from imbe_vocoder by Pavel Yazev for ASLCP.
+// Ported to Go from imbe_vocoder by Pavel Yazev for nodespot.
 // Original notice:
 //
 //   Project 25 IMBE Encoder/Decoder Fixed-Point implementation

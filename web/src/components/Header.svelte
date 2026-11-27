@@ -19,9 +19,9 @@
 
   const nav = $derived([['/', 'Dashboard'], ['/modes', 'Modes'], ['/schedules', 'Schedules'], ...(isAdmin() ? [['/settings', 'Settings']] : [])] as [string, string][]);
   // Admin only: counts only (SSE "updates"); security updates or a reboot use the warn color.
-  const updCount = $derived((app.updates.aslcp || (app.system?.updateAvailable ?? false) ? 1 : 0) + app.updates.os);
+  const updCount = $derived((app.updates.nodespot || (app.system?.updateAvailable ?? false) ? 1 : 0) + app.updates.os);
   const updWarn = $derived(app.updates.security > 0 || app.updates.reboot);
-  const updTitle = $derived([app.updates.aslcp || app.system?.updateAvailable ? 'ASLCP update' : '', app.updates.os ? `${app.updates.os} system package${app.updates.os === 1 ? '' : 's'}${app.updates.security ? ` (${app.updates.security} security)` : ''}` : '', app.updates.reboot ? 'reboot required' : ''].filter(Boolean).join(', '));
+  const updTitle = $derived([app.updates.nodespot || app.system?.updateAvailable ? 'nodespot update' : '', app.updates.os ? `${app.updates.os} system package${app.updates.os === 1 ? '' : 's'}${app.updates.security ? ` (${app.updates.security} security)` : ''}` : '', app.updates.reboot ? 'reboot required' : ''].filter(Boolean).join(', '));
   let menu = $state(false);
   // Phone menu: the tab row only fits from the xl breakpoint (80rem) up, so below it the tabs live in a panel.
   let open = $state(false);
@@ -64,7 +64,7 @@
 <header class="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
   <div class="relative">
   <div class="mx-auto flex max-w-[1100px] items-center gap-2 px-3 py-1 sm:px-4 xl:gap-3">
-    <a href="#/" class="flex shrink-0 items-center gap-1.5 font-bold tracking-tight"><Radio size={18} class="text-accent" /><span class="text-base">ASLCP</span></a>
+    <a href="#/" class="flex shrink-0 items-center gap-1.5 font-bold tracking-tight"><Radio size={18} class="text-accent" /><span class="text-base">nodespot</span></a>
     <span class="min-w-0 flex-1 truncate text-sm font-medium text-muted xl:hidden" data-pagename>{pageName}</span>
     <nav class="-my-1 hidden items-stretch gap-0.5 self-stretch xl:flex" aria-label="Main">
       {#each nav as [path, label]}

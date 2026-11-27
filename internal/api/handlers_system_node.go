@@ -4,12 +4,12 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // nodeUnit is the systemd unit of the native node engine.
-const nodeUnit = "aslcp-node.service"
+const nodeUnit = "nodespot-node.service"
 
 // NodeSvcHost is the part of the helper that restarts the node service
 // (sys_node.go). A SystemHost without it gives 503 on the restart route.
@@ -29,7 +29,7 @@ func (s *Server) systemNodeRoutes() {
 	m.HandleFunc("POST /api/system/node-service/restart", s.authed(store.RoleAdmin, s.handleNodeServiceRestart))
 }
 
-// handleNodeServiceGet reports the systemd state of aslcp-node.service.
+// handleNodeServiceGet reports the systemd state of nodespot-node.service.
 func (s *Server) handleNodeServiceGet(w http.ResponseWriter, r *http.Request, _ store.User) {
 	h := s.sysHost(w)
 	if h == nil {
@@ -53,7 +53,7 @@ func (s *Server) handleNodeServiceGet(w http.ResponseWriter, r *http.Request, _ 
 	writeJSON(w, 200, out)
 }
 
-// handleNodeServiceRestart restarts aslcp-node.service and waits for it.
+// handleNodeServiceRestart restarts nodespot-node.service and waits for it.
 // The node status watcher reconnects to the control socket by itself.
 func (s *Server) handleNodeServiceRestart(w http.ResponseWriter, r *http.Request, u store.User) {
 	h, ok := s.d.SysHost.(NodeSvcHost)
@@ -67,6 +67,6 @@ func (s *Server) handleNodeServiceRestart(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.audit(u, "node.restart", map[string]any{"ok": true})
-	s.d.Logger.Printf("node: aslcp-node restarted by %s", u.Username)
+	s.d.Logger.Printf("node: nodespot-node restarted by %s", u.Username)
 	writeJSON(w, 200, map[string]any{"ok": true})
 }

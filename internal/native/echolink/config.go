@@ -3,6 +3,8 @@ package echolink
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
@@ -26,7 +28,7 @@ const (
 	DefaultConnectTimeout = 30 * time.Second
 	DefaultTalkHang       = 400 * time.Millisecond
 	defaultTick           = 100 * time.Millisecond
-	defaultRecvBuffer     = 50 // frames, one second
+	defaultRecvBuffer     = 250 // frames, five seconds
 	defaultEventBuffer    = 64
 )
 
@@ -44,8 +46,9 @@ type Config struct {
 	Password string // EchoLink password; never logged or put in errors
 	Name     string // operator name shown to peers in SDES; optional
 	Location string // directory description, e.g. a city
-	// Info is the station info text sent to a station after connecting,
-	// with "\n" line breaks; optional.
+	// Info is the station info text sent to a station when calling it and
+	// again once it answers, with "\n" line breaks; optional. Unset, the
+	// callsign, name and location are sent instead.
 	Info string
 	// Servers lists directory servers as host or host:port; default
 	// DefaultServers on port DirectoryPort.
@@ -90,6 +93,10 @@ type Config struct {
 	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 	// Clock drives timers; default the system clock.
 	Clock Clock
+	// Logger gets the info lines about transmissions sent to a station
+	// and, at debug level, packet summaries per talk spurt (never audio).
+	// Default: discard.
+	Logger *slog.Logger
 
 	tick time.Duration // timer resolution of a connection; tests shorten it
 }
@@ -158,6 +165,9 @@ func (c Config) withDefaults() (Config, error) {
 	}
 	if c.Clock == nil {
 		c.Clock = realClock{}
+	}
+	if c.Logger == nil {
+		c.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return c, nil
 }

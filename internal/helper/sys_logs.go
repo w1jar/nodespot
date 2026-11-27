@@ -34,7 +34,7 @@ const (
 // client except to select one of these. md380-emu is the AMBE vocoder the
 // DMR, YSF, P25 and NXDN modes use.
 func logUnits() []string {
-	return []string{nodeService, "aslcp", "aslcp-helper", "md380-emu", "NetworkManager", "systemd-networkd", "aslcp-wifi-watchdog"}
+	return []string{nodeService, "nodespot", "nodespot-helper", "md380-emu", "NetworkManager", "systemd-networkd", "nodespot-wifi-watchdog"}
 }
 
 // LogUnits returns the units the journal viewer accepts.

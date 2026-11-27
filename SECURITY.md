@@ -4,17 +4,17 @@
 
 Please report security problems **privately**, using GitHub private vulnerability reporting:
 
-1. Open the **Security** tab of this repository (<https://github.com/w1jar/aslcp/security>).
+1. Open the **Security** tab of this repository (<https://github.com/w1jar/nodespot/security>).
 2. Choose **Report a vulnerability** and describe the problem.
 
-Please include the ASLCP version, what you did, what happened and, if you can, how to reproduce it. Do not include real passwords or other private data.
+Please include the nodespot version, what you did, what happened and, if you can, how to reproduce it. Do not include real passwords or other private data.
 
 **Please do not open public issues, discussions or pull requests for security problems.** We will acknowledge your report, keep you informed and credit you in the release notes if you wish.
 
 ## In scope
 
-- the `aslcp` service (web interface and API)
-- `aslcp-helper`, the privileged helper
+- the `nodespot` service (web interface and API)
+- `nodespot-helper`, the privileged helper
 - the `.deb` packages and the apt repository
 - the install script (`install.sh`)
 

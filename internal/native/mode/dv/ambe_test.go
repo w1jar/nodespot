@@ -3,7 +3,7 @@ package dv
 import (
 	"testing"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // The modes whose network carries AMBE voice are the ones that need the

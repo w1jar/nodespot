@@ -84,7 +84,7 @@
   </main>
 
   <footer class="mx-auto flex w-full max-w-[1100px] flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-3 py-2 text-xs text-muted sm:px-4">
-    <span>Powered by <a class="underline hover:text-fg" href={REPO_URL} target="_blank" rel="noopener noreferrer">ASLCP</a></span>
+    <span>Powered by <a class="underline hover:text-fg" href={REPO_URL} target="_blank" rel="noopener noreferrer">nodespot</a></span>
     {#if updatedAt}<span class="ml-auto tabular-nums">Last update {updatedAt}</span>{/if}
   </footer>
 </div>

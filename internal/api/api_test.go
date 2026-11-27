@@ -17,23 +17,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/api"
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/backupsvc"
-	"github.com/artw1/aslcp/internal/config"
-	"github.com/artw1/aslcp/internal/diag"
-	"github.com/artw1/aslcp/internal/favstats"
-	"github.com/artw1/aslcp/internal/hostlists"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/mode/modetest"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/node/nodetest"
-	"github.com/artw1/aslcp/internal/nodelist"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/schedules"
-	"github.com/artw1/aslcp/internal/store"
-	"github.com/artw1/aslcp/internal/system"
-	"github.com/artw1/aslcp/internal/updates"
+	"github.com/w1jar/nodespot/internal/api"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/backupsvc"
+	"github.com/w1jar/nodespot/internal/config"
+	"github.com/w1jar/nodespot/internal/diag"
+	"github.com/w1jar/nodespot/internal/favstats"
+	"github.com/w1jar/nodespot/internal/hostlists"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode/modetest"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/node/nodetest"
+	"github.com/w1jar/nodespot/internal/nodelist"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/radioid"
+	"github.com/w1jar/nodespot/internal/schedules"
+	"github.com/w1jar/nodespot/internal/store"
+	"github.com/w1jar/nodespot/internal/system"
+	"github.com/w1jar/nodespot/internal/updates"
 )
 
 // localNode is the test station's AllStar node number.
@@ -84,6 +85,8 @@ type opts struct {
 	// noNode leaves Deps.Node nil; nodeCfg replaces the default node config.
 	noNode  bool
 	nodeCfg *node.Config
+	// radioid is the radioid.net list (nil: none).
+	radioid *radioid.Manager
 }
 
 // testNodeConfig is a station with AllStar and BrandMeister set up, the ID
@@ -95,7 +98,7 @@ func testNodeConfig() *node.Config {
 		Station: node.Station{
 			Callsign: "N0CALL",
 			ID:       node.IDConfig{Enabled: &off},
-			Advanced: node.Advanced{CourtesyTone: &off, ModeAGC: &off, RadioAGC: &off},
+			Advanced: node.Advanced{ModeAGC: &off, RadioAGC: &off},
 		},
 		Modes: map[string]mode.Settings{
 			mode.AllStar: {Values: map[string]string{"node": localNode, "password": "test-node-secret"}},
@@ -180,7 +183,7 @@ func newEnv(t *testing.T, o opts) *env {
 	as.Limiter.Max = 1000 // tests log in often; rate limit has its own test
 
 	// A Unix socket path must be short, so not t.TempDir.
-	dir, err := os.MkdirTemp("", "aslcp-at")
+	dir, err := os.MkdirTemp("", "nodespot-at")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,6 +216,9 @@ func newEnv(t *testing.T, o opts) *env {
 		AllowedOrigins: origins, Logger: quiet,
 		Log: o.log, PlatformPaths: &diag.PlatformPaths{DeviceModel: "/nonexistent"},
 		Power: o.power, SysHost: o.sysHost, HostLists: o.hostlists, FavStats: o.favstats,
+	}
+	if o.radioid != nil {
+		deps.RadioID = o.radioid
 	}
 	if o.updatesFn != nil {
 		deps.Updates = o.updatesFn(st)
@@ -307,7 +313,7 @@ func (e *env) raw(method, path string, body any, cookie string, extra map[string
 	}
 	req, _ := http.NewRequest(method, e.ts.URL+path, rd)
 	if method != "GET" {
-		req.Header.Set("X-ASLCP", "1")
+		req.Header.Set("X-nodespot", "1")
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -422,7 +428,7 @@ func TestLoginRateLimit(t *testing.T) {
 func TestCSRFAndOrigin(t *testing.T) {
 	e := newEnv(t, opts{})
 	body := map[string]string{"username": "op", "password": "password-op"}
-	code, b, _ := e.raw("POST", "/api/login", body, "", map[string]string{"X-ASLCP": ""})
+	code, b, _ := e.raw("POST", "/api/login", body, "", map[string]string{"X-nodespot": ""})
 	if code != 403 || !strings.Contains(string(b), `"csrf"`) {
 		t.Fatalf("missing header: %d %s", code, b)
 	}
@@ -439,7 +445,7 @@ func TestCSRFAndOrigin(t *testing.T) {
 		t.Fatalf("vite origin without --dev: %d", code)
 	}
 	// authenticated state-changing request without the header is rejected too
-	code, _, _ = e.raw("POST", "/api/select", map[string]string{"mode": "allstar", "target": "2000"}, e.ck["op"], map[string]string{"X-ASLCP": ""})
+	code, _, _ = e.raw("POST", "/api/select", map[string]string{"mode": "allstar", "target": "2000"}, e.ck["op"], map[string]string{"X-nodespot": ""})
 	if code != 403 {
 		t.Fatalf("authed no header: %d", code)
 	}
@@ -474,6 +480,10 @@ func TestRoles(t *testing.T) {
 		{"op", "PUT", "/api/radio"},
 		{"op", "GET", "/api/radio/info"},
 		{"op", "POST", "/api/radio/program"},
+		{"op", "POST", "/api/radio/tuning/dismiss"},
+		{"viewer", "POST", "/api/radio/tuning/dismiss"},
+		{"op", "POST", "/api/radio/tone"},
+		{"op", "DELETE", "/api/radio/tone"},
 		{"op", "POST", "/api/node/reload"},
 	}
 	for _, f := range forbidden {
@@ -624,6 +634,16 @@ func TestModesSettingsAndSecrets(t *testing.T) {
 	if err != nil || !bytes.Contains(cfg, []byte("echo-pass")) {
 		t.Fatalf("the node config should keep the password (%v)", err)
 	}
+	// clear removes only the named password
+	clr := mode.Settings{Clear: []string{"password"}}
+	var l2 []node.ModeInfo
+	if c := e.do("admin", "PUT", "/api/modes/echolink", clr, &l2); c != 200 {
+		t.Fatal(c)
+	}
+	if el = modeByName(l2, mode.EchoLink); el.Configured || el.SecretsSet["password"] || el.Settings.Values["callsign"] != "N1CALL-L" {
+		t.Fatalf("clear: %+v", el)
+	}
+	expectErr(t, e, "admin", "PUT", "/api/modes/echolink", mode.Settings{Clear: []string{"callsign"}}, 409, "node_refused")
 	expectErr(t, e, "admin", "PUT", "/api/modes/Bad%20Mode", put, 400, "bad_mode")
 	expectErr(t, e, "admin", "PUT", "/api/modes/nosuchmode", put, 409, "node_refused")
 
@@ -754,7 +774,7 @@ func TestHeard(t *testing.T) {
 	time.Sleep(nowcalling.MinDuration + 100*time.Millisecond) // shorter is a glitch
 	f.Unkey()
 	var l []mode.Heard
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if e.do("viewer", "GET", "/api/heard?limit=5", nil, &l); len(l) == 1 && !l[0].End.IsZero() {
 			break
@@ -769,7 +789,7 @@ func TestHeard(t *testing.T) {
 	var nc struct {
 		Recent []struct{ Kind, Call string }
 	}
-	deadline = time.Now().Add(3 * time.Second)
+	deadline = time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if e.do("viewer", "GET", "/api/nowcalling", nil, &nc); len(nc.Recent) == 1 {
 			break
@@ -909,6 +929,24 @@ func TestFavorites(t *testing.T) {
 	if len(list) != 2 {
 		t.Fatalf("%+v", list)
 	}
+}
+
+func TestFavoriteEchoLinkTargets(t *testing.T) {
+	e := newEnv(t, opts{})
+	var f api.FavoriteJSON
+	// a node number or a callsign (saved in upper case); anything else is refused
+	if c := e.do("op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "n0call-l"}, &f); c != 201 || f.Target != "N0CALL-L" || f.Label != "N0CALL-L" {
+		t.Fatal(c, f)
+	}
+	if c := e.do("op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "123456"}, &f); c != 201 || f.Target != "123456" {
+		t.Fatal(c, f)
+	}
+	expectErr(t, e, "op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "N0CALL-X"}, 400, "bad_target")
+	expectErr(t, e, "op", "POST", "/api/favorites", map[string]string{"mode": "echolink", "target": "no spaces"}, 400, "bad_target")
+	// AllStar still takes only node numbers
+	expectErr(t, e, "op", "POST", "/api/favorites", map[string]string{"mode": "allstar", "target": "N0CALL"}, 400, "bad_target")
+	// writes need an operator
+	expectErr(t, e, "viewer", "POST", "/api/favorites/reorder", map[string]any{"mode": "echolink", "ids": []int64{}}, 403, "forbidden")
 }
 
 func TestFavoritePins(t *testing.T) {
@@ -1166,9 +1204,9 @@ func (s *sseStream) first() sseEvent {
 func TestInstanceHeaderMatchesHello(t *testing.T) {
 	e := newEnv(t, opts{})
 	_, _, h := e.raw("GET", "/api/session", nil, e.ck["admin"], nil)
-	inst := h.Get("X-ASLCP-Instance")
+	inst := h.Get("X-nodespot-Instance")
 	if inst == "" {
-		t.Fatal("missing X-ASLCP-Instance header")
+		t.Fatal("missing X-nodespot-Instance header")
 	}
 	var hello struct {
 		Instance string `json:"instance"`
@@ -1227,7 +1265,7 @@ func TestSSEHelloNodeAndCalls(t *testing.T) {
 	// pings (test interval 100 ms)
 	select {
 	case <-s.pings:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no ping comment")
 	}
 	// system pushes (test interval 200 ms)
@@ -1238,7 +1276,7 @@ func TestSSEHelloNodeAndCalls(t *testing.T) {
 	}
 	s.cancel()
 	<-s.closed
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for e.srv.Clients() != 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -1274,7 +1312,7 @@ func TestSSERequiresSessionAndEndsOnLogout(t *testing.T) {
 	e.do("op", "POST", "/api/logout", nil, nil)
 	select {
 	case <-s.closed:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("stream not closed after logout")
 	}
 }
@@ -1316,4 +1354,140 @@ func TestRadioInputLevel(t *testing.T) {
 		t.Fatalf("%d %+v", c, n)
 	}
 	expectErr(t, e, "viewer", "GET", "/api/radio/input", nil, 403, "forbidden")
+}
+
+// TestSSELocalStation: the Dashboard's "Local station" follows the node's
+// rxActive as it changes, not only when something else refreshes the
+// status.
+func TestSSELocalStation(t *testing.T) {
+	e := newEnv(t, opts{})
+	if c := e.do("op", "POST", "/api/select", map[string]string{"mode": "allstar", "target": "2000"}, nil); c != 200 {
+		t.Fatalf("select: %d", c)
+	}
+	e.waitNode("connected", func(n api.NodeJSON) bool {
+		return n.Active == mode.AllStar && n.Mode != nil && n.Mode.State == mode.StateConnected
+	})
+	time.Sleep(500 * time.Millisecond) // the select's own refreshes are over
+	s := e.stream("admin")
+	s.first()
+	// The rig's engine has no clock of its own: step it in real time.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		tk := time.NewTicker(20 * time.Millisecond)
+		defer tk.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case now := <-tk.C:
+				e.node.Engine.Step(now)
+			}
+		}
+	}()
+	e.node.Radio.SetCarrier(true)
+	s.wait(func(ev sseEvent) bool { return ev.name == "node" && strings.Contains(ev.data, `"rxActive":true`) })
+	e.node.Radio.SetCarrier(false)
+	s.wait(func(ev sseEvent) bool {
+		return ev.name == "node" && strings.Contains(ev.data, `"cos":false`) && !strings.Contains(ev.data, `"rxActive":true`)
+	})
+}
+
+func TestRadioTestTone(t *testing.T) {
+	e := newEnv(t, opts{})
+	expectErr(t, e, "admin", "POST", "/api/radio/tone", map[string]any{"seconds": 11}, 400, "bad_request")
+	if c := e.do("admin", "POST", "/api/radio/tone", map[string]any{"seconds": 3}, nil); c != 200 {
+		t.Fatalf("test tone: %d", c)
+	}
+	e.waitNode("tone on", func(n api.NodeJSON) bool { return n.Radio.TestTone })
+	if c := e.do("admin", "DELETE", "/api/radio/tone", nil, nil); c != 200 {
+		t.Fatalf("stop: %d", c)
+	}
+	e.waitNode("tone off", func(n api.NodeJSON) bool { return !n.Radio.TestTone })
+	// Refused while the radio receives: 409 with the node's reason.
+	e.node.Radio.SetCarrier(true)
+	var out struct{ Code, Error string }
+	if c := e.do("admin", "POST", "/api/radio/tone", nil, &out); c != 409 || out.Code != "node_refused" || !strings.Contains(out.Error, "receiving") {
+		t.Fatalf("while receiving: %d %+v", c, out)
+	}
+}
+
+func TestRadioAutoset(t *testing.T) {
+	e := newEnv(t, opts{})
+	var st struct{ State, Error string }
+	if c := e.do("admin", "GET", "/api/radio/autoset", nil, &st); c != 200 || st.State != "idle" {
+		t.Fatalf("idle: %d %+v", c, st)
+	}
+	// A sound chip with no capture steps: 409 with the node's reason.
+	var out struct{ Code, Error string }
+	if c := e.do("admin", "POST", "/api/radio/autoset", nil, &out); c != 409 || out.Code != "node_refused" || !strings.Contains(out.Error, "receive level") {
+		t.Fatalf("no steps: %d %+v", c, out)
+	}
+	e.node.Radio.SetCaptureSteps([]float64{0, 1, 2, 3, 4})
+	if c := e.do("admin", "POST", "/api/radio/autoset", nil, &st); c != 200 || st.State != "waiting" {
+		t.Fatalf("start: %d %+v", c, st)
+	}
+	if c := e.do("admin", "POST", "/api/radio/autoset", nil, &out); c != 409 {
+		t.Fatalf("second start: %d", c)
+	}
+	if c := e.do("admin", "DELETE", "/api/radio/autoset", nil, &st); c != 200 || st.State != "idle" {
+		t.Fatalf("cancel: %d %+v", c, st)
+	}
+}
+
+func TestRadioTuningNeeded(t *testing.T) {
+	e := newEnv(t, opts{})
+	// No capture control yet: nothing to tune.
+	if n := e.nodeJSON(); n.Radio.NeedsTuning {
+		t.Fatalf("no capture control: %+v", n.Radio)
+	}
+	e.node.Radio.SetCaptureSteps([]float64{0, 1, 2, 3, 4})
+	e.do("admin", "POST", "/api/node/reload", nil, nil) // a config event refreshes the status
+	e.waitNode("needs tuning", func(n api.NodeJSON) bool { return n.Radio.NeedsTuning })
+
+	// Roles: only an admin may dismiss.
+	for _, r := range []string{"viewer", "op"} {
+		expectErr(t, e, r, "POST", "/api/radio/tuning/dismiss", nil, 403, "forbidden")
+	}
+	expectErr(t, e, "", "POST", "/api/radio/tuning/dismiss", nil, 401, "unauthorized")
+	if !e.nodeJSON().Radio.NeedsTuning {
+		t.Fatal("a refused dismiss changed the node")
+	}
+
+	// A hand-set receive level tunes it.
+	if c := e.do("admin", "PUT", "/api/radio", map[string]any{"rxVolume": 0.5}, nil); c != 200 {
+		t.Fatalf("PUT /api/radio: %d", c)
+	}
+	e.waitNode("tuned by hand", func(n api.NodeJSON) bool { return !n.Radio.NeedsTuning })
+	// A viewer sees the field too (the page shows the banner to admins only).
+	var n api.NodeJSON
+	if c := e.do("viewer", "GET", "/api/node", nil, &n); c != 200 || n.Radio.NeedsTuning {
+		t.Fatalf("viewer node: %d %+v", c, n.Radio)
+	}
+}
+
+func TestRadioTuningDismiss(t *testing.T) {
+	e := newEnv(t, opts{})
+	e.node.Radio.SetCaptureSteps([]float64{0, 1, 2, 3, 4})
+	e.do("admin", "POST", "/api/node/reload", nil, nil) // a config event refreshes the status
+	e.waitNode("needs tuning", func(n api.NodeJSON) bool { return n.Radio.NeedsTuning })
+	var out api.NodeJSON
+	if c := e.do("admin", "POST", "/api/radio/tuning/dismiss", nil, &out); c != 200 || out.Radio.NeedsTuning {
+		t.Fatalf("dismiss: %d %+v", c, out.Radio)
+	}
+	if e.nodeJSON().Radio.NeedsTuning {
+		t.Fatal("still needs tuning")
+	}
+	cfg, err := node.LoadConfig(e.node.ConfigPath)
+	if err != nil || cfg.Station.AudioTuned == nil || !cfg.Station.AudioTuned.Dismissed {
+		t.Fatalf("saved config: %v %+v", err, cfg.Station.AudioTuned)
+	}
+	aud, _ := e.st.ListAudit(20)
+	found := false
+	for _, a := range aud {
+		found = found || a.Action == "radio.tuning.dismiss"
+	}
+	if !found {
+		t.Errorf("not audited: %v", aud)
+	}
 }

@@ -102,7 +102,7 @@ func (w *demoWifi) status() WifiStatus {
 			{Name: "wlan0", Type: "wifi", State: "connected", Connection: "ExampleNet", Addrs: []string{"192.0.2.20"}},
 		},
 		Active:  "ExampleNet",
-		Hotspot: WifiHotspot{Enabled: w.hotspot, DelaySeconds: w.delay, SSID: "ASLCP-node2001", Address: HotspotAddr, Firewall: "none"}}
+		Hotspot: WifiHotspot{Enabled: w.hotspot, DelaySeconds: w.delay, SSID: "nodespot-node2001", Address: HotspotAddr, Firewall: "none"}}
 	return st
 }
 

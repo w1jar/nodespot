@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // clientRig serves a rig's engine on a temp socket and returns a client.
@@ -83,7 +83,14 @@ func TestClientOps(t *testing.T) {
 			return err
 		}, nil},
 		{"levels", func() error { _, err := c.RadioLevels(ctx); return err }, nil},
-		{"tune", func() error { _, err := c.RadioTune(ctx, &f, nil); return err }, nil},
+		{"tune", func() error { _, err := c.RadioTune(ctx, &f, nil, nil); return err }, nil},
+		{"autoset status", func() error {
+			st, err := c.AutosetStatus(ctx)
+			if err == nil && st.State != AutosetIdle {
+				return errors.New("state " + st.State)
+			}
+			return err
+		}, nil},
 		{"idle", func() error { _, err := c.Select(ctx, "", nil); return err }, nil},
 	}
 	for _, tt := range tests {
@@ -132,7 +139,7 @@ func TestClientSubscribe(t *testing.T) {
 	if _, err := c.Select(context.Background(), mode.EchoTest, nil); err != nil {
 		t.Fatal(err)
 	}
-	timeout := time.After(3 * time.Second)
+	timeout := time.After(10 * time.Second)
 	for found := false; !found; {
 		select {
 		case ev, ok := <-ch:

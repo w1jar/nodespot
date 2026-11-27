@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 func TestNodeServiceGet(t *testing.T) {
@@ -16,7 +16,7 @@ func TestNodeServiceGet(t *testing.T) {
 	if c := e.do("admin", "GET", "/api/system/node-service", nil, &got); c != 200 {
 		t.Fatalf("status %d", c)
 	}
-	if !got.Available || got.Service == nil || got.Service.Unit != "aslcp-node.service" || got.Service.Sub != "running" {
+	if !got.Available || got.Service == nil || got.Service.Unit != "nodespot-node.service" || got.Service.Sub != "running" {
 		t.Fatalf("%+v %+v", got, got.Service)
 	}
 }
@@ -30,7 +30,7 @@ func TestNodeServiceRestart(t *testing.T) {
 		wantOK   bool
 	}{
 		{name: "ok", wantCode: 200, wantOK: true},
-		{name: "fails", err: errors.New("systemctl restart aslcp-node failed: exit 1"), wantCode: 502, wantErr: "helper_error"},
+		{name: "fails", err: errors.New("systemctl restart nodespot-node failed: exit 1"), wantCode: 502, wantErr: "helper_error"},
 		{name: "unavailable", err: &helper.UnavailableError{Reason: "no systemd"}, wantCode: 503, wantErr: "system_unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

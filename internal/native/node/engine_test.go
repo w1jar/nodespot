@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/mode/modetest"
-	"github.com/artw1/aslcp/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/mode/modetest"
+	"github.com/w1jar/nodespot/internal/native/radio"
 )
 
 var t0 = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -29,7 +29,9 @@ type rig struct {
 
 func off() *bool { b := false; return &b }
 
-// quietConfig is a station with the AGCs, ID and courtesy tone off, so a
+func intp(v int) *int { return &v }
+
+// quietConfig is a station with the AGCs and ID off, so a
 // test turns on only what it checks.
 func quietConfig() *Config {
 	return &Config{
@@ -37,7 +39,8 @@ func quietConfig() *Config {
 		Station: Station{
 			Callsign: "N0CALL",
 			ID:       IDConfig{Enabled: off()},
-			Advanced: Advanced{CourtesyTone: off(), ModeAGC: off(), RadioAGC: off()},
+			// No key-up delay: tests count frames from the step PTT keys.
+			Advanced: Advanced{ModeAGC: off(), RadioAGC: off(), TxOnDelayMS: intp(0)},
 		},
 		Modes: map[string]mode.Settings{
 			mode.AllStar: {Values: map[string]string{"node": "1999"}},
@@ -177,13 +180,22 @@ func TestOneModeAtATime(t *testing.T) {
 	}
 
 	// The radio's audio goes to the active mode only.
+	if g.e.Status().Radio.RxActive {
+		t.Fatal("RxActive without a carrier")
+	}
 	g.r.SetCarrier(true)
 	for i := 0; i < 5; i++ {
 		g.r.Inject(frame(500))
 		g.step(1)
 	}
+	if !g.e.Status().Radio.RxActive {
+		t.Fatal("the status does not show the local transmission")
+	}
 	g.r.SetCarrier(false)
 	g.step(1)
+	if g.e.Status().Radio.RxActive {
+		t.Fatal("RxActive after the carrier dropped")
+	}
 	if len(bm.Sent()) != 5 || len(as.Sent()) != 0 {
 		t.Fatalf("bm got %d frames, allstar %d; want 5 and 0", len(bm.Sent()), len(as.Sent()))
 	}
@@ -403,10 +415,8 @@ func TestReceiverHasPriority(t *testing.T) {
 	}
 }
 
-func TestCourtesyTone(t *testing.T) {
-	cfg := quietConfig()
-	cfg.Station.Advanced.CourtesyTone = nil // on
-	g := newRig(t, cfg)
+func TestNoKeyAfterLocalTransmission(t *testing.T) {
+	g := newRig(t, quietConfig())
 	g.sel(mode.BM, nil)
 	bm := g.fake(mode.BM)
 	g.r.SetCarrier(true)
@@ -416,31 +426,14 @@ func TestCourtesyTone(t *testing.T) {
 	}
 	g.r.SetCarrier(false)
 	g.run(2 * time.Second)
-	if keyings(g.r.PTTLog()) != 1 || g.r.PTT() {
-		t.Fatalf("PTT log %v, want one keying for the tone", g.r.PTTLog())
+	if keyings(g.r.PTTLog()) != 0 || g.r.PTT() {
+		t.Fatalf("PTT log %v, want the radio never keyed", g.r.PTTLog())
 	}
-	if countLoud(g.r.Played()) == 0 {
-		t.Fatal("no courtesy tone played")
-	}
-	for _, f := range bm.Sent() {
-		if f[0] != 700 {
-			t.Fatal("the courtesy tone reached the mode")
-		}
+	if countLoud(g.r.Played()) != 0 {
+		t.Fatal("audio played on the radio after a local transmission")
 	}
 	if len(bm.Sent()) != 10 {
 		t.Fatalf("mode got %d frames, want 10", len(bm.Sent()))
-	}
-
-	// No mode heard the transmission (idle): no tone.
-	g.sel("", nil)
-	before := len(g.r.PTTLog())
-	g.r.SetCarrier(true)
-	g.r.Inject(frame(700))
-	g.step(5)
-	g.r.SetCarrier(false)
-	g.run(time.Second)
-	if len(g.r.PTTLog()) != before {
-		t.Fatal("tone sent with no mode active")
 	}
 }
 
@@ -690,7 +683,7 @@ func TestHeardAndNowCalling(t *testing.T) {
 
 func waitFor(t *testing.T, ok func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for !ok() {
 		if time.Now().After(deadline) {
 			t.Fatal("timed out")
@@ -727,7 +720,7 @@ func TestBackgroundRunsWhileInactive(t *testing.T) {
 	defer e.Close()
 	select {
 	case <-ran:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("background work did not start")
 	}
 	if e.Status().Active != "" {
@@ -850,15 +843,111 @@ func TestRadioWiringChangeAsksForRestart(t *testing.T) {
 			if err := e.SaveStation(st); err != nil {
 				t.Fatal(err)
 			}
+			// RadioChanged runs in its own goroutine: give it long when it
+			// is expected, and a moment to show up when it is not
+			wait := 100 * time.Millisecond
+			if tt.want {
+				wait = 10 * time.Second
+			}
 			got := false
 			select {
 			case <-called:
 				got = true
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(wait):
 			}
 			if got != tt.want || e.Status().RestartRequired != tt.want {
 				t.Fatalf("restart asked %v, status %v, want %v", got, e.Status().RestartRequired, tt.want)
 			}
 		})
+	}
+}
+
+// TestKeyUpDelay: network audio waits for the key-up delay after PTT, so
+// the first word reaches a transmitter that is up; nothing is lost and
+// the order is kept.
+func TestKeyUpDelay(t *testing.T) {
+	cfg := quietConfig()
+	cfg.Station.Advanced.TxOnDelayMS = nil // the default, 500 ms
+	g := newRig(t, cfg)
+	g.sel(mode.BM, &mode.Target{ID: "91"})
+	bm := g.fake(mode.BM)
+	var fs []audio.Frame
+	for i := 0; i < 20; i++ {
+		fs = append(fs, frame(int16(1000+i)))
+	}
+	bm.Key("N1CALL", fs...)
+	g.step(1)
+	if !g.r.PTT() {
+		t.Fatal("PTT not keyed for network audio")
+	}
+	keyed := g.clock()
+	var first time.Time
+	for i := 0; i < 50 && first.IsZero(); i++ {
+		g.step(1)
+		if countLoud(g.r.Played()) > 0 {
+			first = g.clock()
+		}
+	}
+	if d := first.Sub(keyed); first.IsZero() || d < DefaultTxOnDelay || d > DefaultTxOnDelay+audio.FrameDuration {
+		t.Fatalf("first frame played %v after PTT, want %v", d, DefaultTxOnDelay)
+	}
+	g.run(time.Second)
+	bm.Unkey()
+	var got []int16
+	for _, f := range g.r.Played() {
+		if loud(f) {
+			got = append(got, f[0])
+		}
+	}
+	if len(got) != 20 || got[0] != 1000 || got[19] != 1019 {
+		t.Fatalf("played %v", got)
+	}
+	// A transmission that starts while the transmitter is still keyed
+	// (the hang) plays at once.
+	g.run(100 * time.Millisecond)
+	bm.Key("N1CALL", frame(2000), frame(2001))
+	g.step(1)
+	if p := g.r.Played(); p[len(p)-1][0] != 2000 {
+		t.Fatal("audio held although the transmitter was already up")
+	}
+	bm.Unkey()
+}
+
+// TestNetDroppedAndRxEvents: network audio thrown away while a local
+// station has the receiver is counted, and the start and end of a local
+// transmission going to the mode are published (the Dashboard's "Local
+// station").
+func TestNetDroppedAndRxEvents(t *testing.T) {
+	g := newRig(t, quietConfig())
+	g.sel(mode.BM, &mode.Target{ID: "91"})
+	bm := g.fake(mode.BM)
+	evs, stop := g.e.Subscribe()
+	defer stop()
+	g.r.SetCarrier(true)
+	g.step(1)
+	bm.Key("N1CALL", frame(1000), frame(1001), frame(1002), frame(1003), frame(1004))
+	g.step(10)
+	if st := g.e.Status().Radio; !st.RxActive || st.NetDropped != 5 {
+		t.Fatalf("radio %+v, want rxActive and 5 frames not played", st)
+	}
+	g.r.SetCarrier(false)
+	bm.Unkey()
+	g.step(2)
+	if st := g.e.Status().Radio; st.RxActive {
+		t.Fatalf("radio %+v, want rxActive off", st)
+	}
+	var rx []bool
+	for len(evs) > 0 {
+		if ev := <-evs; ev.Kind == EventRx && ev.On != nil {
+			rx = append(rx, *ev.On)
+		}
+	}
+	if len(rx) != 2 || !rx[0] || rx[1] {
+		t.Fatalf("rx events %v, want [true false]", rx)
+	}
+	// A mode change starts the count again.
+	g.sel(mode.AllStar, nil)
+	if n := g.e.Status().Radio.NetDropped; n != 0 {
+		t.Fatalf("netDropped %d after a mode change", n)
 	}
 }

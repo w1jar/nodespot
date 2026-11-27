@@ -2,11 +2,11 @@
   // The station form shared by the first-run setup and Settings: callsign, radio channel and tone, ID on or off.
   import type { Station } from '../lib/types';
   import { CTCSS } from '../lib/station';
-  let { st = $bindable(), radio = true, idPrefix = 'st' }: { st: Station; radio?: boolean; idPrefix?: string } = $props();
+  let { st = $bindable(), radio = true, idToggle = true, idPrefix = 'st' }: { st: Station; radio?: boolean; idToggle?: boolean; idPrefix?: string } = $props();
   const id = (k: string) => `${idPrefix}-${k}`;
   const chk = 'size-4 accent-[var(--accent)]';
   let idOn = $state(st.id.enabled !== false);
-  $effect(() => { st.id.enabled = idOn; });
+  $effect(() => { if (idToggle) st.id.enabled = idOn; });
 </script>
 
 <div class="space-y-3">
@@ -33,5 +33,5 @@
     </div>
     <label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" class={chk} bind:checked={st.radio.narrow} />Narrow channel (12.5 kHz)</label>
   {/if}
-  <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class="mt-0.5 {chk}" bind:checked={idOn} /><span>Identify the station<span class="block text-xs text-muted">The licensee is responsible for IDing.</span></span></label>
+  {#if idToggle}<label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class="mt-0.5 {chk}" bind:checked={idOn} /><span>Identify the station<span class="block text-xs text-muted">The licensee is responsible for IDing.</span></span></label>{/if}
 </div>

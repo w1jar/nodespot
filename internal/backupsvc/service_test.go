@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 func newSvc(t *testing.T) (*Service, *store.Store, string) {
@@ -20,7 +20,7 @@ func newSvc(t *testing.T) (*Service, *store.Store, string) {
 		t.Fatal(err)
 	}
 	data := t.TempDir()
-	st, err := store.Open(filepath.Join(data, "aslcp.db"))
+	st, err := store.Open(filepath.Join(data, "nodespot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestStagedRestoreAndSwap(t *testing.T) {
 	if err != nil || !swapped {
 		t.Fatalf("ApplyStaged: %v %v", swapped, err)
 	}
-	for _, p := range []string{"aslcp.db", "aslcp.db.pre-restore"} {
+	for _, p := range []string{"nodespot.db", "nodespot.db.pre-restore"} {
 		if _, err := os.Stat(filepath.Join(data, p)); err != nil {
 			t.Errorf("%s: %v", p, err)
 		}
@@ -78,7 +78,7 @@ func TestStagedRestoreAndSwap(t *testing.T) {
 	if _, err := os.Stat(StagedPath(data)); err == nil {
 		t.Error("staged file remains")
 	}
-	st2, err := store.Open(filepath.Join(data, "aslcp.db"))
+	st2, err := store.Open(filepath.Join(data, "nodespot.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestStagedRestoreAndSwap(t *testing.T) {
 
 func TestApplyStagedRejectsJunk(t *testing.T) {
 	dir := t.TempDir()
-	live := filepath.Join(dir, "aslcp.db")
+	live := filepath.Join(dir, "nodespot.db")
 	os.WriteFile(live, []byte("live"), 0o600)
 	os.WriteFile(StagedPath(dir), []byte("junk junk junk junk junk junk junk junk junk junk"), 0o600)
 	swapped, err := ApplyStaged(dir)

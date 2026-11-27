@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/network"
-	dvn "github.com/artw1/aslcp/internal/dv/nxdn"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/network"
+	dvn "github.com/w1jar/nodespot/internal/dv/nxdn"
 )
 
 type sink struct {
@@ -118,7 +118,7 @@ func (r *reflector) send(t *testing.T, p []byte) {
 
 func eventually(t *testing.T, what string, f func() bool) {
 	t.Helper()
-	dl := time.Now().Add(3 * time.Second)
+	dl := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for time.Now().Before(dl) {
 		if f() {
 			return
@@ -128,11 +128,23 @@ func eventually(t *testing.T, what string, f func() bool) {
 	t.Fatalf("timeout waiting for %s", what)
 }
 
+// opts polls fast, with a keepalive timeout (missed_polls) and an RX timeout
+// long enough that a stall under -race on a loaded runner does not drop the
+// link or end a call mid-test. The tests about losing the link use lossOpts.
 func opts(extra map[string]string) map[string]string {
 	o := map[string]string{
-		OptID: "1234", OptListen: "127.0.0.1:0", OptPollMS: "60", OptMissedPolls: "3",
-		OptBackoffMinMS: "10", OptBackoffMaxMS: "40", OptRxTimeoutMS: "80",
+		OptID: "1234", OptListen: "127.0.0.1:0", OptPollMS: "60", OptMissedPolls: "20",
+		OptBackoffMinMS: "10", OptBackoffMaxMS: "40", OptRxTimeoutMS: "300",
 	}
+	for k, v := range extra {
+		o[k] = v
+	}
+	return o
+}
+
+// lossOpts is opts with the short keepalive timeout of three missed polls.
+func lossOpts(extra map[string]string) map[string]string {
+	o := opts(map[string]string{OptMissedPolls: "3"})
 	for k, v := range extra {
 		o[k] = v
 	}
@@ -173,9 +185,9 @@ func TestLoginSuccessAndPollFormat(t *testing.T) {
 	if string(p) != string(want) {
 		t.Fatalf("poll %q want %q", p, want)
 	}
-	if r.count("NXDNP") < 3 {
-		t.Fatal("expected a poll burst")
-	}
+	// The reflector can answer the first poll of the burst before the
+	// other two have arrived.
+	eventually(t, "poll burst", func() bool { return r.count("NXDNP") >= 3 })
 	// periodic keepalive
 	c0 := r.count("NXDNP")
 	eventually(t, "keepalive", func() bool { return r.count("NXDNP") > c0 })
@@ -208,7 +220,7 @@ func TestRoomAsTGAndConfigAddress(t *testing.T) {
 
 func TestLoginTimeoutBackoff(t *testing.T) {
 	r := newReflector(t, false)
-	n, _, cancel, done := start(t, opts(map[string]string{OptPollMS: "40"}))
+	n, _, cancel, done := start(t, lossOpts(map[string]string{OptPollMS: "40"}))
 	defer func() { cancel(); <-done }()
 	tune(t, n, r, 1999)
 	eventually(t, "failed", func() bool { return n.Status().Login == ctl.LoginFailed })
@@ -221,7 +233,7 @@ func TestLoginTimeoutBackoff(t *testing.T) {
 
 func TestKeepaliveLossAndReconnect(t *testing.T) {
 	r := newReflector(t, true)
-	n, s, cancel, done := start(t, opts(nil))
+	n, s, cancel, done := start(t, lossOpts(nil))
 	defer func() { cancel(); <-done }()
 	tune(t, n, r, 1999)
 	eventually(t, "ok", func() bool { return n.Status().Login == ctl.LoginOK })
@@ -241,7 +253,9 @@ func notAnswering(n *Net) bool { st := n.Status(); return ctl.NotAnswering(st.Lo
 // status says so, a reply clears it, a reflector that answers never shows it.
 func TestNotAnswering(t *testing.T) {
 	r := newReflector(t, false)
-	n, _, cancel, done := start(t, opts(nil))
+	// a grace short enough to pass a few times over, but not so short that
+	// one stall of a loaded runner looks like a silent reflector
+	n, _, cancel, done := start(t, lossOpts(map[string]string{OptMissedPolls: "8"}))
 	defer func() { cancel(); <-done }()
 	if notAnswering(n) {
 		t.Fatal("not answering before any tune")
@@ -253,7 +267,7 @@ func TestNotAnswering(t *testing.T) {
 	if notAnswering(n) {
 		t.Fatal("still not answering after a reply")
 	}
-	time.Sleep(300 * time.Millisecond) // well past the 180 ms grace
+	time.Sleep(1500 * time.Millisecond) // well past the 480 ms grace
 	if n.Status().Login != ctl.LoginOK || notAnswering(n) {
 		t.Fatalf("answering reflector reported silent: %+v", n.Status())
 	}

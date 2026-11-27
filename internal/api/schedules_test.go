@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/api"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/schedules"
+	"github.com/w1jar/nodespot/internal/api"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/schedules"
 )
 
 func ny(t *testing.T) *time.Location {

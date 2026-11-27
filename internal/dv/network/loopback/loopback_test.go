@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 type sink struct {
@@ -58,7 +58,7 @@ func TestEchoTest(t *testing.T) {
 	l.EndTX(7)
 	select {
 	case <-s.done:
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no playback")
 	}
 	s.mu.Lock()
@@ -98,7 +98,19 @@ func TestStartTXCutsPlayback(t *testing.T) {
 		l.WriteVoice(network.VoiceFrame{Call: 1, Data: make([]byte, 7)})
 	}
 	l.EndTX(1)
-	time.Sleep(100 * time.Millisecond)
+	// wait for the playback to be under way (a fixed sleep could cut it
+	// before it started on a loaded runner, and then there is no end)
+	for dl := time.Now().Add(10 * time.Second); ; time.Sleep(time.Millisecond) {
+		s.mu.Lock()
+		started := len(s.frames) > 0
+		s.mu.Unlock()
+		if started {
+			break
+		}
+		if time.Now().After(dl) {
+			t.Fatal("playback did not start")
+		}
+	}
 	l.StartTX(network.CallHeader{Call: 2}) // cut
 	s.mu.Lock()
 	n, ends := len(s.frames), len(s.ends)

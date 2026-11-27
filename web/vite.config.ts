@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [svelte(), tailwindcss(), ...(mock ? [mockApi()] : [])],
     server: {
       port: 5173,
-      proxy: mock ? undefined : { '/api': { target: env.ASLCP_BACKEND || 'http://localhost:8080', changeOrigin: false } },
+      proxy: mock ? undefined : { '/api': { target: env.NODESPOT_BACKEND || 'http://localhost:8080', changeOrigin: false } },
     },
     build: { outDir: 'dist', emptyOutDir: true, target: 'es2022' },
   };

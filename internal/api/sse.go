@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/auth"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/auth"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // sseMsg is a pre-framed SSE message in two variants: for privileged
@@ -189,7 +189,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request, u store.Us
 	c.admin.Store(u.Role == store.RoleAdmin)
 	defer s.hub.remove(c)
 
-	nj := s.nw.json()
+	nj := s.nodeJSON()
 	if !write(frame("hello", map[string]any{"user": userJSON(u), "version": s.d.Version, "instance": s.instance,
 		"settings": s.settings(), "setupNeeded": nj.SetupNeeded})) ||
 		!write(frame("node", nj)) {

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/store"
-	"github.com/artw1/aslcp/internal/updates"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/store"
+	"github.com/w1jar/nodespot/internal/updates"
 )
 
 type fakeOS struct {
@@ -54,7 +54,7 @@ func (f *fakeOS) Reboot(context.Context) error {
 	f.reboots++
 	return nil
 }
-func (f *fakeOS) RestartASLCP(context.Context) error {
+func (f *fakeOS) RestartNodespot(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.restarts++
@@ -136,7 +136,7 @@ func TestOSUpdatesAdminOnly(t *testing.T) {
 		expectErr(t, e, role, "POST", "/api/updates/os/check", nil, 403, "forbidden")
 		expectErr(t, e, role, "POST", "/api/updates/os/apply", nil, 403, "forbidden")
 		expectErr(t, e, role, "POST", "/api/system/reboot", nil, 403, "forbidden")
-		expectErr(t, e, role, "POST", "/api/system/restart-aslcp", nil, 403, "forbidden")
+		expectErr(t, e, role, "POST", "/api/system/restart-nodespot", nil, 403, "forbidden")
 	}
 	if fo.checks+fo.applies+fo.reboots+fo.restarts != 0 {
 		t.Fatalf("helper reached by a non-admin: %+v", fo)
@@ -175,11 +175,11 @@ func TestOSCheckApplyRebootAudit(t *testing.T) {
 	if fo.checks <= checks {
 		t.Fatal("no automatic re-check after the upgrade")
 	}
-	// reboot and ASLCP restart
+	// reboot and nodespot restart
 	if c := e.do("admin", "POST", "/api/system/reboot", nil, nil); c != 202 || fo.reboots != 1 {
 		t.Fatalf("reboot: %d", c)
 	}
-	if c := e.do("admin", "POST", "/api/system/restart-aslcp", nil, nil); c != 202 || fo.restarts != 1 {
+	if c := e.do("admin", "POST", "/api/system/restart-nodespot", nil, nil); c != 202 || fo.restarts != 1 {
 		t.Fatalf("restart: %d", c)
 	}
 	var actions []string
@@ -191,7 +191,7 @@ func TestOSCheckApplyRebootAudit(t *testing.T) {
 		}
 	}
 	got := strings.Join(actions, ",")
-	for _, w := range []string{"updates.os.apply", "system.reboot", "aslcp.restart"} {
+	for _, w := range []string{"updates.os.apply", "system.reboot", "nodespot.restart"} {
 		if !strings.Contains(got, w) {
 			t.Errorf("audit lacks %s: %s", w, got)
 		}
@@ -213,7 +213,7 @@ func TestOSCheckErrors(t *testing.T) {
 func TestPowerUnavailable(t *testing.T) {
 	e := newEnv(t, opts{})
 	expectErr(t, e, "admin", "POST", "/api/system/reboot", nil, 503, "updates_unavailable")
-	expectErr(t, e, "admin", "POST", "/api/system/restart-aslcp", nil, 503, "updates_unavailable")
+	expectErr(t, e, "admin", "POST", "/api/system/restart-nodespot", nil, 503, "updates_unavailable")
 	expectErr(t, e, "admin", "POST", "/api/updates/os/check", nil, 503, "updates_unavailable")
 }
 

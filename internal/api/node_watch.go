@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/radio"
-	"github.com/artw1/aslcp/internal/nowcalling"
-	"github.com/artw1/aslcp/internal/system"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/nowcalling"
+	"github.com/w1jar/nodespot/internal/system"
 )
 
 // Node is the node daemon's control API as the server uses it.
@@ -29,10 +29,15 @@ type Node interface {
 	LastHeard(ctx context.Context, limit int) ([]mode.Heard, error)
 	RadioLevels(ctx context.Context) (radio.Levels, error)
 	InputLevel(ctx context.Context) (node.InputLevel, error)
-	RadioTune(ctx context.Context, rx, tx *float64) (radio.Levels, error)
+	RadioTune(ctx context.Context, rx, tx *float64, boost *bool) (radio.Levels, error)
+	AutosetRx(ctx context.Context, cancel bool) (node.AutosetStatus, error)
+	AutosetStatus(ctx context.Context) (node.AutosetStatus, error)
 	RadioInfo(ctx context.Context) (node.RadioDetail, error)
 	RadioProgram(ctx context.Context) (node.Status, error)
+	RadioTuningDismiss(ctx context.Context) (node.Status, error)
+	TestTone(ctx context.Context, seconds float64, stop bool) (node.Status, error)
 	Reload(ctx context.Context) (node.Status, error)
+	SearchDirectory(ctx context.Context, name, q string, limit int) (mode.DirResult, error)
 	Subscribe(ctx context.Context) (node.Status, <-chan node.Event, error)
 }
 
@@ -146,7 +151,7 @@ func linkedTo(st node.Status, m, target string) bool {
 // broadcastNodeStatus sends the cached status as the SSE event "node" and
 // tells the public view.
 func (s *Server) broadcastNodeStatus() {
-	f := frame("node", s.nw.json())
+	f := frame("node", s.nodeJSON())
 	s.hub.broadcast(sseMsg{priv: f, pub: f})
 	s.pub.Changed()
 }
@@ -246,13 +251,20 @@ func (s *Server) refreshModes(ctx context.Context) {
 // nodeEvent folds one event of the node's stream.
 func (s *Server) nodeEvent(ctx context.Context, ev node.Event) {
 	switch ev.Kind {
-	case node.EventPTT, node.EventCOS:
+	case node.EventPTT, node.EventCOS, node.EventRx, node.EventTone:
 		if ev.On != nil {
 			s.nw.mu.Lock()
-			if ev.Kind == node.EventPTT {
+			switch ev.Kind {
+			case node.EventPTT:
 				s.nw.st.Radio.PTT = *ev.On
-			} else {
+			case node.EventCOS:
 				s.nw.st.Radio.COS = *ev.On
+			case node.EventTone:
+				s.nw.st.Radio.TestTone = *ev.On
+			default:
+				// A local station's audio started or stopped going to
+				// the active mode: the Dashboard's "Local station".
+				s.nw.st.Radio.RxActive = *ev.On
 			}
 			s.nw.mu.Unlock()
 			s.broadcastNodeStatus()

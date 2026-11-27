@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/native/radio/cm108"
+	"github.com/w1jar/nodespot/internal/native/radio/cm108"
 )
 
 func ptr[T any](v T) *T { return &v }

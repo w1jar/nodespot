@@ -6,7 +6,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/native/gsm"
+	"github.com/w1jar/nodespot/internal/native/gsm"
 )
 
 // Audio-port packets. EchoLink audio is RTP with version bits 3 (first byte

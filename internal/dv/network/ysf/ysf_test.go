@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/network"
-	air "github.com/artw1/aslcp/internal/dv/ysf"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/network"
+	air "github.com/w1jar/nodespot/internal/dv/ysf"
 )
 
 // ---- fake reflector ----
@@ -141,21 +141,39 @@ func kind(k string) func(event) bool { return func(e event) bool { return e.kind
 
 // ---- setup ----
 
+// waitLong bounds waits for something that should happen. They return as
+// soon as it does; the bound only has to outlast a slow, loaded CI runner.
+const waitLong = 10 * time.Second
+
+// fastOpts polls fast, with a link timeout and an RX timeout long enough
+// that a stall under -race on a loaded runner does not drop the link or end
+// a call in the middle of a test. Tests about the timeouts set their own.
 var fastOpts = map[string]string{
-	OptPollMS: "20", OptTimeoutMS: "120", OptRxTimeoutMS: "80", OptTickMS: "5",
+	OptPollMS: "20", OptTimeoutMS: "2000", OptRxTimeoutMS: "300", OptTickMS: "5",
+}
+
+// lossOpts has a short link timeout, for the tests about losing the link.
+var lossOpts = map[string]string{
+	OptPollMS: "50", OptTimeoutMS: "120", OptRxTimeoutMS: "300", OptTickMS: "5",
 }
 
 func start(t *testing.T) (*Net, *fakeRef, *sink) {
 	t.Helper()
-	return startReply(t, true)
+	return startOpts(t, true, fastOpts)
 }
 
-// startReply tunes to a fake reflector that answers polls only when reply is set.
+// startReply tunes to a fake reflector that answers polls only when reply is
+// set, with the short link timeout.
 func startReply(t *testing.T, reply bool) (*Net, *fakeRef, *sink) {
+	t.Helper()
+	return startOpts(t, reply, lossOpts)
+}
+
+func startOpts(t *testing.T, reply bool, opts map[string]string) (*Net, *fakeRef, *sink) {
 	t.Helper()
 	ref := newFakeRef(t)
 	ref.setReply(reply)
-	n, err := New(ctl.NetConfig{Mode: ctl.ModeYSF, Enabled: true, Options: fastOpts},
+	n, err := New(ctl.NetConfig{Mode: ctl.ModeYSF, Enabled: true, Options: opts},
 		ctl.Identity{Callsign: "N0CALL", DMRID: 1234567})
 	if err != nil {
 		t.Fatal(err)
@@ -179,52 +197,54 @@ func TestRegistered(t *testing.T) {
 
 func TestLoginPollUnlink(t *testing.T) {
 	n, ref, s := start(t)
-	p := ref.next("YSFP", time.Second)
+	p := ref.next("YSFP", waitLong)
 	if string(p) != "YSFPN0CALL    " {
 		t.Fatalf("poll %q", p)
 	}
-	s.wait(t, loginIs(ctl.LoginOK, "12345"), time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, "12345"), waitLong)
 	if st := n.Status(); st.Login != ctl.LoginOK || st.Mode != ctl.ModeYSF {
 		t.Fatalf("status %+v", st)
 	}
-	ref.next("YSFP", time.Second) // keepalive continues
+	ref.next("YSFP", waitLong) // keepalive continues
 
 	n.Unlink(context.Background())
 	for i := 0; i < 3; i++ {
-		if u := ref.next("YSFU", time.Second); string(u) != "YSFUN0CALL    " {
+		if u := ref.next("YSFU", waitLong); string(u) != "YSFUN0CALL    " {
 			t.Fatalf("unlink %q", u)
 		}
 	}
-	s.wait(t, loginIs(ctl.LoginOff, ""), time.Second)
+	s.wait(t, loginIs(ctl.LoginOff, ""), waitLong)
 }
 
 func TestTimeoutBackoffReconnect(t *testing.T) {
-	_, ref, s := start(t)
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	_, ref, s := startReply(t, true)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	ref.setReply(false)
-	s.wait(t, loginIs(ctl.LoginPending, "retrying"), time.Second)
+	s.wait(t, loginIs(ctl.LoginPending, "retrying"), waitLong)
 	// Polls back off: the gaps grow.
 	for len(ref.got) > 0 {
 		<-ref.got
 	}
-	ref.next("YSFP", time.Second)
-	t0 := time.Now()
-	ref.next("YSFP", time.Second)
-	g1 := time.Since(t0)
-	t0 = time.Now()
-	ref.next("YSFP", 2*time.Second)
-	g2 := time.Since(t0)
-	if g2 <= g1 {
-		t.Errorf("no backoff: %v then %v", g1, g2)
+	// Compare the first gap with the third (four times as long), so
+	// scheduling jitter on a loaded runner cannot invert them.
+	ref.next("YSFP", waitLong)
+	var gaps []time.Duration
+	for i := 0; i < 3; i++ {
+		t0 := time.Now()
+		ref.next("YSFP", waitLong)
+		gaps = append(gaps, time.Since(t0))
+	}
+	if g1, g3 := gaps[0], gaps[2]; g3 <= g1 {
+		t.Errorf("no backoff: %v then %v", g1, g3)
 	}
 	ref.setReply(true)
-	s.wait(t, loginIs(ctl.LoginOK, ""), 3*time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 }
 
 // A reflector that never answers: after the grace (timeout_ms) the login says so.
 func TestNotAnsweringAfterTune(t *testing.T) {
 	n, ref, s := startReply(t, false)
-	e := s.wait(t, loginIs(ctl.LoginPending, "no reply from"), time.Second)
+	e := s.wait(t, loginIs(ctl.LoginPending, "no reply from"), waitLong)
 	if !ctl.NotAnswering(e.login, e.det) {
 		t.Fatalf("event %+v is not 'not answering'", e)
 	}
@@ -232,7 +252,7 @@ func TestNotAnsweringAfterTune(t *testing.T) {
 		t.Fatalf("status %+v", st)
 	}
 	ref.setReply(true) // a reply clears it
-	s.wait(t, loginIs(ctl.LoginOK, ""), 3*time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	if st := n.Status(); ctl.NotAnswering(st.Login, st.Detail) {
 		t.Fatalf("status %+v after reply", st)
 	}
@@ -240,9 +260,11 @@ func TestNotAnsweringAfterTune(t *testing.T) {
 
 // A reflector that answers never reports it, and nothing tuned never does.
 func TestAnsweringNeverNotAnswering(t *testing.T) {
-	n, _, s := start(t)
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
-	time.Sleep(300 * time.Millisecond) // well past the 120 ms grace
+	// a grace short enough to pass a few times over, but not so short that
+	// one stall of a loaded runner looks like a silent reflector
+	n, _, s := startOpts(t, true, map[string]string{OptPollMS: "20", OptTimeoutMS: "500", OptTickMS: "5"})
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
+	time.Sleep(1500 * time.Millisecond) // well past the 500 ms grace
 	if st := n.Status(); st.Login != ctl.LoginOK || ctl.NotAnswering(st.Login, st.Detail) {
 		t.Fatalf("status %+v", st)
 	}
@@ -307,37 +329,37 @@ func commPacket(fn uint8, base int) []byte {
 
 func TestRXCall(t *testing.T) {
 	_, ref, s := start(t)
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	ref.send(headerPacket(air.FIHeader, "N0CALL", false))
-	h := s.wait(t, kind("header"), time.Second).h
+	h := s.wait(t, kind("header"), waitLong).h
 	if h.Src != "N0CALL" || h.Room != "12345" {
 		t.Fatalf("header %+v", h)
 	}
 	ref.send(commPacket(0, 0))
 	ref.send(commPacket(1, 5))
 	for i := 0; i < 10; i++ {
-		f := s.wait(t, kind("voice"), time.Second).f
+		f := s.wait(t, kind("voice"), waitLong).f
 		want := ambe(i)
 		if f.Call != h.Call || f.Seq != uint32(i) || !bytes.Equal(f.Data, want[:]) {
 			t.Fatalf("frame %d: %+v want %x", i, f, want)
 		}
 	}
 	ref.send(headerPacket(air.FITerminator, "N0CALL", true))
-	if e := s.wait(t, kind("end"), time.Second); e.call != h.Call {
+	if e := s.wait(t, kind("end"), waitLong); e.call != h.Call {
 		t.Fatalf("end %d", e.call)
 	}
 }
 
 func TestRXLostEnd(t *testing.T) {
 	_, ref, s := start(t)
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	ref.send(commPacket(0, 0)) // late entry: no header
-	h := s.wait(t, kind("header"), time.Second).h
+	h := s.wait(t, kind("header"), waitLong).h
 	if h.Src != "NETSRC" {
 		t.Fatalf("src %q", h.Src)
 	}
 	t0 := time.Now()
-	if e := s.wait(t, kind("end"), time.Second); e.call != h.Call {
+	if e := s.wait(t, kind("end"), waitLong); e.call != h.Call {
 		t.Fatalf("end %d", e.call)
 	}
 	if d := time.Since(t0); d < 60*time.Millisecond {
@@ -347,7 +369,7 @@ func TestRXLostEnd(t *testing.T) {
 
 func TestRXVoiceFR(t *testing.T) {
 	_, ref, s := start(t)
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	p := refPacket("NETSRC", false, 1)
 	fr := p[hdrLen:]
 	air.FICH{FI: air.FICommunications, CS: 2, FN: 2, FT: 6, DT: air.DTVoiceFRMode}.Encode(fr)
@@ -360,9 +382,9 @@ func TestRXVoiceFR(t *testing.T) {
 		air.WriteVW(fr, j, v)
 	}
 	ref.send(p)
-	s.wait(t, kind("header"), time.Second)
+	s.wait(t, kind("header"), waitLong)
 	for j := 0; j < 5; j++ {
-		f := s.wait(t, kind("voice"), time.Second).f
+		f := s.wait(t, kind("voice"), waitLong).f
 		if len(f.Data) != 11 || f.Data[0] != byte(j*13) {
 			t.Fatalf("vw %d: %x", j, f.Data)
 		}
@@ -373,7 +395,7 @@ func TestRXVoiceFR(t *testing.T) {
 
 func TestTXFraming(t *testing.T) {
 	n, ref, s := start(t)
-	s.wait(t, loginIs(ctl.LoginOK, ""), time.Second)
+	s.wait(t, loginIs(ctl.LoginOK, ""), waitLong)
 	if err := n.WriteVoice(network.VoiceFrame{Data: make([]byte, 11)}); err == nil {
 		t.Fatal("11-byte frame accepted")
 	}
@@ -394,7 +416,7 @@ func TestTXFraming(t *testing.T) {
 		}
 		return p[hdrLen:]
 	}
-	fr := check(ref.next("YSFD", time.Second), 0, false)
+	fr := check(ref.next("YSFD", waitLong), 0, false)
 	f, ok := air.DecodeFICH(fr)
 	if !ok || f.FI != air.FIHeader || f.DT != air.DTVDMode2 || f.CS != 2 || f.FT != 6 {
 		t.Fatalf("header fich %+v %v", f, ok)
@@ -404,7 +426,7 @@ func TestTXFraming(t *testing.T) {
 		t.Fatalf("csd %q", c1)
 	}
 	for k := 0; k < 2; k++ {
-		fr = check(ref.next("YSFD", time.Second), uint8(k+1), false)
+		fr = check(ref.next("YSFD", waitLong), uint8(k+1), false)
 		f, ok = air.DecodeFICH(fr)
 		if !ok || f.FI != air.FICommunications || f.FN != uint8(k) {
 			t.Fatalf("comm fich %+v", f)
@@ -424,7 +446,7 @@ func TestTXFraming(t *testing.T) {
 			}
 		}
 	}
-	fr = check(ref.next("YSFD", time.Second), 3, true)
+	fr = check(ref.next("YSFD", waitLong), 3, true)
 	if f, ok = air.DecodeFICH(fr); !ok || f.FI != air.FITerminator {
 		t.Fatalf("term fich %+v", f)
 	}
@@ -458,5 +480,5 @@ func TestNoLinkAtStart(t *testing.T) {
 	if err := n.Tune(ctx, ctl.Target{Room: "12345", Host: "127.0.0.1", Port: ref.port()}); err != nil {
 		t.Fatal(err)
 	}
-	ref.next("YSFP", time.Second)
+	ref.next("YSFP", waitLong)
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 func testSpec() Spec {
@@ -99,6 +99,40 @@ func TestRedactMerge(t *testing.T) {
 	}
 	if s := sp.Secrets(old); len(s) != 1 || s[0] != "hunter2" {
 		t.Fatalf("Secrets: %v", s)
+	}
+}
+
+func TestMergeClear(t *testing.T) {
+	sp := testSpec()
+	old := Settings{Values: map[string]string{"callsign": "N0CALL", "password": "hunter2", "port": "5000"}}
+	got := sp.Merge(old, Settings{Values: map[string]string{"callsign": "N1CALL"}, Clear: []string{"password"}})
+	if _, ok := got.Values["password"]; ok || got.Values["callsign"] != "N1CALL" || got.Clear != nil {
+		t.Fatalf("Merge with clear: %+v", got)
+	}
+	// A clear-only request keeps every other value.
+	if got = sp.Merge(old, Settings{Clear: []string{"password"}}); got.Values["callsign"] != "N0CALL" || got.Values["port"] != "5000" || got.Values["password"] != "" {
+		t.Fatalf("clear-only: %+v", got)
+	}
+	// Only the named secret goes; without Clear the password stays.
+	if got = sp.Merge(old, Settings{Values: map[string]string{"callsign": "N1CALL"}}); got.Values["password"] != "hunter2" {
+		t.Fatalf("Merge without clear: %+v", got)
+	}
+	tests := []struct {
+		name string
+		upd  Settings
+		ok   bool
+	}{
+		{"secret", Settings{Clear: []string{"password"}}, true},
+		{"nothing", Settings{}, true},
+		{"unknown", Settings{Clear: []string{"nope"}}, false},
+		{"not a secret", Settings{Clear: []string{"callsign"}}, false},
+		{"set and clear", Settings{Values: map[string]string{"password": "x"}, Clear: []string{"password"}}, false},
+		{"blank and clear", Settings{Values: map[string]string{"password": ""}, Clear: []string{"password"}}, true},
+	}
+	for _, tt := range tests {
+		if err := sp.CheckClear(tt.upd); (err == nil) != tt.ok {
+			t.Errorf("%s: CheckClear = %v", tt.name, err)
+		}
 	}
 }
 
@@ -209,8 +243,26 @@ func TestBase(t *testing.T) {
 	if f := <-b.Recv(); f[0] != 5 {
 		t.Fatalf("oldest frame %d, want 5 (dropped oldest)", f[0])
 	}
+	if b.Overflow() != 5 {
+		t.Fatalf("overflow %d, want 5", b.Overflow())
+	}
 	b.Flush()
 	if len(b.Recv()) != 0 {
 		t.Fatal("Flush")
+	}
+}
+
+func TestBaseInitBuffer(t *testing.T) {
+	var b Base
+	b.InitBuffer("echolink", "EchoLink", nil, 500)
+	for i := 0; i < 500; i++ {
+		b.Deliver(audio.Frame{})
+	}
+	if len(b.Recv()) != 500 || b.Overflow() != 0 {
+		t.Fatalf("queued %d, overflow %d; want 500 and 0", len(b.Recv()), b.Overflow())
+	}
+	b.Deliver(audio.Frame{})
+	if b.Overflow() != 1 {
+		t.Fatalf("overflow %d, want 1", b.Overflow())
 	}
 }

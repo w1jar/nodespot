@@ -1,4 +1,4 @@
-// Package config loads /etc/aslcp/aslcp.conf (an INI file: [section],
+// Package config loads /etc/nodespot/nodespot.conf (an INI file: [section],
 // key = value, comments after ";" or "#").
 package config
 
@@ -15,12 +15,12 @@ import (
 
 // Default paths.
 const (
-	DefaultConfigPath = "/etc/aslcp/aslcp.conf"
+	DefaultConfigPath = "/etc/nodespot/nodespot.conf"
 	// DefaultNodeSocket is the node daemon's control socket.
-	DefaultNodeSocket = "/run/aslcp-node/control.sock"
+	DefaultNodeSocket = "/run/nodespot-node/control.sock"
 	// DefaultNodeConfig is the node daemon's config file (backed up with
 	// the panel's data).
-	DefaultNodeConfig = "/etc/aslcp/node.json"
+	DefaultNodeConfig = "/etc/nodespot/node.json"
 )
 
 // Config is the effective server configuration.
@@ -36,7 +36,7 @@ type Config struct {
 	NodelistURL     string
 	NodelistRefresh time.Duration
 
-	// HelperSocket is the aslcp-helper unix socket ([helper] socket).
+	// HelperSocket is the nodespot-helper unix socket ([helper] socket).
 	HelperSocket string
 	// UpdatesURL is the base URL of the public apt repository, which also
 	// serves latest.json with release notes ([updates] url). Empty disables
@@ -56,13 +56,13 @@ type Config struct {
 func Defaults() Config {
 	return Config{
 		Listen:          ":8080",
-		DataDir:         "/var/lib/aslcp",
+		DataDir:         "/var/lib/nodespot",
 		NodeSocket:      DefaultNodeSocket,
 		NodeConfig:      DefaultNodeConfig,
 		NodelistURL:     "https://allmondb.allstarlink.org/",
 		NodelistRefresh: 24 * time.Hour,
-		HelperSocket:    "/run/aslcp/helper.sock",
-		UpdatesURL:      "https://w1jar.github.io/aslcp",
+		HelperSocket:    "/run/nodespot/helper.sock",
+		UpdatesURL:      "https://w1jar.github.io/nodespot",
 		FavStatsURL:     "https://stats.allstarlink.org",
 		FavStatsRate:    20,
 	}

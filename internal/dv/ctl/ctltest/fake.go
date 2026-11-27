@@ -1,4 +1,4 @@
-// Package ctltest is a fake aslcp-dv on a temporary unix socket, for tests
+// Package ctltest is a fake nodespot-dv on a temporary unix socket, for tests
 // of code that uses ctl.Client.
 package ctltest
 
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
 )
 
 // Fake answers the ctl protocol from canned state.

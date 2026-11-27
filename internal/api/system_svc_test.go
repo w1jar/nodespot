@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // fakeSvcSys adds the services switch and the port 80 move to fakeSys.
@@ -19,7 +19,7 @@ type fakeSvcSys struct {
 func newFakeSvcSys() *fakeSvcSys { return &fakeSvcSys{fakeSys: newFakeSys(), port: 8080, apache: true} }
 
 func (f *fakeSvcSys) SvcStatus(context.Context) (helper.SvcStatus, error) {
-	return helper.SvcStatus{Available: true, AslcpPort: f.port, AslcpOn80: f.port == 80, Scopes: []helper.SvcScopeState{}, Ports: []helper.SvcPort{}}, nil
+	return helper.SvcStatus{Available: true, NodespotPort: f.port, NodespotOn80: f.port == 80, Scopes: []helper.SvcScopeState{}, Ports: []helper.SvcPort{}}, nil
 }
 
 func (f *fakeSvcSys) SvcSet(_ context.Context, scope, action string, fw bool) (helper.SvcSetResult, error) {
@@ -85,7 +85,7 @@ func TestSvcPut(t *testing.T) {
 	fs := newFakeSvcSys()
 	e := newEnv(t, opts{sysHost: fs})
 	var st helper.SvcStatus
-	if c := e.do("admin", "GET", "/api/system/asl-services", nil, &st); c != 200 || !st.Available || st.AslcpPort != 8080 {
+	if c := e.do("admin", "GET", "/api/system/asl-services", nil, &st); c != 200 || !st.Available || st.NodespotPort != 8080 {
 		t.Fatalf("%d %+v", c, st)
 	}
 	// nothing invalid reaches the helper
@@ -106,7 +106,7 @@ func TestSvcPut(t *testing.T) {
 	if len(aud) == 0 || aud[0].Action != "system.svc" || !strings.Contains(aud[0].Detail, `"scope":"apache"`) || aud[0].Username != "admin" {
 		t.Fatalf("%+v", aud)
 	}
-	// Apache cannot come back while ASLCP holds port 80
+	// Apache cannot come back while nodespot holds port 80
 	fs.port = 80
 	expectErr(t, e, "admin", "PUT", "/api/system/asl-services/apache", map[string]any{"action": "enable"}, 409, "port80_held")
 }

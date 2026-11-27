@@ -13,19 +13,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/config"
+	"github.com/w1jar/nodespot/internal/config"
 )
 
 // Setup hotspot and its watchdog (plan 9.3 and 9.4).
 //
-// The hotspot is an open access point, SSID "ASLCP-<hostname>", on 10.42.0.1.
-// Protection is ASLCP's own login (or the first-run setup code). The watchdog
-// is "aslcp-helper wifi-watchdog", run by a systemd timer every 30 seconds, so
+// The hotspot is an open access point, SSID "nodespot-<hostname>", on 10.42.0.1.
+// Protection is nodespot's own login (or the first-run setup code). The watchdog
+// is "nodespot-helper wifi-watchdog", run by a systemd timer every 30 seconds, so
 // it works while the web server is down; WatchDecide is its logic as a pure
 // function.
 const (
-	hotspotConnName = "aslcp-hotspot"
-	hotspotZone     = "aslcp-hotspot"
+	hotspotConnName = "nodespot-hotspot"
+	hotspotZone     = "nodespot-hotspot"
 	// HotspotAddr is the gateway address of the hotspot. The web server
 	// compares it with the address a request arrived on to tell hotspot
 	// clients (docs/API.md).
@@ -51,7 +51,7 @@ type WifiHotspot struct {
 	Firewall     string `json:"firewall"` // "firewalld" or "none" (see docs/DESIGN.md)
 }
 
-// hotspotCfg is /var/lib/aslcp-wifi/hotspot.json (root only).
+// hotspotCfg is /var/lib/nodespot-wifi/hotspot.json (root only).
 type hotspotCfg struct {
 	Enabled      bool `json:"enabled"`
 	DelaySeconds int  `json:"delaySeconds"`
@@ -90,7 +90,7 @@ func (o *Ops) saveHotspotCfg(c hotspotCfg) error {
 	return atomicWrite(filepath.Join(dir, "hotspot.json"), dir, append(b, '\n'), 0, 0, 0o600)
 }
 
-// hotspotSSID is "ASLCP-<hostname>", cut to the 32 bytes of an SSID.
+// hotspotSSID is "nodespot-<hostname>", cut to the 32 bytes of an SSID.
 func hotspotSSID(hostname string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(hostname) {
@@ -102,7 +102,7 @@ func hotspotSSID(hostname string) string {
 	if h == "" {
 		h = "node"
 	}
-	s := "ASLCP-" + h
+	s := "nodespot-" + h
 	if len(s) > 32 {
 		s = s[:32]
 	}
@@ -132,8 +132,8 @@ func (o *Ops) firewalldRunning(ctx context.Context) bool {
 	return err == nil && code == 0
 }
 
-func (o *Ops) aslcpPort() int {
-	if cfg, err := config.Load(o.aslcpConf()); err == nil {
+func (o *Ops) nodespotPort() int {
+	if cfg, err := config.Load(o.nodespotConf()); err == nil {
 		if p, err := config.ListenPort(cfg.Listen); err == nil {
 			return p
 		}
@@ -142,7 +142,7 @@ func (o *Ops) aslcpPort() int {
 }
 
 // firewallZoneCmds is the permanent firewalld setup of the hotspot zone: a
-// fresh zone whose default is DROP, that allows only ASLCP's TCP port, DHCP
+// fresh zone whose default is DROP, that allows only nodespot's TCP port, DHCP
 // (server) and DNS, and takes no part in forwarding.
 func firewallZoneCmds(port int) [][]string {
 	z := "--zone=" + hotspotZone
@@ -163,7 +163,7 @@ func (o *Ops) syncFirewall(ctx context.Context) (bool, error) {
 	if !o.firewalldRunning(ctx) {
 		return false, nil
 	}
-	// Start from nothing so that a changed ASLCP port leaves no stale rule.
+	// Start from nothing so that a changed nodespot port leaves no stale rule.
 	if out, code, err := o.Run.Run(ctx, "firewall-cmd", "--permanent", "--get-zones"); err == nil && code == 0 {
 		for _, z := range strings.Fields(out) {
 			if z == hotspotZone {
@@ -172,7 +172,7 @@ func (o *Ops) syncFirewall(ctx context.Context) (bool, error) {
 			}
 		}
 	}
-	for _, argv := range firewallZoneCmds(o.aslcpPort()) {
+	for _, argv := range firewallZoneCmds(o.nodespotPort()) {
 		if out, code, err := o.Run.Run(ctx, argv...); err != nil || code != 0 {
 			return false, fmt.Errorf("firewalld: %s failed: %s", argv[2], wifiText(LastLines(out, 2)))
 		}
@@ -359,7 +359,7 @@ func WatchDecide(in WatchInput) WatchResult {
 	return r
 }
 
-// watchState is /run/aslcp/wifi-watchdog.json.
+// watchState is /run/nodespot/wifi-watchdog.json.
 type watchState struct {
 	NoLinkSince  int64 `json:"noLinkSince,omitempty"`  // unix seconds
 	HotspotSince int64 `json:"hotspotSince,omitempty"` // unix seconds
@@ -420,7 +420,7 @@ func (o *Ops) bootTime(now time.Time) time.Time {
 	return now.Add(-time.Duration(up * float64(time.Second)))
 }
 
-// RunWifiWatchdog is "aslcp-helper wifi-watchdog": one pass of the hotspot
+// RunWifiWatchdog is "nodespot-helper wifi-watchdog": one pass of the hotspot
 // policy. It does nothing without NetworkManager or a WiFi device, and skips
 // the pass while a WiFi change by the web UI is in progress. Log lines go to
 // w (the journal).

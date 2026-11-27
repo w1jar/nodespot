@@ -2,6 +2,10 @@ export type Role = 'admin' | 'operator' | 'viewer';
 export interface User { id: number; username: string; role: Role }
 /** An AllStar node list entry (favorites and calls of the AllStar mode). */
 export interface NodeInfo { node: string; callsign: string; description: string; location: string }
+/** One EchoLink station from GET /api/echolink/search. */
+export interface EchoStation { node: number; callsign: string; location?: string; status?: string; kind: 'user' | 'link' | 'repeater' | 'conference' }
+/** GET /api/echolink/search: loaded is false while EchoLink is not logged in (results is then empty). */
+export interface EchoSearch { loaded: boolean; updated?: string; error?: string; results: EchoStation[] }
 export interface UpdateInfo {
   available: boolean; reason: string | null; applyReason: string | null; channel: 'stable' | 'beta'; installed: string; candidate: string; upgradable: boolean;
   job: 'idle' | 'running' | 'succeeded' | 'failed' | 'noop'; jobLog: string; notes: string | null; checked: string | null;
@@ -16,7 +20,7 @@ export interface OSUpdates {
   /** Non-fatal notes of the last check (e.g. a package repository could not be refreshed). */ warnings?: string[];
 }
 /** Admin-only SSE event "updates": counts only. */
-export interface UpdatesBadge { aslcp: boolean; aslcpVersion: string; os: number; security: number; reboot: boolean }
+export interface UpdatesBadge { nodespot: boolean; nodespotVersion: string; os: number; security: number; reboot: boolean }
 
 // ---- The node: one radio, one active mode (GET /api/node, SSE "node").
 
@@ -28,10 +32,15 @@ export interface Registration {
   registered: boolean; ready: boolean; publicIp?: string; dnsOk: boolean;
   lastAttempt?: string; lastSuccess?: string; since?: string; lastError?: string; httpStatus?: number;
 }
-/** Counters of the current AllStar link, for diagnosing audio problems. */
+/**
+ * Counters of the current AllStar or EchoLink link, for diagnosing audio problems. proto "echolink": rxVoiceFull is the audio
+ * packets received, txVoice the packets sent, late the duplicate or late packets dropped, parseErrors the undecodable ones,
+ * dropped the frames the node did not take in time, txErrors the packets the network refused.
+ */
 export interface LinkStats {
+  proto?: string;
   rxVoiceFull: number; rxVoiceMini: number; txVoice: number; vnakSent: number; vnakRecv: number;
-  retransmits: number; parseErrors: number; dropped: number; gaps: number;
+  retransmits: number; parseErrors: number; dropped: number; gaps: number; late?: number; txErrors?: number;
 }
 export interface ModeStatus {
   mode: string; title: string; active: boolean; state: ModeState; target?: Target; since?: string;
@@ -44,14 +53,45 @@ export interface EchoReport {
   at: string; frames: number; durationMs: number; peakDb: number; rmsDb: number; voicedFrames: number; clipped: number; warnings?: string[];
 }
 /** The live radio RX input level (GET /api/radio/input; also radio.level of the node status). */
-export interface InputLevel { peakDb: number; rmsDb: number; cos: boolean }
+export interface InputLevel { peakDb: number; rmsDb: number; cos: boolean; lastRx?: RxSummary }
+/** The level summary of the last local transmission (at least half a second of speech), as the node measured it before the AGC. */
+export interface RxSummary {
+  at: string; durationMs: number;
+  /** Loudest input sample, dBFS. */
+  peakDb: number;
+  /** Input speech RMS (gate open), dBFS. */
+  speechDb: number;
+  /** Mean AGC gain over the speech, dB (0 with the AGC off). */
+  agcGainDb: number;
+  /** Speech RMS after the AGC, dBFS. */
+  outDb: number;
+  /** The AGC sat at its maximum gain for most of the speech. */
+  agcAtMax: boolean;
+  /** Input samples at full scale. */
+  clipped: number;
+}
+/** GET/POST/DELETE /api/radio/autoset: the receive auto-set. */
+export interface AutosetStatus {
+  state: 'idle' | 'waiting' | 'measuring' | 'done' | 'failed';
+  error?: string;
+  result?: { step: number; steps: number; db: number | null; speechDb: number; peakDb: number; estimated?: boolean };
+}
 export interface NodeJSON {
   callsign?: string; started: string;
   radio: {
-    present: boolean; ptt: boolean; cos: boolean; rxLocked?: boolean; txLocked?: boolean;
+    present: boolean; ptt: boolean; cos: boolean; rxActive?: boolean; rxLocked?: boolean; txLocked?: boolean;
+    /** Network frames thrown away because a local station had the receiver or the transmit timeout had locked the
+     * network out; restarts when the active mode changes. */
+    netDropped?: number;
     /** The preset in use and the interface found (chip name, USB id). */
     preset?: string; chip?: string; usbId?: string; product?: string; detected?: boolean; sa818?: boolean;
     level?: InputLevel;
+    /** The summary of the last local transmission, kept until the next. */
+    lastRx?: RxSummary;
+    /** True while the test tone (POST /api/radio/tone) is keyed. */
+    testTone?: boolean;
+    /** True when a radio with a receive level control has not been tuned (or the reminder dismissed) for this hardware. */
+    needsTuning?: boolean;
   };
   /** The active mode ("" or absent when the node is idle) and its status. */
   active?: string; since?: string; mode?: ModeStatus; registration?: Registration;
@@ -73,8 +113,11 @@ export interface ModeField {
   stationDefault?: 'callsign' | 'dmrId' | 'nxdnId';
   /** Appended to the station value shown as the placeholder (EchoLink uses "-L" after the callsign). */
   stationSuffix?: string;
+  /** A text field the UI offers a host list picker for: "bm" (BrandMeister masters) or "dmr-other" (other Homebrew masters). The saved value stays plain text. */
+  hostList?: 'bm' | 'dmr-other';
 }
-export interface ModeSettings { values?: Record<string, string>; favorites?: Target[]; reflectors?: Target[] }
+/** `clear` lists secret keys to delete from the saved settings (a save with only `clear` changes nothing else). */
+export interface ModeSettings { values?: Record<string, string>; favorites?: Target[]; reflectors?: Target[]; clear?: string[] }
 /** One mode of GET /api/modes. Operators and viewers get no fields, settings or secretsSet. */
 export interface ModeInfo {
   name: string; title: string; targetLabel?: string; targetHelp?: string; needsHost?: boolean;
@@ -100,6 +143,28 @@ export interface Vocoder {
 }
 
 /** GET and PUT /api/station (admin). */
+/** station.id: the station ID sent on the radio. Unset or 0 is the node's default. Unknown keys survive a save. */
+export interface StationId {
+  enabled?: boolean; intervalS?: number; tailWindowS?: number; endQuietS?: number;
+  wpm?: number; pitchHz?: number; levelDb?: number; voiceFile?: string;
+  [key: string]: unknown;
+}
+/** station.advanced: timers and AGC. Unset or 0 is the node's default. Unknown keys (md380 and others) survive a save. */
+export interface StationAdvanced {
+  hangMs?: number; txTimeoutS?: number;
+  /** AGC: radioAgc is radio to network, modeAgc network to radio; both on by default. Targets -40 to -6 dBFS (unset -22). */
+  modeAgc?: boolean; radioAgc?: boolean; rxAgcTargetDb?: number; txAgcTargetDb?: number; agcMaxDb?: number;
+  /** Static gain, -20 to 20 dB: radio to network and network to radio. 0 or unset is none. */
+  rxGainDb?: number; txGainDb?: number;
+  /** flatAudio: the radio's audio is flat (data port or discriminator), so the node applies 75 microsecond pre- and
+   * de-emphasis in software. plFilter unset is automatic: on, unless the radio is an SA818. */
+  flatAudio?: boolean; plFilter?: boolean;
+  /** Carrier debounce before a receive counts (0 to 1000 ms) and extra hang time (0 to 2000 ms). */
+  rxOnDelayMs?: number; txOffDelayMs?: number;
+  /** Key-up delay: network audio waits this long after PTT (0 to 1000 ms); unset is 500, 0 is off. */
+  txOnDelayMs?: number;
+  [key: string]: unknown;
+}
 export interface Station {
   callsign?: string;
   /** Optional digital IDs of the station (DMR 1 to 16777215, NXDN 1 to 65535); unset or 0 is none. Modes use them when their own ID is empty. */
@@ -110,9 +175,13 @@ export interface Station {
     preset?: string;
     pttGpio?: number; pttActiveLow?: boolean; cosSource?: string; cosActiveLow?: boolean;
     ctcssSource?: string; ctcssActiveLow?: boolean; sa818?: boolean; sa818Port?: string;
+    /** Microphone boost of the sound chip, when it has the control. */
+    rxBoost?: boolean;
+    /** The SA818's filter flags, written to the module only by Program. Unset flags take the defaults: emphasis off, high-pass and low-pass on. */
+    sa818Filter?: Sa818Filter;
   };
-  id: { enabled?: boolean; intervalS?: number; wpm?: number; pitchHz?: number; levelDb?: number };
-  advanced: Record<string, unknown>;
+  id: StationId;
+  advanced: StationAdvanced;
   active?: { mode: string; target?: Target };
 }
 /** The settings of a radio interface (a preset's defaults, or what runs). */
@@ -120,16 +189,22 @@ export interface RadioInterface {
   preset: string; audio: boolean; pttPin: number; pttActiveLow: boolean; cos: string; cosActiveLow: boolean;
   ctcss: string; ctcssActiveLow: boolean; sa818: boolean;
 }
+export interface Sa818Filter { emphasis?: boolean; highPass?: boolean; lowPass?: boolean }
+/** What the SA818's filters were last programmed to (from its state file); absent when never programmed. */
+export interface Sa818Programmed { emphasis: boolean; highPass: boolean; lowPass: boolean; at?: string }
 export interface RadioPreset { name: string; title: string; description: string; defaults: RadioInterface }
 /** GET /api/radio/info (admin). */
 export interface RadioInfo {
   present: boolean; detected: boolean; chip?: string; usbId?: string; product?: string; busPath?: string; shari: boolean;
   interface: RadioInterface; preset: string; presets: RadioPreset[]; resolved?: RadioInterface; restartRequired?: boolean;
+  sa818Filters?: Sa818Programmed;
 }
 export interface Reading { RMSDb: number; PeakDb: number; Active: boolean; Clipped: number; Frames: number }
 /** GET and PUT /api/radio: the sound chip's levels. -1 means the chip has no such control. */
 export interface RadioLevels {
-  CaptureVolume: number; PlaybackVolume: number; Rx: Reading; Tx: Reading; DroppedRx: number; DroppedTx: number; Xruns: number;
+  CaptureVolume: number; PlaybackVolume: number;
+  /** The sound chip's hardware steps (0 or absent: no such control): a control has Steps+1 positions, 0..Steps, and the volume is Step/Steps. Db is the gain at the step, null without dB information. */
+  CaptureSteps?: number; CaptureStep?: number; CaptureDb?: number | null; PlaybackSteps?: number; PlaybackStep?: number; PlaybackDb?: number | null; BoostAvailable?: boolean; Boost?: boolean; Rx: Reading; Tx: Reading; DroppedRx: number; DroppedTx: number; Xruns: number;
 }
 
 /** One row of GET /api/heard: who was heard on which mode. */
@@ -141,11 +216,17 @@ export interface Heard {
 /** A reflector or master of GET /api/hostlists. */
 export interface HostItem { value: string; name: string; detail?: string; address: string; port: number; password?: string }
 export interface HostList { mode: string; items: HostItem[]; truncated?: boolean; etag: string }
+/** One downloaded list in GET /api/hostlists/status: dmr, ysf, p25, nxdn or m17. */
+export interface HostListState { entries: number; updated?: string; checked?: string; error?: string }
+/** The AllStar node list in GET /api/hostlists/status. */
+export interface NodelistState { count: number; updated: string | null; source: string; error: string | null; busy?: boolean }
+/** GET /api/hostlists/status (and the answer of the refresh): nextManual is when the next manual refresh is allowed. */
+export interface HostListsStatus { busy?: boolean; lists: Record<string, HostListState>; nextManual?: string; nodelist?: NodelistState }
 
 /** A favorite: a saved target of one mode (GET /api/favorites). */
 export interface Favorite { id: number; mode: string; target: string; label: string; group: string; position: number; pinned: boolean; info: NodeInfo | null }
 
-/** The state of the aslcp-node systemd unit. */
+/** The state of the nodespot-node systemd unit. */
 export interface NodeService { available: boolean; service?: { unit: string; description: string; active: string; sub: string; enabled: string; since: string } }
 
 export interface SystemInfo {
@@ -157,7 +238,8 @@ export interface About {
   version: string; nodeRunning: boolean; nodeStarted: string;
   platform: { os: string; arch: string; model: string; distro: string; kernel: string; hardware: string };
 }
-export type Settings = Record<string, unknown>
+/** GET /api/settings (and the SSE hello and settings events). hiddenModes: the modes an admin hid from the Modes row and the pickers. */
+export interface Settings { favoritesScan?: boolean; hiddenModes?: string[]; [key: string]: unknown }
 
 // ---- The public status view (GET /api/public/status, SSE "snapshot"): no IPs, no system info.
 export interface PubStation { callsign: string; mode: string; modeTitle: string; target: string; state: ModeState | string; txKeyed: boolean; rxKeyed: boolean }
@@ -180,7 +262,7 @@ export interface BackupSelection { secrets: boolean }
 export interface RestoreWarning { code: string; message: string }
 export interface RestoreRadio { bandwidth: string; rxMHz: number; txMHz: number; rxTone: string; txTone: string; squelch: number }
 export interface RestorePreview {
-  backup: { hostname: string; created: string; createdBy: string; aslcpVersion: string; arch: string; osId?: string; osCodename?: string; osName?: string; callsign: string; channel: string };
+  backup: { hostname: string; created: string; createdBy: string; nodespotVersion: string; arch: string; osId?: string; osCodename?: string; osName?: string; callsign: string; channel: string };
   node: { arch: string; osId?: string; osCodename?: string; osName?: string; callsign: string };
   warnings: RestoreWarning[];
   users: { username: string; role: string }[];

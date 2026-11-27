@@ -101,7 +101,7 @@ func atomicWrite(abs, parent string, data []byte, uid, gid int, mode fs.FileMode
 	if _, err := rand.Read(rnd[:]); err != nil {
 		return err
 	}
-	tmp := filepath.Join(parent, ".aslcp-tmp-"+hex.EncodeToString(rnd[:]))
+	tmp := filepath.Join(parent, ".nodespot-tmp-"+hex.EncodeToString(rnd[:]))
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return err

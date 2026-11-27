@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/artw1/aslcp/internal/schedules"
+	"github.com/w1jar/nodespot/internal/schedules"
 )
 
 // SchemaVersion is the schema version of this build.
@@ -48,7 +48,7 @@ type Inspection struct {
 var ErrSchemaNewer = errors.New("store: database schema is newer than this build")
 
 // Inspect opens the database file at path read-only (no migration) and
-// checks that it is an intact ASLCP database without triggers or views.
+// checks that it is an intact nodespot database without triggers or views.
 func Inspect(path string) (Inspection, error) {
 	var in Inspection
 	db, err := sql.Open("sqlite", "file:"+path+"?"+url.Values{"mode": {"ro"}, "_pragma": {"busy_timeout(5000)"}}.Encode())
@@ -72,14 +72,14 @@ func Inspect(path string) (Inspection, error) {
 		return in, errors.New("database contains triggers or views")
 	}
 	if err := db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_version`).Scan(&in.Version); err != nil {
-		return in, fmt.Errorf("not an ASLCP database: %w", err)
+		return in, fmt.Errorf("not an nodespot database: %w", err)
 	}
 	if in.Version > len(migrations) {
 		return in, ErrSchemaNewer
 	}
 	rows, err := db.Query(`SELECT username, role FROM users ORDER BY id`)
 	if err != nil {
-		return in, fmt.Errorf("not an ASLCP database: %w", err)
+		return in, fmt.Errorf("not an nodespot database: %w", err)
 	}
 	defer rows.Close()
 	in.Users = []InspectedUser{}
@@ -97,12 +97,12 @@ func Inspect(path string) (Inspection, error) {
 		return in, err
 	}
 	if err := db.QueryRow(`SELECT COUNT(*) FROM favorites`).Scan(&in.Favorites); err != nil {
-		return in, fmt.Errorf("not an ASLCP database: %w", err)
+		return in, fmt.Errorf("not an nodespot database: %w", err)
 	}
 	// The schedules table exists from migration 4; older backups have none.
 	if in.Version >= 4 {
 		if err := db.QueryRow(`SELECT COUNT(*) FROM schedules`).Scan(&in.Schedules); err != nil {
-			return in, fmt.Errorf("not an ASLCP database: %w", err)
+			return in, fmt.Errorf("not an nodespot database: %w", err)
 		}
 	}
 	return in, nil

@@ -1,5 +1,5 @@
 // Package legacy names the previous third-party digital voice stack in one
-// place. ASLCP refers to it only to install md380-emu from that stack's apt
+// place. nodespot refers to it only to install md380-emu from that stack's apt
 // repository, to stop and purge old installs (units, packages, apt source),
 // and to migrate its own old data (state directories, settings keys, backup
 // part ids, database tables). Nothing else in the code base spells these
@@ -28,13 +28,13 @@ func IsLegacyPackage(name string) bool { return strings.HasPrefix(name, PackageP
 // enabling digital modes (and the upgrade purge) stops and disables.
 var Units = []string{"analog_bridge", "mmdvm_bridge", "netcheck", "ysfgateway", "p25gateway", "nxdngateway", "stfu"}
 
-// Names of ASLCP's own pre-2.0 data that 2.0 migrates, deletes or still accepts.
+// Names of nodespot's own pre-2.0 data that 2.0 migrates, deletes or still accepts.
 const (
-	OldStateDir       = "/var/lib/aslcp-dvswitch"         // helper state directory
-	OldHistoryDir     = "/var/lib/aslcp-dvswitch-history" // helper ini history (deleted on upgrade)
-	OldSettingsPrefix = "dvswitch."                       // settings keys
-	OldFavoritesTable = "dvswitch_favorites"              // database table
-	OldBackupPart     = "dvswitch"                        // backup part id and archive directory
+	OldStateDir       = "/var/lib/nodespot-dvswitch"         // helper state directory
+	OldHistoryDir     = "/var/lib/nodespot-dvswitch-history" // helper ini history (deleted on upgrade)
+	OldSettingsPrefix = "dvswitch."                          // settings keys
+	OldFavoritesTable = "dvswitch_favorites"                 // database table
+	OldBackupPart     = "dvswitch"                           // backup part id and archive directory
 )
 
 // IniMainRel is the path below /opt of the old stack's main ini file, which

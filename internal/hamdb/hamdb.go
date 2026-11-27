@@ -46,7 +46,7 @@ const (
 	// answers with a redirect to /v1/<call>/json/<app>, so the latter is used.
 	DefaultBaseURL = "https://api.hamdb.org"
 	// AppName is the app name hamdb.org asks to be sent in the URL.
-	AppName = "aslcp"
+	AppName = "nodespot"
 
 	FoundTTL    = 30 * 24 * time.Hour
 	NotFoundTTL = 7 * 24 * time.Hour
@@ -76,7 +76,7 @@ type Options struct {
 	// Dir is the data directory the cache is kept in (required for a cache that survives a restart).
 	Dir     string
 	BaseURL string // default DefaultBaseURL
-	Version string // for the User-Agent "ASLCP/<version>"
+	Version string // for the User-Agent "nodespot/<version>"
 	Client  *http.Client
 	// Settings holds the switch; nil: off and not persisted.
 	Settings Settings
@@ -578,7 +578,7 @@ func (m *Manager) fetch(ctx context.Context, call string) (entry, error) {
 	if err != nil {
 		return entry{}, err
 	}
-	req.Header.Set("User-Agent", "ASLCP/"+m.o.Version)
+	req.Header.Set("User-Agent", "nodespot/"+m.o.Version)
 	req.Header.Set("Accept", "application/json")
 	resp, err := m.o.Client.Do(req)
 	if err != nil {

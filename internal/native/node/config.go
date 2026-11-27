@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,14 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/radio"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 // DefaultConfigPath is where the daemon keeps its config.
-const DefaultConfigPath = "/etc/aslcp/node.json"
+const DefaultConfigPath = "/etc/nodespot/node.json"
 
 // ConfigVersion is the version written to new files.
 const ConfigVersion = 1
@@ -46,6 +47,47 @@ type Station struct {
 	// configs only (it seeds the mode's remembered tune); see Tune.
 	Active   *Selection `json:"active,omitempty"`
 	Advanced Advanced   `json:"advanced"`
+	// AudioTuned records that the receive audio was tuned (or the reminder
+	// dismissed) for one radio interface. The node sets it; see AudioTuned.
+	AudioTuned *AudioTuned `json:"audioTuned,omitempty"`
+}
+
+// AudioTuned remembers that the node's receive audio has been tuned: by
+// Auto-set, by setting the receive level by hand, by an admin dismissing the
+// "tune your audio" reminder, or (for a config that predates this record) by
+// an audio level already being stored. It belongs to one radio interface: when
+// the detected interface or sound chip is another one, the node is untuned
+// again, a dismissal included.
+type AudioTuned struct {
+	// At is when it was recorded (RFC 3339).
+	At time.Time `json:"at"`
+	// Interface identifies the hardware it was recorded for: the interface
+	// preset in use and the sound chip's USB id, "shari:0d8c:0012" (see
+	// HardwareID).
+	Interface string `json:"interface"`
+	// Dismissed is true when an admin dismissed the reminder instead of tuning.
+	Dismissed bool `json:"dismissed,omitempty"`
+}
+
+// HardwareID is the identity a tuning record is kept for: the interface
+// preset in use and the USB id of the detected sound chip.
+func HardwareID(i radio.Info) string {
+	return string(i.Interface.Preset) + ":" + i.USBID
+}
+
+// Tuned reports whether the audio counts as tuned (or dismissed) for the
+// hardware hw.
+func (s Station) Tuned(hw string) bool {
+	return s.AudioTuned != nil && s.AudioTuned.Interface == hw
+}
+
+// legacyTuned reports whether a config without an AudioTuned record shows the
+// audio was set up already: any stored audio level (receive or transmit
+// volume, receive boost, a static gain or an AGC target).
+func (s Station) legacyTuned() bool {
+	r, a := s.Radio, s.Advanced
+	return r.RxVolume != nil || r.TxVolume != nil || r.RxBoost != nil ||
+		a.RxGainDB != 0 || a.TxGainDB != 0 || a.RxAGCTarget != 0 || a.TxAGCTarget != 0 || a.AGCMax != 0
 }
 
 // Largest station digital IDs: DMR IDs are 24 bits, NXDN unit IDs 16 bits.
@@ -95,6 +137,34 @@ type RadioConfig struct {
 	CTCSSActiveLow *bool  `json:"ctcssActiveLow,omitempty"`
 	SA818Enabled   *bool  `json:"sa818,omitempty"`
 	SA818Port      string `json:"sa818Port,omitempty"`
+	// RxBoost switches the sound chip's microphone boost on or off, when the
+	// chip has the control (unset leaves it as it is).
+	RxBoost *bool `json:"rxBoost,omitempty"`
+	// SA818Filter is what the SA818's three audio filters are set to the next
+	// time the module is programmed (the Program button, or a changed
+	// channel). Unset is sa818.DefaultFilters: emphasis off, high-pass and
+	// low-pass on. Saving it sends nothing.
+	SA818Filter *SA818Filter `json:"sa818Filter,omitempty"`
+}
+
+// SA818Filter is the SA818's three audio filters (AT+SETFILTER=emphasis,
+// highPass,lowPass). true is "on" (the wire value 0; 1 bypasses the filter,
+// see sa818.Filters). A nil flag is the default: emphasis off (flat audio),
+// high-pass and low-pass on.
+type SA818Filter struct {
+	Emphasis *bool `json:"emphasis,omitempty"` // pre- and de-emphasis
+	HighPass *bool `json:"highPass,omitempty"` // high-pass (removes sub-audible tones)
+	LowPass  *bool `json:"lowPass,omitempty"`  // low-pass
+}
+
+// Filters returns the filter settings to program.
+func (r RadioConfig) Filters() sa818.Filters {
+	f := r.SA818Filter
+	d := sa818.DefaultFilters()
+	if f == nil {
+		return d
+	}
+	return sa818.Filters{Emphasis: on(f.Emphasis, d.Emphasis), HighPass: on(f.HighPass, d.HighPass), LowPass: on(f.LowPass, d.LowPass)}
 }
 
 // Overrides are the preset overrides of r.
@@ -141,15 +211,39 @@ type IDConfig struct {
 
 // Advanced holds tuning most stations leave alone.
 type Advanced struct {
-	HangMS       int   `json:"hangMs,omitempty"`       // transmitter hang (default 500)
-	TxTimeoutS   int   `json:"txTimeoutS,omitempty"`   // longest transmission either way (default 180)
-	CourtesyTone *bool `json:"courtesyTone,omitempty"` // tone after a local transmission (default on)
-	// AGC on the mode's audio for the radio (default on) and on the
-	// radio's audio for the mode (default off).
-	ModeAGC   *bool   `json:"modeAgc,omitempty"`
-	RadioAGC  *bool   `json:"radioAgc,omitempty"`
-	AGCTarget float64 `json:"agcTargetDb,omitempty"` // dBFS (default -22)
-	AGCMax    float64 `json:"agcMaxDb,omitempty"`    // dB (default 18)
+	HangMS     int `json:"hangMs,omitempty"`     // transmitter hang (default 500)
+	TxTimeoutS int `json:"txTimeoutS,omitempty"` // longest transmission either way (default 180)
+	// AGC on the mode's audio for the radio (network to radio) and on the
+	// radio's audio for the mode (radio to network), both on by default,
+	// each with its own target level. AGCMax is shared.
+	ModeAGC     *bool   `json:"modeAgc,omitempty"`
+	RadioAGC    *bool   `json:"radioAgc,omitempty"`
+	RxAGCTarget float64 `json:"rxAgcTargetDb,omitempty"` // radio to network, dBFS (default -22)
+	TxAGCTarget float64 `json:"txAgcTargetDb,omitempty"` // network to radio, dBFS (default -22)
+	AGCMax      float64 `json:"agcMaxDb,omitempty"`      // dB (default 18)
+	// RxGainDB (radio to network) and TxGainDB (network to radio) are static
+	// gains, -20 to 20 dB, applied before the AGC.
+	RxGainDB float64 `json:"rxGainDb,omitempty"`
+	TxGainDB float64 `json:"txGainDb,omitempty"`
+	// FlatAudio says the radio's audio is flat (a data port or the
+	// discriminator): the node then applies software 75 microsecond
+	// pre-emphasis to the audio to the radio and the matching de-emphasis to
+	// the audio from it (default off).
+	FlatAudio bool `json:"flatAudio,omitempty"`
+	// PLFilter is the ~300 Hz high-pass on the received audio that removes
+	// sub-audible tones. Unset is automatic: on, unless the interface has an
+	// SA818, whose own high-pass does the job.
+	PLFilter *bool `json:"plFilter,omitempty"`
+	// RxOnDelayMS is how long the carrier must stay present before a
+	// received transmission counts (debounce); TxOffDelayMS is added to the
+	// hang time.
+	RxOnDelayMS  int `json:"rxOnDelayMs,omitempty"`
+	TxOffDelayMS int `json:"txOffDelayMs,omitempty"`
+	// TxOnDelayMS is the key-up delay: when the network keys the
+	// transmitter, its audio waits this long after PTT so the transmitter
+	// (and the squelch of the radios listening) is up before the first
+	// word. Unset is DefaultTxOnDelay; 0 turns it off.
+	TxOnDelayMS *int `json:"txOnDelayMs,omitempty"`
 	// MD380 is the md380-emu address for AMBE (default 127.0.0.1:2470).
 	MD380          string `json:"md380,omitempty"`
 	MD380TimeoutMS int    `json:"md380TimeoutMs,omitempty"`
@@ -159,6 +253,7 @@ type Advanced struct {
 const (
 	DefaultHang        = 500 * time.Millisecond
 	DefaultTxTimeout   = 180 * time.Second
+	DefaultTxOnDelay   = 500 * time.Millisecond
 	DefaultIDInterval  = 600 * time.Second
 	DefaultIDTail      = 60 * time.Second
 	DefaultIDEndQuiet  = 60 * time.Second
@@ -168,6 +263,11 @@ const (
 	DefaultAGCTargetDb = -22
 	DefaultAGCMaxDb    = 18
 	DefaultSquelch     = 4
+
+	MaxStaticGainDb = audio.MaxStaticGainDb // gain is -20 to +20 dB
+	MaxRxOnDelayMS  = 1000
+	MaxTxOffDelayMS = 2000
+	MaxTxOnDelayMS  = 1000
 )
 
 func on(b *bool, def bool) bool {
@@ -222,20 +322,97 @@ func (a Advanced) Hang() time.Duration {
 // TxTimeout is the longest transmission.
 func (a Advanced) TxTimeout() time.Duration { return secs(a.TxTimeoutS, DefaultTxTimeout) }
 
-// Courtesy reports whether the courtesy tone is on.
-func (a Advanced) Courtesy() bool { return on(a.CourtesyTone, true) }
-
-// AGC returns the AGC parameters and which AGCs are on.
-func (a Advanced) AGC() (p audio.AGCParams, modeOn, radioOn bool) {
-	p = audio.AGCParams{TargetDb: a.AGCTarget, MaxGainDb: a.AGCMax}
-	if p.TargetDb == 0 {
-		p.TargetDb = DefaultAGCTargetDb
+// UnmarshalJSON reads Advanced and migrates the keys of earlier builds, so
+// their config files keep loading (the strict decoder would refuse them):
+//   - "courtesyTone" (retired) is dropped;
+//   - "agcTargetDb" (one target for both directions) sets "rxAgcTargetDb"
+//     and "txAgcTargetDb" when those are absent;
+//   - "preEmphasis" and "deEmphasis": either one true sets "flatAudio"
+//     when that is absent.
+//
+// The old keys are never written again: the next save has only the new ones.
+func (a *Advanced) UnmarshalJSON(b []byte) error {
+	type plain Advanced
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
 	}
-	if p.MaxGainDb == 0 {
-		p.MaxGainDb = DefaultAGCMaxDb
+	migrated := false
+	if _, ok := raw["courtesyTone"]; ok {
+		delete(raw, "courtesyTone")
+		migrated = true
 	}
-	return p.Clamp(), on(a.ModeAGC, true), on(a.RadioAGC, false)
+	if v, ok := raw["agcTargetDb"]; ok {
+		delete(raw, "agcTargetDb")
+		migrated = true
+		for _, k := range []string{"rxAgcTargetDb", "txAgcTargetDb"} {
+			if _, set := raw[k]; !set {
+				raw[k] = v
+			}
+		}
+	}
+	flat := false
+	for _, k := range []string{"preEmphasis", "deEmphasis"} {
+		v, ok := raw[k]
+		if !ok {
+			continue
+		}
+		delete(raw, k)
+		migrated = true
+		var on bool
+		if err := json.Unmarshal(v, &on); err != nil {
+			return fmt.Errorf("advanced %s: %w", k, err)
+		}
+		flat = flat || on
+	}
+	if _, set := raw["flatAudio"]; flat && !set {
+		raw["flatAudio"] = json.RawMessage("true")
+	}
+	if !migrated {
+		return json.Unmarshal(b, (*plain)(a))
+	}
+	nb, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(nb, (*plain)(a))
 }
+
+// AGC returns the AGC parameters of each direction and which AGCs are on:
+// rx is radio to network (RadioAGC), tx network to radio (ModeAGC).
+func (a Advanced) AGC() (rx, tx audio.AGCParams, modeOn, radioOn bool) {
+	max := a.AGCMax
+	if max == 0 {
+		max = DefaultAGCMaxDb
+	}
+	target := func(v float64) float64 {
+		if v == 0 {
+			return DefaultAGCTargetDb
+		}
+		return v
+	}
+	rx = audio.AGCParams{TargetDb: target(a.RxAGCTarget), MaxGainDb: max}.Clamp()
+	tx = audio.AGCParams{TargetDb: target(a.TxAGCTarget), MaxGainDb: max}.Clamp()
+	return rx, tx, on(a.ModeAGC, true), on(a.RadioAGC, true)
+}
+
+// PL reports whether the PL (sub-audible tone) high-pass is on. sa818 says
+// the interface has an SA818, which has its own high-pass: unset is then off.
+func (a Advanced) PL(sa818 bool) bool { return on(a.PLFilter, !sa818) }
+
+// RxOnDelay is the carrier debounce.
+func (a Advanced) RxOnDelay() time.Duration { return time.Duration(a.RxOnDelayMS) * time.Millisecond }
+
+// TxOnDelay is the key-up delay before network audio plays.
+func (a Advanced) TxOnDelay() time.Duration {
+	if a.TxOnDelayMS == nil {
+		return DefaultTxOnDelay
+	}
+	return time.Duration(*a.TxOnDelayMS) * time.Millisecond
+}
+
+// TxOffDelay is the extra transmitter tail added to the hang time.
+func (a Advanced) TxOffDelay() time.Duration { return time.Duration(a.TxOffDelayMS) * time.Millisecond }
 
 // SquelchLevel is the SA818 squelch.
 func (r RadioConfig) SquelchLevel() int {
@@ -287,6 +464,7 @@ func (r RadioConfig) SA818() (sa818.Settings, error) {
 	s.RxMHz, s.TxMHz = r.FrequencyMHz, r.FrequencyMHz
 	s.RxTone, s.TxTone = t, t
 	s.Squelch = r.SquelchLevel()
+	s.Filters = r.Filters()
 	if r.Narrow {
 		s.Bandwidth = sa818.Narrow
 	}
@@ -355,14 +533,20 @@ func (c *Config) Validate() error {
 	if id.IntervalS < 0 || id.IntervalS > 600 {
 		errs = append(errs, errors.New("ID: interval must be at most 600 seconds (10 minutes)"))
 	}
-	if id.TailWindowS < 0 || id.EndQuietS < 0 {
-		errs = append(errs, errors.New("ID: times must not be negative"))
+	if id.TailWindowS < 0 || id.TailWindowS > 600 {
+		errs = append(errs, errors.New("ID: tail window must be at most 600 seconds"))
+	}
+	if id.EndQuietS < 0 || id.EndQuietS > 600 {
+		errs = append(errs, errors.New("ID: quiet time must be at most 600 seconds"))
 	}
 	if id.WPM != 0 && (id.WPM < 5 || id.WPM > 60) {
 		errs = append(errs, errors.New("ID: CW speed must be 5 to 60 WPM"))
 	}
-	if id.LevelDb > 0 {
-		errs = append(errs, errors.New("ID: level must be at most 0 dBFS"))
+	if id.PitchHz != 0 && (id.PitchHz < 200 || id.PitchHz > 2000) {
+		errs = append(errs, errors.New("ID: CW pitch must be 200 to 2000 Hz"))
+	}
+	if id.LevelDb > 0 || id.LevelDb < -60 {
+		errs = append(errs, errors.New("ID: level must be -60 to 0 dBFS"))
 	}
 	if id.VoiceFile != "" && !filepath.IsAbs(id.VoiceFile) {
 		errs = append(errs, errors.New("ID: voice file must be an absolute path"))
@@ -374,8 +558,27 @@ func (c *Config) Validate() error {
 	if a.TxTimeoutS < 0 || a.TxTimeoutS > 1800 {
 		errs = append(errs, errors.New("transmit timeout must be at most 1800 seconds"))
 	}
-	if a.AGCMax < 0 || a.AGCTarget > 0 {
-		errs = append(errs, errors.New("AGC: target must be below 0 dBFS and maximum gain positive"))
+	for name, v := range map[string]float64{"radio to network": a.RxAGCTarget, "network to radio": a.TxAGCTarget} {
+		if v != 0 && (math.IsNaN(v) || v < audio.MinTargetDb || v > audio.MaxTargetDb) {
+			errs = append(errs, fmt.Errorf("AGC: %s target must be %d to %d dBFS", name, audio.MinTargetDb, audio.MaxTargetDb))
+		}
+	}
+	if a.AGCMax < 0 || a.AGCMax > audio.MaxGainLimitDb {
+		errs = append(errs, fmt.Errorf("AGC: maximum gain must be 0 to %d dB", audio.MaxGainLimitDb))
+	}
+	for name, v := range map[string]float64{"receive gain": a.RxGainDB, "transmit gain": a.TxGainDB} {
+		if math.IsNaN(v) || v < -MaxStaticGainDb || v > MaxStaticGainDb {
+			errs = append(errs, fmt.Errorf("audio: %s must be -%d to %d dB", name, MaxStaticGainDb, MaxStaticGainDb))
+		}
+	}
+	if a.RxOnDelayMS < 0 || a.RxOnDelayMS > MaxRxOnDelayMS {
+		errs = append(errs, fmt.Errorf("audio: receive-on delay must be 0 to %d ms", MaxRxOnDelayMS))
+	}
+	if a.TxOffDelayMS < 0 || a.TxOffDelayMS > MaxTxOffDelayMS {
+		errs = append(errs, fmt.Errorf("audio: transmit-off delay must be 0 to %d ms", MaxTxOffDelayMS))
+	}
+	if a.TxOnDelayMS != nil && (*a.TxOnDelayMS < 0 || *a.TxOnDelayMS > MaxTxOnDelayMS) {
+		errs = append(errs, fmt.Errorf("audio: key-up delay must be 0 to %d ms", MaxTxOnDelayMS))
 	}
 	if st.Active != nil {
 		if _, ok := mode.Lookup(st.Active.Mode); !ok {

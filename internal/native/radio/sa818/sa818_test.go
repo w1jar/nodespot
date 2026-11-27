@@ -116,7 +116,7 @@ func TestCommands(t *testing.T) {
 		{"simplex wide", func(*Settings) {}, []string{
 			"AT+DMOSETGROUP=1,146.5200,146.5200,0000,4,0000",
 			"AT+DMOSETVOLUME=8",
-			"AT+SETFILTER=1,1,1",
+			"AT+SETFILTER=1,0,0",
 		}, false},
 		{"narrow repeater ctcss", func(s *Settings) {
 			s.Bandwidth = Narrow
@@ -128,7 +128,12 @@ func TestCommands(t *testing.T) {
 		}, []string{
 			"AT+DMOSETGROUP=0,447.1000,442.1000,0008,2,0008",
 			"AT+DMOSETVOLUME=5",
-			"AT+SETFILTER=0,0,0",
+			"AT+SETFILTER=1,1,1", // all bypassed
+		}, false},
+		{"all filters on", func(s *Settings) { s.Filters = Filters{Emphasis: true, HighPass: true, LowPass: true} }, []string{
+			"AT+DMOSETGROUP=1,146.5200,146.5200,0000,4,0000",
+			"AT+DMOSETVOLUME=8",
+			"AT+SETFILTER=0,0,0", // the manual's example: all three enabled
 		}, false},
 		{"dcs", func(s *Settings) {
 			s.RxTone = Tone{Kind: ToneDCS, DCSCode: 23}
@@ -136,7 +141,7 @@ func TestCommands(t *testing.T) {
 		}, []string{
 			"AT+DMOSETGROUP=1,146.5200,146.5200,025I,4,023N",
 			"AT+DMOSETVOLUME=8",
-			"AT+SETFILTER=1,1,1",
+			"AT+SETFILTER=1,0,0",
 		}, false},
 		{"frequency out of band", func(s *Settings) { s.RxMHz = 200 }, nil, true},
 		{"squelch too high", func(s *Settings) { s.Squelch = 9 }, nil, true},
@@ -190,7 +195,7 @@ func TestApplyOverFakeSerial(t *testing.T) {
 	if err := c.Apply(s); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"AT+DMOCONNECT", "AT+DMOSETGROUP=1,146.5200,146.5200,0000,4,0000", "AT+DMOSETVOLUME=8", "AT+SETFILTER=1,1,1"}
+	want := []string{"AT+DMOCONNECT", "AT+DMOSETGROUP=1,146.5200,146.5200,0000,4,0000", "AT+DMOSETVOLUME=8", "AT+SETFILTER=1,0,0"}
 	if strings.Join(f.sent, "|") != strings.Join(want, "|") {
 		t.Errorf("sent %q", f.sent)
 	}
@@ -271,7 +276,7 @@ func TestProgrammerSavesOnlyOnSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Settings != s || st.Version != 1 || !st.AppliedAt.Equal(time.Date(2026, 11, 26, 3, 4, 5, 0, time.UTC)) {
+	if st.Settings != s || st.Version != 2 || !st.AppliedAt.Equal(time.Date(2026, 11, 26, 3, 4, 5, 0, time.UTC)) {
 		t.Errorf("state = %+v", st)
 	}
 	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o644 {
@@ -324,5 +329,17 @@ func TestFindPort(t *testing.T) {
 	os.MkdirAll(filepath.Join(empty, "bus", "usb", "devices"), 0o755)
 	if _, err := FindPort(empty, "/dev"); !errors.Is(err, ErrNoPort) {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// A state file of an earlier build (version 1, filter flags sent inverted)
+// does not count as programmed.
+func TestStateVersion1IsStale(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sa818.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"applied_at":"2026-01-01T00:00:00Z","settings":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadState(path); err == nil {
+		t.Fatal("a version 1 state loaded")
 	}
 }

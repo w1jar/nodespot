@@ -1,6 +1,6 @@
 package vocoder
 
-import "github.com/artw1/aslcp/internal/dv/codec2"
+import "github.com/w1jar/nodespot/internal/dv/codec2"
 
 // C2 is the native Codec2 3200 vocoder: an encoder and a decoder of
 // internal/dv/codec2 behind the Codec2 interface. Stateful and not safe for

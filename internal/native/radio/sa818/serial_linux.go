@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/artw1/aslcp/internal/native/radio/usbsys"
+	"github.com/w1jar/nodespot/internal/native/radio/usbsys"
 )
 
 // SerialID is the USB id of the CH340 bridge on the SHARI.

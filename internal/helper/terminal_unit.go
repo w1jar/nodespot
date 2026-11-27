@@ -16,14 +16,14 @@ import (
 )
 
 // The terminal's login runs in its own transient systemd unit
-// (aslcp-term-<id>.service), not as a child of the helper. This file holds
+// (nodespot-term-<id>.service), not as a child of the helper. This file holds
 // the parts that do not touch a pseudo terminal, so they build and are tested
 // on every platform: the unit name and the systemd-run command line, the
 // validation of what goes into them, stopping a unit, finding its processes,
 // and the sweep of units left behind by an earlier helper.
 
 const (
-	termUnitPrefix = "aslcp-term-"
+	termUnitPrefix = "nodespot-term-"
 	termUnitSuffix = ".service"
 	// terminalStopTimeout bounds systemctl stop (the unit's own
 	// TimeoutStopSec=5s turns SIGTERM into SIGKILL before that).
@@ -35,7 +35,7 @@ const (
 
 var (
 	termIDRe   = regexp.MustCompile(`^[0-9a-f]{16}$`)
-	termUnitRe = regexp.MustCompile(`^aslcp-term-[0-9a-f]{16}\.service$`)
+	termUnitRe = regexp.MustCompile(`^nodespot-term-[0-9a-f]{16}\.service$`)
 )
 
 // newTermID returns a random 16 digit hex id.
@@ -80,7 +80,7 @@ func termUnitArgv(id, self string, rows, cols uint16, owner int64) ([]string, er
 	return []string{
 		"systemd-run", "--quiet",
 		"--unit=" + termUnitPrefix + id,
-		"--description=ASLCP web terminal",
+		"--description=nodespot web terminal",
 		"--service-type=exec", "--collect",
 		"--property=TimeoutStopSec=5s",
 		"--", self, "term-host",
@@ -174,9 +174,9 @@ func termUnitBusy(unit string) bool {
 	return false
 }
 
-// listTermUnits returns the aslcp-term-* service units systemd knows about.
+// listTermUnits returns the nodespot-term-* service units systemd knows about.
 func listTermUnits(ctx context.Context, r Runner) ([]string, error) {
-	out, code, err := r.Run(ctx, "systemctl", "list-units", "--all", "--plain", "--no-legend", "--no-pager", "--type=service", "aslcp-term-*")
+	out, code, err := r.Run(ctx, "systemctl", "list-units", "--all", "--plain", "--no-legend", "--no-pager", "--type=service", "nodespot-term-*")
 	if err != nil {
 		return nil, err
 	}

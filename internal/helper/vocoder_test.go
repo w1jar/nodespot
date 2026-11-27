@@ -103,7 +103,7 @@ func TestVocoderScript(t *testing.T) {
 	if strings.Contains(vocoderScript("armhf", DefaultVocoderDropin), "qemu") {
 		t.Error("armhf runs the vocoder natively")
 	}
-	if strings.Contains(s, "apt-get purge") || strings.Contains(s, "apt-get remove") || strings.Contains(s, "aslcp-dv") {
+	if strings.Contains(s, "apt-get purge") || strings.Contains(s, "apt-get remove") || strings.Contains(s, "nodespot-dv") {
 		t.Error("the install job only installs the vocoder")
 	}
 }
@@ -133,7 +133,7 @@ func vocoderOps(t *testing.T, r map[string]resp) (*Ops, *fakeRunner, []byte) {
 	o := &Ops{
 		Run: f, OSRelease: rel,
 		VocoderKeyring: filepath.Join(dir, "keyrings", "v.gpg"), VocoderSourceList: filepath.Join(dir, "apt", "v.list"),
-		VocoderDropin: filepath.Join(dir, "d", "aslcp.conf"),
+		VocoderDropin: filepath.Join(dir, "d", "nodespot.conf"),
 		HTTPGet:       func(context.Context, string) ([]byte, error) { return bin, nil },
 		Now:           func() time.Time { return time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC) },
 	}
@@ -175,7 +175,7 @@ func TestVocoderInstall(t *testing.T) {
 	if err != nil || st.Job != "running" || st.Installed {
 		t.Fatalf("%+v %v", st, err)
 	}
-	if f.called("systemd-run --no-block --unit=aslcp-vocoder-install --collect --property=Type=oneshot") != 1 {
+	if f.called("systemd-run --no-block --unit=nodespot-vocoder-install --collect --property=Type=oneshot") != 1 {
 		t.Fatalf("calls: %v", f.calls)
 	}
 	if got, _ := os.ReadFile(o.VocoderKeyring); !bytes.Equal(got, bin) {
@@ -277,7 +277,7 @@ func TestVocoderInstallRefusals(t *testing.T) {
 	t.Run("apt job running", func(t *testing.T) {
 		err, _, _ := run(t, func(_ *Ops, r map[string]resp) {
 			r["systemctl list-units"] = resp{out: loadedUnit}
-			r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+			r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 		})
 		if !errors.Is(err, ErrBusy) {
 			t.Fatalf("%v", err)
@@ -296,8 +296,8 @@ func TestVocoderInstallRefusals(t *testing.T) {
 func TestVocoderJobBlocksOSApply(t *testing.T) {
 	r := map[string]resp{"systemd-run": {}}
 	o, _ := osOps(t, r)
-	r["systemctl list-units"] = resp{out: loadedUnit + "aslcp-vocoder-install.service loaded active running x\n"}
-	r["systemctl show aslcp-vocoder-install"] = resp{out: "ActiveState=active\nResult=success\n"}
+	r["systemctl list-units"] = resp{out: loadedUnit + "nodespot-vocoder-install.service loaded active running x\n"}
+	r["systemctl show nodespot-vocoder-install"] = resp{out: "ActiveState=active\nResult=success\n"}
 	if _, err := o.OSApply(context.Background()); !errors.Is(err, ErrBusy) {
 		t.Fatalf("%v", err)
 	}

@@ -22,7 +22,7 @@ type Server struct {
 	// Peer returns the uid of the process on the other end of conn.
 	Peer func(conn net.Conn) (uint32, error)
 	// AllowedUIDs returns the uids permitted to talk to the helper (root plus
-	// the aslcp user). It is evaluated per connection.
+	// the nodespot user). It is evaluated per connection.
 	AllowedUIDs func() []uint32
 	// Idle is how long the server waits without connections before Serve
 	// returns (systemd restarts the service on the next connection). Zero
@@ -58,11 +58,11 @@ func NewServer(logger *log.Logger, extraUIDs ...uint32) *Server {
 	}
 }
 
-// DefaultAllowedUIDs returns root, the uid of user "aslcp" (if it exists)
+// DefaultAllowedUIDs returns root, the uid of user "nodespot" (if it exists)
 // and any extra uids.
 func DefaultAllowedUIDs(extra ...uint32) []uint32 {
 	uids := []uint32{0}
-	if u, err := user.Lookup("aslcp"); err == nil {
+	if u, err := user.Lookup("nodespot"); err == nil {
 		if n, err := strconv.ParseUint(u.Uid, 10, 32); err == nil {
 			uids = append(uids, uint32(n))
 		}
@@ -295,7 +295,7 @@ func knownOp(op string) bool {
 		return true
 	}
 	switch op {
-	case OpUpdateStatus, OpUpdateCheck, OpUpdateApply, OpOSCheck, OpOSStatus, OpOSApply, OpReboot, OpAslcpRestart, OpFirewallStatus, OpFirewallOpen, OpChannelStable, OpChannelBeta, OpBackupInfo, OpBackupCreate, OpBackupRestore:
+	case OpUpdateStatus, OpUpdateCheck, OpUpdateApply, OpOSCheck, OpOSStatus, OpOSApply, OpReboot, OpNodespotRestart, OpFirewallStatus, OpFirewallOpen, OpChannelStable, OpChannelBeta, OpBackupInfo, OpBackupCreate, OpBackupRestore:
 		return true
 	}
 	return false

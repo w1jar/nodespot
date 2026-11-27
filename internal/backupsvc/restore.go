@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/backup"
-	"github.com/artw1/aslcp/internal/helper"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/backup"
+	"github.com/w1jar/nodespot/internal/helper"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 // ---------------------------------------------------------------- types
@@ -52,16 +52,16 @@ type Radio struct {
 
 // BackupInfo describes the backup itself.
 type BackupInfo struct {
-	Hostname     string `json:"hostname"`
-	Created      string `json:"created"`
-	CreatedBy    string `json:"createdBy"`
-	ASLCPVersion string `json:"aslcpVersion"`
-	Arch         string `json:"arch"`
-	OSID         string `json:"osId,omitempty"`
-	OSCodename   string `json:"osCodename,omitempty"`
-	OSName       string `json:"osName,omitempty"`
-	Callsign     string `json:"callsign"`
-	Channel      string `json:"channel"`
+	Hostname        string `json:"hostname"`
+	Created         string `json:"created"`
+	CreatedBy       string `json:"createdBy"`
+	NodespotVersion string `json:"nodespotVersion"`
+	Arch            string `json:"arch"`
+	OSID            string `json:"osId,omitempty"`
+	OSCodename      string `json:"osCodename,omitempty"`
+	OSName          string `json:"osName,omitempty"`
+	Callsign        string `json:"callsign"`
+	Channel         string `json:"channel"`
 }
 
 // NodeInfo describes this node, for comparison with the backup.
@@ -81,7 +81,7 @@ type PartsPresent struct {
 	SA818 bool `json:"sa818"`
 	// Secrets: the node settings keep their network passwords.
 	Secrets bool `json:"secrets"`
-	// Conf: aslcp.conf.
+	// Conf: nodespot.conf.
 	Conf bool `json:"conf"`
 }
 
@@ -226,10 +226,10 @@ func (s *Service) Upload(ctx context.Context, r io.Reader) (Upload, error) {
 		return Upload{}, err
 	}
 	var sa818 []byte
-	dbPath := filepath.Join(dir, "aslcp.db")
+	dbPath := filepath.Join(dir, "nodespot.db")
 	m, err := backup.Read(in, func(e backup.Entry, body io.Reader) error {
 		switch e.Path {
-		case backup.PathAslcpDB:
+		case backup.PathNodespotDB:
 			w, err := os.OpenFile(dbPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 			if err != nil {
 				return err
@@ -254,22 +254,22 @@ func (s *Service) Upload(ctx context.Context, r io.Reader) (Upload, error) {
 	if err != nil {
 		var nf *backup.NewerFormatError
 		if errors.As(err, &nf) {
-			return Upload{}, &TooNewError{Msg: "this backup was made by a newer ASLCP (backup format " + fmt.Sprint(nf.Version) + "); update ASLCP first"}
+			return Upload{}, &TooNewError{Msg: "this backup was made by a newer nodespot (backup format " + fmt.Sprint(nf.Version) + "); update nodespot first"}
 		}
 		return Upload{}, err
 	}
-	if backup.VersionNewer(m.ASLCPVersion, s.o.Version) {
-		return Upload{}, &TooNewError{Msg: fmt.Sprintf("this backup was made by ASLCP %s, newer than the installed %s; update ASLCP first", m.ASLCPVersion, s.o.Version)}
+	if backup.VersionNewer(m.NodespotVersion, s.o.Version) {
+		return Upload{}, &TooNewError{Msg: fmt.Sprintf("this backup was made by nodespot %s, newer than the installed %s; update nodespot first", m.NodespotVersion, s.o.Version)}
 	}
-	if m.Find(backup.PathAslcpDB) == nil {
-		return Upload{}, &backup.Error{Msg: "the backup has no ASLCP database"}
+	if m.Find(backup.PathNodespotDB) == nil {
+		return Upload{}, &backup.Error{Msg: "the backup has no nodespot database"}
 	}
 	insp, err := store.Inspect(dbPath)
 	if err != nil {
 		if errors.Is(err, store.ErrSchemaNewer) {
-			return Upload{}, &TooNewError{Msg: "the database in this backup is newer than this ASLCP understands; update ASLCP first"}
+			return Upload{}, &TooNewError{Msg: "the database in this backup is newer than this nodespot understands; update nodespot first"}
 		}
-		return Upload{}, &backup.Error{Msg: "the ASLCP database in the backup is not usable: " + err.Error()}
+		return Upload{}, &backup.Error{Msg: "the nodespot database in the backup is not usable: " + err.Error()}
 	}
 	in, err = os.Open(arc)
 	if err != nil {
@@ -302,14 +302,14 @@ func (s *Service) Upload(ctx context.Context, r io.Reader) (Upload, error) {
 func (s *Service) preview(m *backup.Manifest, plan helper.RestoreResult, insp store.Inspection, sa818 []byte) Preview {
 	p := Preview{
 		Backup: BackupInfo{Hostname: m.Hostname, Created: m.Created.UTC().Format(time.RFC3339), CreatedBy: m.CreatedBy,
-			ASLCPVersion: m.ASLCPVersion, Arch: m.Arch, OSID: m.OSID, OSCodename: m.OSVersionCodename, OSName: m.OSPrettyName,
+			NodespotVersion: m.NodespotVersion, Arch: m.Arch, OSID: m.OSID, OSCodename: m.OSVersionCodename, OSName: m.OSPrettyName,
 			Callsign: m.Callsign, Channel: m.Channel},
 		Node:     NodeInfo{Arch: plan.Arch, OSID: plan.OSID, OSCodename: plan.OSCodename, OSName: plan.OSName, Callsign: plan.Callsign},
 		Warnings: []Warning{}, Users: []User{}, Checklist: []ChecklistItem{},
 		Favorites: insp.Favorites,
 		Schedules: insp.Schedules,
 		Parts: PartsPresent{Node: m.Parts.Node, SA818: m.Parts.SA818, Secrets: m.Parts.Secrets,
-			Conf: m.Find(backup.PathAslcpConf) != nil},
+			Conf: m.Find(backup.PathNodespotConf) != nil},
 		Modes:          nonNil(plan.Modes),
 		MissingSecrets: nonNil(plan.MissingSecrets),
 	}
@@ -352,7 +352,7 @@ func (s *Service) preview(m *backup.Manifest, plan helper.RestoreResult, insp st
 // crossReleaseMessage is the warning for a backup made on another Debian
 // release than the one this node runs.
 func crossReleaseMessage(backupRel, nodeRel string) string {
-	return fmt.Sprintf("This backup was made on %s; this node runs %s. ASLCP's settings carry over between releases.",
+	return fmt.Sprintf("This backup was made on %s; this node runs %s. nodespot's settings carry over between releases.",
 		backup.ReleaseLabel(backupRel), backup.ReleaseLabel(nodeRel))
 }
 
@@ -361,7 +361,7 @@ func checklist(m *backup.Manifest) []ChecklistItem {
 		{"Hostname", m.Hostname}, {"Timezone", m.Timezone},
 		{"Network and Wi-Fi", "Not included in the backup"},
 		{"SSH keys and OS users", "Not included in the backup"},
-		{"Firewall rules", "Only ASLCP's own rule is set up by the package"},
+		{"Firewall rules", "Only nodespot's own rule is set up by the package"},
 		{"Cron jobs", "Not included in the backup"},
 	}
 	if !m.Parts.Secrets && m.Parts.Node {
@@ -453,10 +453,10 @@ func copyFile(src, dst string) error {
 }
 
 // StagedPath is the staged database ApplyStaged swaps in at startup.
-func StagedPath(dataDir string) string { return filepath.Join(dataDir, "aslcp.db.restore") }
+func StagedPath(dataDir string) string { return filepath.Join(dataDir, "nodespot.db.restore") }
 
 // Apply runs the restore of upload id for who: the helper applies the system
-// part, then ASLCP's database is staged for the swap at the next start. On
+// part, then nodespot's database is staged for the swap at the next start. On
 // success the caller must restart the server (Restarting is true).
 func (s *Service) Apply(ctx context.Context, id string, who string) (ApplyResult, error) {
 	if !s.apply.TryLock() {
@@ -472,14 +472,14 @@ func (s *Service) Apply(ctx context.Context, id string, who string) (ApplyResult
 	staged := StagedPath(s.o.DataDir)
 	part := staged + ".part"
 	_ = os.Remove(part)
-	if err := copyFile(filepath.Join(p.dir, "aslcp.db"), part); err != nil {
+	if err := copyFile(filepath.Join(p.dir, "nodespot.db"), part); err != nil {
 		return ApplyResult{}, err
 	}
 	detail, _ := json.Marshal(map[string]any{"backupCreated": p.m.Created.UTC().Format(time.RFC3339), "backupHostname": p.m.Hostname})
 	au := store.Audit{Username: who, Action: "backup.restore", Detail: string(detail), Time: s.o.Now()}
 	if err := store.MigrateFile(part, &au); err != nil {
 		os.Remove(part)
-		return ApplyResult{}, &backup.Error{Msg: "the ASLCP database in the backup cannot be upgraded: " + err.Error()}
+		return ApplyResult{}, &backup.Error{Msg: "the nodespot database in the backup cannot be upgraded: " + err.Error()}
 	}
 	for _, suf := range []string{"-wal", "-shm"} {
 		_ = os.Remove(part + suf)
@@ -507,18 +507,18 @@ func (s *Service) Apply(ctx context.Context, id string, who string) (ApplyResult
 	health := Health{Pending: true, Checks: []Check{}}
 	if s.o.Demo {
 		os.Remove(part)
-		out.Steps = append(out.Steps, Step{Name: "Stage ASLCP database", OK: true, Detail: "skipped in demo mode"})
+		out.Steps = append(out.Steps, Step{Name: "Stage nodespot database", OK: true, Detail: "skipped in demo mode"})
 		out.OK = true
 		health = Health{OK: true, Checks: []Check{{Name: "Demo node", OK: true, Detail: "nothing to restart in demo mode"}}}
 	} else if err := os.Rename(part, staged); err != nil {
 		os.Remove(part)
-		out.Steps = append(out.Steps, Step{Name: "Stage ASLCP database", OK: false, Detail: err.Error()})
-		out.Error = "Stage ASLCP database: " + err.Error()
+		out.Steps = append(out.Steps, Step{Name: "Stage nodespot database", OK: false, Detail: err.Error()})
+		out.Error = "Stage nodespot database: " + err.Error()
 		return out, nil
 	}
 	if !s.o.Demo {
-		out.Steps = append(out.Steps, Step{Name: "Stage ASLCP database", OK: true,
-			Detail: "replaced when ASLCP restarts; the previous database is kept as aslcp.db.pre-restore"})
+		out.Steps = append(out.Steps, Step{Name: "Stage nodespot database", OK: true,
+			Detail: "replaced when nodespot restarts; the previous database is kept as nodespot.db.pre-restore"})
 		out.OK, out.Restarting = true, true
 	}
 	r := stored{Result: Result{At: s.o.Now().UTC(), BackupCreated: p.m.Created.UTC(), Steps: out.Steps,
@@ -614,9 +614,9 @@ func nonNilChecks(c []Check) []Check {
 // ---------------------------------------------------------------- startup
 
 // ApplyStaged swaps a staged restore database in before the store is opened
-// (ASLCP restarts after a restore). The previous database is kept as
-// aslcp.db.pre-restore. A staged file that does not check out is set aside
-// as aslcp.db.restore-rejected and the current database stays.
+// (nodespot restarts after a restore). The previous database is kept as
+// nodespot.db.pre-restore. A staged file that does not check out is set aside
+// as nodespot.db.restore-rejected and the current database stays.
 func ApplyStaged(dataDir string) (swapped bool, err error) {
 	staged := StagedPath(dataDir)
 	if _, err := os.Stat(staged); err != nil {
@@ -626,7 +626,7 @@ func ApplyStaged(dataDir string) (swapped bool, err error) {
 		_ = os.Rename(staged, staged+"-rejected")
 		return false, fmt.Errorf("staged restore database rejected: %w", err)
 	}
-	live := filepath.Join(dataDir, "aslcp.db")
+	live := filepath.Join(dataDir, "nodespot.db")
 	prev := live + ".pre-restore"
 	for _, suf := range []string{"", "-wal", "-shm"} {
 		_ = os.Remove(prev + suf)

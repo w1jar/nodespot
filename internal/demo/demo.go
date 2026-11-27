@@ -1,9 +1,9 @@
-// Package demo has the placeholder data of the demo mode ("aslcp -demo"):
+// Package demo has the placeholder data of the demo mode ("nodespot -demo"):
 // a node list and a radioid.net user list. Every name, callsign and node
 // number in it is made up.
 package demo
 
-import "github.com/artw1/aslcp/internal/nodelist"
+import "github.com/w1jar/nodespot/internal/nodelist"
 
 // LocalNode is the demo station's AllStar node number.
 const LocalNode = "1997"

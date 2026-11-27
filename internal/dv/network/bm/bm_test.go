@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/dmr"
-	"github.com/artw1/aslcp/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/dmr"
+	"github.com/w1jar/nodespot/internal/dv/network"
 )
 
 const (
@@ -42,6 +42,11 @@ type fakeMaster struct {
 	rec     []packet // current call recording for the parrot
 	events  chan packet
 	sseq    uint32 // server sequence number, increases across calls
+	// subs is each client's subscriptions ({type, number}); CANCELLING
+	// clears them. The parrot delivers its playback (a private call to the
+	// caller's ID) only to a client subscribed {5, caller's ID}, as the
+	// real master routes a private call to its destination ID.
+	subs map[string][][2]uint32
 }
 
 func newMaster(t *testing.T) *fakeMaster {
@@ -50,7 +55,8 @@ func newMaster(t *testing.T) *fakeMaster {
 		t.Fatal(err)
 	}
 	m := &fakeMaster{t: t, conn: c, pass: testPass, salt: []byte{1, 2, 3, 4},
-		authed: map[string]bool{}, seen: map[string]bool{}, events: make(chan packet, 256)}
+		authed: map[string]bool{}, seen: map[string]bool{}, events: make(chan packet, 256),
+		subs: map[string][][2]uint32{}}
 	go m.loop()
 	t.Cleanup(func() { c.Close() })
 	return m
@@ -118,6 +124,11 @@ func (m *fakeMaster) loop() {
 				m.reply(from, typChallenge, 0, m.salt)
 			}
 		case typSubscription, typCancelling:
+			if p.typ == typCancelling {
+				delete(m.subs, key)
+			} else if len(p.payload) == 8 {
+				m.subs[key] = append(m.subs[key], [2]uint32{binary.LittleEndian.Uint32(p.payload), binary.LittleEndian.Uint32(p.payload[4:])})
+			}
 			m.echoPkt(from, p)
 		case typVoiceHeader, typAudio, typTerminator:
 			if m.parrot {
@@ -129,7 +140,10 @@ func (m *fakeMaster) loop() {
 				case p.typ == typTerminator && len(m.rec) > 0:
 					rec := m.rec
 					m.rec = nil
-					go m.echo(from, rec)
+					_, _, caller, _ := parseLC(rec[0].payload)
+					if m.subscribedLocked(key, sessionPrivate, caller) {
+						go m.echo(from, rec)
+					}
 				}
 			}
 		}
@@ -174,6 +188,15 @@ func (m *fakeMaster) sendCall(to *net.UDPAddr, src, dst uint32, private bool, au
 	}
 }
 
+func (m *fakeMaster) subscribedLocked(key string, typ, num uint32) bool {
+	for _, s := range m.subs[key] {
+		if s == [2]uint32{typ, num} {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *fakeMaster) setSilent(v bool) { m.mu.Lock(); m.silent = v; m.mu.Unlock() }
 func (m *fakeMaster) lastAddr() *net.UDPAddr {
 	m.mu.Lock()
@@ -195,7 +218,7 @@ func (m *fakeMaster) packets(typ uint16) []packet {
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
@@ -251,9 +274,13 @@ func (s *testSink) nHdr() int    { s.mu.Lock(); defer s.mu.Unlock(); return len(
 func (s *testSink) nFrames() int { s.mu.Lock(); defer s.mu.Unlock(); return len(s.frames) }
 func (s *testSink) nEnds() int   { s.mu.Lock(); defer s.mu.Unlock(); return len(s.ends) }
 
+// fastOpts sends keepalives and retries fast, with a session timeout and an
+// RX timeout long enough that a stall under -race on a loaded runner does
+// not drop the session or end a call mid-test. The tests about those
+// timeouts set their own.
 var fastOpts = map[string]string{
-	"keepalive_ms": "30", "timeout_ms": "150", "login_timeout_ms": "200",
-	"backoff_min_ms": "20", "backoff_max_ms": "100", "rx_timeout_ms": "80",
+	"keepalive_ms": "30", "timeout_ms": "3000", "login_timeout_ms": "1000",
+	"backoff_min_ms": "20", "backoff_max_ms": "100", "rx_timeout_ms": "300",
 }
 
 func start(t *testing.T, m *fakeMaster, pass string, extra map[string]string) (*Net, *testSink) {
@@ -279,8 +306,17 @@ func start(t *testing.T, m *fakeMaster, pass string, extra map[string]string) (*
 }
 
 func login(t *testing.T) (*fakeMaster, *Net, *testSink) {
+	return loginWith(t, nil)
+}
+
+// loginWith is login with the given options added.
+func loginWith(t *testing.T, extra map[string]string) (*fakeMaster, *Net, *testSink) {
 	m := newMaster(t)
-	n, s := start(t, m, testPass, map[string]string{"client_version": "test 1.0"})
+	o := map[string]string{"client_version": "test 1.0"}
+	for k, v := range extra {
+		o[k] = v
+	}
+	n, s := start(t, m, testPass, o)
 	waitFor(t, "login", func() bool { return s.loginIs(ctl.LoginOK) })
 	return m, n, s
 }
@@ -328,13 +364,15 @@ func TestStatusHasNoPassword(t *testing.T) {
 func TestLoginTimeoutBackoff(t *testing.T) {
 	m := newMaster(t)
 	m.setSilent(true)
-	_, s := start(t, m, testPass, map[string]string{"login_timeout_ms": "30", "backoff_min_ms": "30", "backoff_max_ms": "120"})
+	_, s := start(t, m, testPass, map[string]string{"login_timeout_ms": "30", "backoff_min_ms": "40", "backoff_max_ms": "1000"})
 	waitFor(t, "4 attempts", func() bool { m.mu.Lock(); defer m.mu.Unlock(); return len(m.clients) >= 4 })
 	m.mu.Lock()
 	g1 := m.clients[1].Sub(m.clients[0])
 	g3 := m.clients[3].Sub(m.clients[2])
 	m.mu.Unlock()
-	if g3 < g1 {
+	// 70 then 190 ms: far enough apart that jitter on a loaded runner
+	// cannot invert them
+	if g3 <= g1 {
 		t.Fatalf("backoff not growing: %v then %v", g1, g3)
 	}
 	if s.loginIs(ctl.LoginOK) {
@@ -364,7 +402,7 @@ func TestBackoffSequence(t *testing.T) {
 }
 
 func TestKeepAliveAndReconnect(t *testing.T) {
-	m, n, s := login(t)
+	m, n, s := loginWith(t, map[string]string{"timeout_ms": "300"})
 	if err := n.Tune(context.Background(), ctl.Target{TG: 1999}); err != nil {
 		t.Fatal(err)
 	}
@@ -411,11 +449,15 @@ func TestTuneUnlink(t *testing.T) {
 	if c := m.packets(typCancelling); len(c) != 2 || len(c[1].payload) != 0 {
 		t.Fatalf("cancel %+v", c)
 	}
-	// the parrot is subscribed as group 7, too.
+	// the parrot subscribes private voice for our own DMR ID: its playback
+	// is a private call to us.
 	n.Tune(ctx, ctl.Target{TG: ParrotTG})
 	waitFor(t, "parrot sub", func() bool { return len(m.packets(typSubscription)) == 3 })
-	if a, b := sub(2); a != sessionGroup || b != ParrotTG {
+	if a, b := sub(2); a != sessionPrivate || b != testID {
 		t.Fatal(a, b)
+	}
+	if d := n.Status().Detail; d != "private 9990" {
+		t.Fatalf("detail %q", d)
 	}
 	// unlink tunes TG 4000.
 	if err := n.Unlink(ctx); err != nil {
@@ -439,12 +481,14 @@ func TestTuneUnlink(t *testing.T) {
 	}
 }
 
-func TestPrivateTargetSubscribesAsGroup(t *testing.T) {
+// A private target subscribes {5, own DMR ID}, so the answer (a private call
+// to us) is delivered; TX goes to the target as a private call.
+func TestPrivateTargetSubscribesPrivate(t *testing.T) {
 	m, n, _ := login(t)
 	n.Tune(context.Background(), ctl.Target{TG: testOther, Private: true})
 	waitFor(t, "sub", func() bool { return len(m.packets(typSubscription)) == 1 })
 	p := m.packets(typSubscription)[0].payload
-	if binary.LittleEndian.Uint32(p) != sessionGroup || binary.LittleEndian.Uint32(p[4:]) != testOther {
+	if binary.LittleEndian.Uint32(p) != sessionPrivate || binary.LittleEndian.Uint32(p[4:]) != testID {
 		t.Fatalf("% x", p)
 	}
 	n.StartTX(network.CallHeader{Call: 1})
@@ -511,7 +555,8 @@ func TestRXCall(t *testing.T) {
 // A call starts from the voice header alone (no super header); the terminator
 // ends it. IDs and the private flag come from the LC.
 func TestRXWithoutSuperHeader(t *testing.T) {
-	m, _, s := login(t)
+	// an RX timeout that cannot end the call before the terminator
+	m, _, s := loginWith(t, map[string]string{"rx_timeout_ms": "5000"})
 	to := m.lastAddr()
 	m.sendCall(to, testOther, testID, true, [][]byte{cat(frames(3, 9))}, false)
 	waitFor(t, "frames", func() bool { return s.nFrames() == 3 })
@@ -713,9 +758,9 @@ func TestParrotRoundTrip(t *testing.T) {
 			t.Fatalf("frame %d", i)
 		}
 	}
-	// subscribed as {7, 9990}; the TX was a private call (FLCO 0x03) to 9990.
+	// subscribed as {5, own ID}; the TX was a private call (FLCO 0x03) to 9990.
 	sp := m.packets(typSubscription)[0].payload
-	if binary.LittleEndian.Uint32(sp) != sessionGroup || binary.LittleEndian.Uint32(sp[4:]) != ParrotTG {
+	if binary.LittleEndian.Uint32(sp) != sessionPrivate || binary.LittleEndian.Uint32(sp[4:]) != testID {
 		t.Fatalf("subscription % x", sp)
 	}
 	lc := m.packets(typVoiceHeader)
@@ -831,5 +876,96 @@ func TestRXPrivateParrotReply(t *testing.T) {
 	h := s.hdrs[0]
 	if !h.Private || h.SrcID != ParrotTG || h.TG != testID {
 		t.Fatalf("header %+v", h)
+	}
+}
+
+// The exact parrot wire format: SUBSCRIPTION {5, own ID} after an empty
+// CANCELLING, three voice headers with a unit-to-unit Full LC to 9990 from
+// our ID and a valid masked RS(12,9) parity, real-time flag 1, no super
+// header.
+func TestParrotWireBytes(t *testing.T) {
+	m, n, _ := login(t)
+	n.Tune(context.Background(), ctl.Target{TG: ParrotTG})
+	waitFor(t, "sub", func() bool { return len(m.packets(typSubscription)) == 1 })
+	sp := m.packets(typSubscription)[0]
+	// 1234567 = 0x12d687
+	if want := []byte{5, 0, 0, 0, 0x87, 0xd6, 0x12, 0}; string(sp.payload) != string(want) || sp.flags != 0 {
+		t.Fatalf("subscription % x flags %d", sp.payload, sp.flags)
+	}
+	if c := m.packets(typCancelling); len(c) != 1 || len(c[0].payload) != 0 || c[0].seq >= sp.seq {
+		t.Fatalf("cancel %+v", c)
+	}
+	if err := n.StartTX(network.CallHeader{Call: 3, SrcID: testID}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "headers", func() bool { return len(m.packets(typVoiceHeader)) == 3 })
+	for _, p := range m.packets(typVoiceHeader) {
+		lc := p.payload
+		// FLCO 0x03, FID 0, options 0, dst 9990 = 0x002706, src 0x12d687
+		if want := []byte{0x03, 0, 0, 0x00, 0x27, 0x06, 0x12, 0xd6, 0x87}; len(lc) != 12 || string(lc[:9]) != string(want) {
+			t.Fatalf("LC % x", lc)
+		}
+		var cw [12]byte
+		copy(cw[:], lc)
+		for i := 9; i < 12; i++ {
+			cw[i] ^= dmr.MaskVoiceLCHeader
+		}
+		if cw[9]|cw[10]|cw[11] == 0 || !dmr.RS129Correct(&cw) || string(cw[:9]) != string(lc[:9]) {
+			t.Fatalf("LC parity % x", lc)
+		}
+		if p.flags != flagRealTime1 {
+			t.Fatalf("flags %d", p.flags)
+		}
+	}
+	if len(m.packets(typSuperHeader)) != 0 {
+		t.Fatal("super header sent")
+	}
+	n.EndTX(3)
+}
+
+// A group talkgroup still subscribes {7, TG}; a group call's LC is FLCO 0.
+func TestGroupWireBytes(t *testing.T) {
+	m, n, _ := login(t)
+	n.Tune(context.Background(), ctl.Target{TG: 91})
+	waitFor(t, "sub", func() bool { return len(m.packets(typSubscription)) == 1 })
+	if want := []byte{7, 0, 0, 0, 91, 0, 0, 0}; string(m.packets(typSubscription)[0].payload) != string(want) {
+		t.Fatalf("% x", m.packets(typSubscription)[0].payload)
+	}
+	n.StartTX(network.CallHeader{Call: 4, SrcID: testID})
+	waitFor(t, "headers", func() bool { return len(m.packets(typVoiceHeader)) == 3 })
+	if lc := m.packets(typVoiceHeader)[0].payload; lc[0] != 0 || lc[5] != 91 {
+		t.Fatalf("LC % x", lc)
+	}
+}
+
+// The parrot answers only a terminator that is subscribed for private calls
+// to its own ID: a TX to 9990 while tuned to a talkgroup (no private
+// subscription) gets no reply, the parrot tune does.
+func TestParrotNeedsPrivateSubscription(t *testing.T) {
+	m, n, s := login(t)
+	m.mu.Lock()
+	m.parrot = true
+	m.mu.Unlock()
+	n.Tune(context.Background(), ctl.Target{TG: 91})
+	n.StartTX(network.CallHeader{Call: 1, TG: ParrotTG, SrcID: testID})
+	for i, f := range frames(3, 1) {
+		n.WriteVoice(network.VoiceFrame{Call: 1, Seq: uint32(i), Data: f})
+	}
+	n.EndTX(1)
+	waitFor(t, "terminator", func() bool { return len(m.packets(typTerminator)) == 1 })
+	n.Tune(context.Background(), ctl.Target{TG: ParrotTG})
+	n.StartTX(network.CallHeader{Call: 2, SrcID: testID})
+	for i, f := range frames(3, 2) {
+		n.WriteVoice(network.VoiceFrame{Call: 2, Seq: uint32(i), Data: f})
+	}
+	n.EndTX(2)
+	waitFor(t, "echo end", func() bool { return s.nEnds() == 1 })
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.hdrs) != 1 || s.hdrs[0].SrcID != ParrotTG || s.hdrs[0].TG != testID || !s.hdrs[0].Private {
+		t.Fatalf("headers %+v", s.hdrs)
+	}
+	if len(s.frames) != 3 || string(s.frames[0].Data) != string(frames(3, 2)[0]) {
+		t.Fatalf("frames %d", len(s.frames))
 	}
 }

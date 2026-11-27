@@ -17,7 +17,7 @@ import (
 // Planted values (placeholders). None may appear in any file of a bundle.
 var diagPlanted = []string{
 	"example-pass-iax", "example-pass-echo", "example-pass-bm",
-	"example-pass-aslcp", "example-pass-wifi", "example-pass-req",
+	"example-pass-nodespot", "example-pass-wifi", "example-pass-req",
 	"example-pass-journal", "example-pass-url", "example-pass-bearer",
 }
 
@@ -32,9 +32,9 @@ const (
   }
 }
 `
-	diagSA818 = `{"version":1,"settings":{"bandwidth":0,"rx_mhz":446.1,"tx_mhz":446.1}}` + "\n"
-	diagAslcp = "[server]\nlisten=:8080\npublic_url=https://node.example.net/\n[smtp]\npassword=example-pass-aslcp\n"
-	diagWifi  = "[wifi-security]\npsk=example-pass-wifi\n"
+	diagSA818    = `{"version":1,"settings":{"bandwidth":0,"rx_mhz":446.1,"tx_mhz":446.1}}` + "\n"
+	diagNodespot = "[server]\nlisten=:8080\npublic_url=https://node.example.net/\n[smtp]\npassword=example-pass-nodespot\n"
+	diagWifi     = "[wifi-security]\npsk=example-pass-wifi\n"
 )
 
 type diagFixture struct {
@@ -56,17 +56,17 @@ func newDiagFixture(t *testing.T) *diagFixture {
 		}
 		return p
 	}
-	nodeConf := w("etc-aslcp/node.json", diagNode)
-	sa := w("etc-aslcp/sa818.json", diagSA818)
-	aslcp := w("etc-aslcp/aslcp.conf", diagAslcp)
+	nodeConf := w("etc-nodespot/node.json", diagNode)
+	sa := w("etc-nodespot/sa818.json", diagSA818)
+	nodespot := w("etc-nodespot/nodespot.conf", diagNodespot)
 	// Things that must never be collected:
-	w("etc-aslcp/aslcp.db", "SQLITE example-pass-aslcp")
+	w("etc-nodespot/nodespot.db", "SQLITE example-pass-nodespot")
 	w("etc-nm/ExampleNet.nmconnection", diagWifi)
 	w("os-release", "PRETTY_NAME=\"Debian GNU/Linux 12 (bookworm)\"\n")
 
 	rules := map[string]resp{
 		"uname -srm":  {out: "Linux 6.1.0 aarch64\n"},
-		"dpkg-query":  {out: "ii  md380-emu 1.0\nrc  aslcp-old 1.0\nii  aslcp 1.3.4\n"},
+		"dpkg-query":  {out: "ii  md380-emu 1.0\nrc  nodespot-old 1.0\nii  nodespot 1.3.4\n"},
 		"uptime":      {out: " 12:00:00 up 1 day, load average: 0.01, 0.02, 0.03\n"},
 		"free -m":     {out: "              total used\nMem: 1000 100\n"},
 		"df -hP":      {out: "Filesystem Size Used\n/dev/root 30G 5G\n"},
@@ -76,13 +76,13 @@ func newDiagFixture(t *testing.T) *diagFixture {
 		"ip -j route": {out: fixture(t, "ip_route.json")},
 		"ip -j -6":    {out: "[]"},
 		"nmcli":       {out: "wlan0:wifi:connected\n"},
-		"journalctl -u aslcp-node": {out: "2026-11-20T12:00:00+0000 node2001 aslcp-node[1]: N0CALL from 198.51.100.7 rejected password=example-pass-journal\n" +
+		"journalctl -u nodespot-node": {out: "2026-11-20T12:00:00+0000 node2001 nodespot-node[1]: N0CALL from 198.51.100.7 rejected password=example-pass-journal\n" +
 			"allstar: registration failed with example-pass-iax\nfetch https://user:example-pass-url@host.example.net/x\nAuthorization: Bearer example-pass-bearer\n"},
 		"journalctl": {out: "2026-11-20T12:00:00+0000 node2001 x[1]: ok\n"},
 	}
 	f := &fakeRunner{rules: rules}
 	o := &Ops{Run: f, Now: func() time.Time { return time.Date(2026, 11, 20, 15, 15, 2, 0, time.UTC) },
-		NodeConfig: nodeConf, SA818State: sa, AslcpConf: aslcp,
+		NodeConfig: nodeConf, SA818State: sa, NodespotConf: nodespot,
 		OSRelease:  filepath.Join(root, "os-release"),
 		ResolvConf: filepath.Join("testdata", "resolv.conf")}
 	old := diagTempBases
@@ -146,14 +146,14 @@ func TestDiagBundleContentAndSecrets(t *testing.T) {
 			t.Errorf("mask=%v: README is not first: %v", mask, names)
 		}
 		for _, want := range []string{"report.txt", "versions.txt", "system.txt", "services.txt", "network.txt", "audit.txt",
-			"journal/aslcp-node.txt", "journal/aslcp.txt", "config/node.json", "config/aslcp.conf", "config/sa818.json"} {
+			"journal/nodespot-node.txt", "journal/nodespot.txt", "config/node.json", "config/nodespot.conf", "config/sa818.json"} {
 			if _, ok := files[want]; !ok {
 				t.Errorf("mask=%v: missing %s (have %v)", mask, want, names)
 			}
 		}
 		// Never collected.
 		for name := range files {
-			for _, bad := range []string{"aslcp.db", "nmconnection"} {
+			for _, bad := range []string{"nodespot.db", "nmconnection"} {
 				if strings.Contains(name, bad) {
 					t.Errorf("mask=%v: %s collected", mask, name)
 				}
@@ -175,11 +175,11 @@ func TestDiagBundleContentAndSecrets(t *testing.T) {
 		}
 		// Configuration that is not secret stays readable.
 		if !strings.Contains(files["config/node.json"], "master.example.net") || !strings.Contains(files["config/sa818.json"], "446.1") ||
-			!strings.Contains(files["journal/aslcp-node.txt"], "registration failed") || !strings.Contains(files["config/aslcp.conf"], "listen=:8080") {
-			t.Errorf("over-redacted: %q %q", files["config/node.json"], files["journal/aslcp-node.txt"])
+			!strings.Contains(files["journal/nodespot-node.txt"], "registration failed") || !strings.Contains(files["config/nodespot.conf"], "listen=:8080") {
+			t.Errorf("over-redacted: %q %q", files["config/node.json"], files["journal/nodespot-node.txt"])
 		}
-		if !strings.Contains(files["versions.txt"], "md380-emu 1.0") || strings.Contains(files["versions.txt"], "aslcp-old") ||
-			!strings.Contains(files["versions.txt"], "ASLCP: 1.3.4") {
+		if !strings.Contains(files["versions.txt"], "md380-emu 1.0") || strings.Contains(files["versions.txt"], "nodespot-old") ||
+			!strings.Contains(files["versions.txt"], "nodespot: 1.3.4") {
 			t.Errorf("versions: %q", files["versions.txt"])
 		}
 		if !strings.Contains(files["system.txt"], "/dev/root") || !strings.Contains(files["system.txt"], "Mem:") {
@@ -189,7 +189,7 @@ func TestDiagBundleContentAndSecrets(t *testing.T) {
 			t.Errorf("network: %q", files["network.txt"])
 		}
 		readme := files["README.txt"]
-		for _, want := range []string{"journal/aslcp-node.txt", "config/node.json", "Never collected", "Redacted in every file", "Read every file"} {
+		for _, want := range []string{"journal/nodespot-node.txt", "config/node.json", "Never collected", "Redacted in every file", "Read every file"} {
 			if !strings.Contains(readme, want) {
 				t.Errorf("README lacks %q:\n%s", want, readme)
 			}
@@ -233,7 +233,7 @@ func TestDiagBundleToolsMissing(t *testing.T) {
 	fx.f.rules = map[string]resp{} // every command "not found"
 	names, files := collect(t, fx, DiagRequest{})
 	if !strings.Contains(files["versions.txt"], "not available") || !strings.Contains(files["network.txt"], "not available") ||
-		!strings.Contains(files["journal/aslcp-node.txt"], "not available") {
+		!strings.Contains(files["journal/nodespot-node.txt"], "not available") {
 		t.Errorf("tools missing not reported: %v", files["versions.txt"])
 	}
 	if len(names) < 8 {
@@ -247,11 +247,11 @@ func TestDiagBundleToolsMissing(t *testing.T) {
 
 func TestDiagBundleSizeCapAndTruncation(t *testing.T) {
 	fx := newDiagFixture(t)
-	big := strings.Repeat("2026-11-20T12:00:00+0000 node2001 aslcp-node[1]: a long log line to fill the cap\n", 10000) // ~720 KiB
+	big := strings.Repeat("2026-11-20T12:00:00+0000 node2001 nodespot-node[1]: a long log line to fill the cap\n", 10000) // ~720 KiB
 	fx.f.rules["journalctl"] = resp{out: big}
-	delete(fx.f.rules, "journalctl -u aslcp-node")
+	delete(fx.f.rules, "journalctl -u nodespot-node")
 	names, files := collect(t, fx, DiagRequest{})
-	j := files["journal/aslcp-node.txt"]
+	j := files["journal/nodespot-node.txt"]
 	if len(j) > diagMaxFile || !strings.HasSuffix(j, "fill the cap\n") || !strings.HasPrefix(j, "2026-") {
 		t.Errorf("journal not capped at a line boundary: %d bytes", len(j))
 	}
@@ -288,7 +288,7 @@ func TestDiagBundleTimeLimit(t *testing.T) {
 	fx := newDiagFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	fx.f.hook = func(cmd string) {
-		if strings.HasPrefix(cmd, "journalctl -u aslcp-node") {
+		if strings.HasPrefix(cmd, "journalctl -u nodespot-node") {
 			cancel() // the budget runs out during the first journal
 		}
 	}

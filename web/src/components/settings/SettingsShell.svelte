@@ -14,7 +14,7 @@
   const tabs = $derived(visibleTabs(grp));
   const tab = $derived(grp.tabs?.find((t) => t.id === route.tab));
   // Updates carries the same badge as the header, on the System group and on its Updates tab.
-  const updCount = $derived((app.updates.aslcp || (app.system?.updateAvailable ?? false) ? 1 : 0) + app.updates.os);
+  const updCount = $derived((app.updates.nodespot || (app.system?.updateAvailable ?? false) ? 1 : 0) + app.updates.os);
   const hasBadge = $derived(admin && (updCount > 0 || app.updates.reboot));
   // Keep the active button and tab visible in the one-line rows on phones.
   $effect(() => {

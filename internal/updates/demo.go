@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // DemoHelper simulates the helper for --demo: applying an update "runs" for
@@ -64,13 +64,13 @@ func (d *DemoHelper) status() helper.Status {
 	switch {
 	case !d.started.IsZero() && !d.finished && time.Since(d.started) < d.RunTime:
 		st.Job = helper.JobRunning
-		st.JobLog = "Reading package lists...\nUnpacking aslcp (" + d.target + ") over (" + d.installed + ") ..."
+		st.JobLog = "Reading package lists...\nUnpacking nodespot (" + d.target + ") over (" + d.installed + ") ..."
 	case !d.started.IsZero():
 		d.finished = true
 		d.installed = d.target
 		st.Installed = d.installed
 		st.Job = helper.JobSucceeded
-		st.JobLog = "Setting up aslcp (" + d.target + ") ...\n(demo: the server does not restart)"
+		st.JobLog = "Setting up nodespot (" + d.target + ") ...\n(demo: the server does not restart)"
 	}
 	return st
 }
@@ -182,5 +182,5 @@ func (d *DemoHelper) Reboot(context.Context) error {
 	return nil
 }
 
-// RestartASLCP simulates the restart of the panel (nothing happens).
-func (d *DemoHelper) RestartASLCP(context.Context) error { return nil }
+// RestartNodespot simulates the restart of the panel (nothing happens).
+func (d *DemoHelper) RestartNodespot(context.Context) error { return nil }

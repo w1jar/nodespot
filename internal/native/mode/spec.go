@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,7 +46,20 @@ type Field struct {
 	// (EchoLink adds "-L" to the station callsign). The UI shows it in the
 	// "from station" hint.
 	StationSuffix string `json:"stationSuffix,omitempty"`
+	// HostList names a host list (GET /api/hostlists?mode=<HostList>) the
+	// UI offers as a picker for this text field: HostListBM or
+	// HostListDMROther. A pick fills the field with the list entry's host
+	// (host:port when the list gives a port); the UI also keeps an
+	// "Other..." choice to type a value. The saved value is always plain
+	// text, so the field works the same without the list.
+	HostList string `json:"hostList,omitempty"`
 }
+
+// Host lists a Field can be picked from (Field.HostList).
+const (
+	HostListBM       = "bm"        // BrandMeister masters of the DMR list
+	HostListDMROther = "dmr-other" // the DMR list without BrandMeister and TGIF
+)
 
 // Station values a Field can fall back to (Field.StationDefault).
 const (
@@ -63,6 +77,10 @@ type Settings struct {
 	// Reflectors maps target IDs to addresses for modes that connect to a
 	// host (YSF, P25, NXDN, M17), so a target can be picked by ID alone.
 	Reflectors []Target `json:"reflectors,omitempty"`
+	// Clear names Secret fields to delete from the saved settings. It is
+	// only read by a save request (Spec.CheckClear, Spec.Merge); Merge
+	// drops it, so it is never stored.
+	Clear []string `json:"clear,omitempty"`
 }
 
 // Get returns the value of key, or def when it is unset or blank.
@@ -320,8 +338,25 @@ func (sp Spec) Redact(s Settings) (Settings, map[string]bool) {
 	return out, set
 }
 
+// CheckClear validates upd.Clear: every key must be a Secret field of the
+// spec, and upd must not set a new value for it at the same time.
+func (sp Spec) CheckClear(upd Settings) error {
+	for _, k := range upd.Clear {
+		if f, ok := sp.Field(k); !ok || !f.Secret {
+			return fmt.Errorf("%s: %q is not a saved password", sp.Title, k)
+		}
+		if strings.TrimSpace(upd.Values[k]) != "" {
+			return fmt.Errorf("%s: cannot set and clear %q in one save", sp.Title, k)
+		}
+	}
+	return nil
+}
+
 // Merge applies an update from the control API onto old: secrets left
-// blank in upd keep their old values. Favorites and Reflectors are taken
+// blank in upd keep their old values, except those named in upd.Clear
+// (checked by CheckClear; others are ignored here), which are removed. An
+// update with no values and a Clear list changes nothing else.
+// Favorites and Reflectors are taken
 // from upd when it has them (nil keeps the old list).
 func (sp Spec) Merge(old, upd Settings) Settings {
 	out := upd.Clone()
@@ -329,8 +364,17 @@ func (sp Spec) Merge(old, upd Settings) Settings {
 		out.Values = map[string]string{}
 	}
 	for _, f := range sp.Fields {
-		if f.Secret && strings.TrimSpace(out.Values[f.Key]) == "" && old.Values[f.Key] != "" {
+		if f.Secret && strings.TrimSpace(out.Values[f.Key]) == "" && old.Values[f.Key] != "" && !slices.Contains(upd.Clear, f.Key) {
 			out.Values[f.Key] = old.Values[f.Key]
+		}
+	}
+	out.Clear = nil
+	if len(upd.Values) == 0 && len(upd.Clear) > 0 {
+		// A request that only clears passwords leaves every other value as it is.
+		for k, v := range old.Values {
+			if !slices.Contains(upd.Clear, k) {
+				out.Values[k] = v
+			}
 		}
 	}
 	for k, v := range out.Values {

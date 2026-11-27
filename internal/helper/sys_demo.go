@@ -105,9 +105,9 @@ func (d *DemoSystem) Services(context.Context) (ServicesResult, error) {
 		return ServiceState{Unit: u, Desc: desc, Active: "active", Sub: "running", Enabled: en, Since: since}
 	}
 	return ServicesResult{Available: true, Services: []ServiceState{
-		mk("aslcp-node.service", "ASLCP native node (one radio, one network mode)", "enabled"),
-		mk("aslcp.service", "ASLCP web control panel", "enabled"),
-		{Unit: "aslcp-helper.service", Desc: "ASLCP privileged helper", Active: "inactive", Sub: "dead", Enabled: "static"},
+		mk("nodespot-node.service", "nodespot native node (one radio, one network mode)", "enabled"),
+		mk("nodespot.service", "nodespot web control panel", "enabled"),
+		{Unit: "nodespot-helper.service", Desc: "nodespot privileged helper", Active: "inactive", Sub: "dead", Enabled: "static"},
 		mk("NetworkManager.service", "Network Manager", "enabled"),
 		mk("cockpit.socket", "Cockpit Web Service Socket", "enabled"),
 		mk("chrony.service", "chrony, an NTP client/server", "enabled"),

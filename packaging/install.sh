@@ -1,41 +1,41 @@
 #!/bin/sh
-# ASLCP installer: adds the signed apt repository and installs the package.
-#   curl -fsSL https://w1jar.github.io/aslcp/install.sh | sudo sh
+# nodespot installer: adds the signed apt repository and installs the package.
+#   curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo sh
 # Run as root. Safe to run again (it also acts as an upgrade).
-# Update channel: stable (default). ASLCP_CHANNEL=beta selects the beta suite;
+# Update channel: stable (default). NODESPOT_CHANNEL=beta selects the beta suite;
 # without it, the channel of an existing install is kept.
-# Web port: 8080 by default. ASLCP_PORT=<1024-65535, or 80> picks another one:
-#   curl -fsSL https://w1jar.github.io/aslcp/install.sh | sudo ASLCP_PORT=8181 sh
-# Port 80 is the only port below 1024 that is accepted. ASLCP runs without
+# Web port: 8080 by default. NODESPOT_PORT=<1024-65535, or 80> picks another one:
+#   curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_PORT=8181 sh
+# Port 80 is the only port below 1024 that is accepted. nodespot runs without
 # privileges, so for port 80 the installer writes the systemd drop-in
-# /etc/systemd/system/aslcp.service.d/port80.conf (AmbientCapabilities and
+# /etc/systemd/system/nodespot.service.d/port80.conf (AmbientCapabilities and
 # CapabilityBoundingSet = CAP_NET_BIND_SERVICE); default installs stay as they
 # are. It refuses to switch while another program holds port 80 (and names it).
-# Run ASLCP on port 80 and turn off the web services an earlier ASL install left:
-# ASLCP_TAKEOVER=1 (or yes, true) implies ASLCP_PORT=80 unless ASLCP_PORT is
+# Run nodespot on port 80 and turn off the web services an earlier ASL install left:
+# NODESPOT_TAKEOVER=1 (or yes, true) implies NODESPOT_PORT=80 unless NODESPOT_PORT is
 # given, and stops and disables the services that would compete for the web
 # ports or duplicate the panel, whichever of them exist and are enabled or
 # running: Allmon3 (allmon3), the web server of the ASL web UIs (apache2,
 # lighttpd or nginx), the asl-web-ui backend and Supermon, if they run as
 # services. It prints each unit it turned off and records them in
-# /var/lib/aslcp/takeover.list. aslcp-node and everything else the node needs
+# /var/lib/nodespot/takeover.list. nodespot-node and everything else the node needs
 # to stay on the air are never touched, nor is Cockpit (port 9090).
-#   curl -fsSL https://w1jar.github.io/aslcp/install.sh | sudo ASLCP_TAKEOVER=1 sh
-# Undo (ASLCP goes back to its previous port and the recorded units are
+#   curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_TAKEOVER=1 sh
+# Undo (nodespot goes back to its previous port and the recorded units are
 # enabled and started again; nothing is installed or removed):
-#   curl -fsSL https://w1jar.github.io/aslcp/install.sh | sudo ASLCP_TAKEOVER=undo sh
+#   curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_TAKEOVER=undo sh
 # Any other non-empty value is refused.
-# After the package is installed, the "listen" line in /etc/aslcp/aslcp.conf is
-# rewritten (an address part is kept), aslcp is restarted and the port is opened
-# in firewalld (if it is running). Without ASLCP_PORT the configured port is kept.
+# After the package is installed, the "listen" line in /etc/nodespot/nodespot.conf is
+# rewritten (an address part is kept), nodespot is restarted and the port is opened
+# in firewalld (if it is running). Without NODESPOT_PORT the configured port is kept.
 # The installer warns when another program already uses the port.
-# Digital modes are built into the native node (aslcp-node): there is
-# nothing to install. ASLCP_DV, which enabled them in 2.x, is still accepted
+# Digital modes are built into the native node (nodespot-node): there is
+# nothing to install. NODESPOT_DV, which enabled them in 2.x, is still accepted
 # and does nothing.
 # 64-bit only: arm64 and amd64. On a 32-bit system (dpkg architecture armhf,
 # including a 32-bit userland on a 64-bit kernel) the installer refuses before
 # anything is changed; reinstall with Raspberry Pi OS Lite (64-bit).
-# ASLCP runs its own node (aslcp-node): it does not need AllStarLink 3 or
+# nodespot runs its own node (nodespot-node): it does not need AllStarLink 3 or
 # Asterisk and never installs them.
 # Pre-flight: before anything is changed the installer refuses to run while
 # the system is still finishing its first-boot setup (systemd still starting,
@@ -43,17 +43,17 @@
 # package manager (apt, apt-get, dpkg, unattended-upgrades, aptitude) runs or
 # holds the dpkg lock: a fresh image may install updates and reboot by
 # itself, which would cut an install in half. Wait 20-30 minutes after the
-# first boot and run it again. ASLCP_SKIP_PREFLIGHT=1 skips this check. A
+# first boot and run it again. NODESPOT_SKIP_PREFLIGHT=1 skips this check. A
 # pending reboot (/var/run/reboot-required) only produces a warning.
 set -eu
 
 # Base URL of the apt repository (GitHub Pages of the public repo).
-APT_URL="${ASLCP_APT_URL:-https://w1jar.github.io/aslcp}"
-KEYRING=/usr/share/keyrings/aslcp-archive-keyring.gpg
-LIST=/etc/apt/sources.list.d/aslcp.list
+APT_URL="${NODESPOT_APT_URL:-https://w1jar.github.io/nodespot}"
+KEYRING=/usr/share/keyrings/nodespot-archive-keyring.gpg
+LIST=/etc/apt/sources.list.d/nodespot.list
 
-say() { printf '%s\n' "aslcp-install: $*"; }
-die() { printf '%s\n' "aslcp-install: error: $*" >&2; exit 1; }
+say() { printf '%s\n' "nodespot-install: $*"; }
+die() { printf '%s\n' "nodespot-install: error: $*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "run as root (for example: curl -fsSL $APT_URL/install.sh | sudo sh)"
 
@@ -67,50 +67,50 @@ check_arch() {
 	case "$ARCH" in
 	arm64 | amd64) ;;
 	armhf | armel)
-		die "this system is 32-bit ($ARCH, kernel $(uname -m 2>/dev/null || echo unknown)). ASLCP needs a 64-bit OS: reinstall with Raspberry Pi OS Lite (64-bit), then install ASLCP again. Nothing was changed."
+		die "this system is 32-bit ($ARCH, kernel $(uname -m 2>/dev/null || echo unknown)). nodespot needs a 64-bit OS: reinstall with Raspberry Pi OS Lite (64-bit), then install nodespot again. Nothing was changed."
 		;;
 	*) die "unsupported architecture '$ARCH' (supported: arm64, amd64)" ;;
 	esac
 }
 # --->8--- arch-check
 
-# --- takeover (ASLCP_TAKEOVER) ----------------------------------------------
+# --- takeover (NODESPOT_TAKEOVER) ----------------------------------------------
 TAKEOVER_WANT=0
 TAKEOVER_UNDO=0
-TK_VAL="${ASLCP_TAKEOVER:-}"
+TK_VAL="${NODESPOT_TAKEOVER:-}"
 case "$TK_VAL" in
 "") ;;
 1 | [Yy][Ee][Ss] | [Tt][Rr][Uu][Ee]) TAKEOVER_WANT=1 ;;
 undo) TAKEOVER_UNDO=1 ;;
-*) die "ASLCP_TAKEOVER must be 1, yes, true or undo (got '$TK_VAL')" ;;
+*) die "NODESPOT_TAKEOVER must be 1, yes, true or undo (got '$TK_VAL')" ;;
 esac
 
-# --- web port (ASLCP_PORT) -------------------------------------------------
-PORT_WANT=${ASLCP_PORT:-}
+# --- web port (NODESPOT_PORT) -------------------------------------------------
+PORT_WANT=${NODESPOT_PORT:-}
 if [ -n "$PORT_WANT" ]; then
 	case "$PORT_WANT" in
-	*[!0-9]* | 0*) die "ASLCP_PORT must be a number from 1024 to 65535, or 80, without leading zeros (got '$PORT_WANT')" ;;
+	*[!0-9]* | 0*) die "NODESPOT_PORT must be a number from 1024 to 65535, or 80, without leading zeros (got '$PORT_WANT')" ;;
 	esac
-	{ [ "${#PORT_WANT}" -le 5 ] && [ "$PORT_WANT" -le 65535 ]; } || die "ASLCP_PORT must be a number from 1024 to 65535, or 80 (got '$PORT_WANT')"
+	{ [ "${#PORT_WANT}" -le 5 ] && [ "$PORT_WANT" -le 65535 ]; } || die "NODESPOT_PORT must be a number from 1024 to 65535, or 80 (got '$PORT_WANT')"
 	# The service runs without capabilities. Port 80 works through a systemd
 	# drop-in this installer writes (see set_port); other low ports are refused.
-	{ [ "$PORT_WANT" -ge 1024 ] || [ "$PORT_WANT" = 80 ]; } || die "ASLCP_PORT must be 1024 or higher, or exactly 80: ASLCP runs without privileges and cannot listen on port $PORT_WANT (got '$PORT_WANT')"
+	{ [ "$PORT_WANT" -ge 1024 ] || [ "$PORT_WANT" = 80 ]; } || die "NODESPOT_PORT must be 1024 or higher, or exactly 80: nodespot runs without privileges and cannot listen on port $PORT_WANT (got '$PORT_WANT')"
 fi
 if [ "$TAKEOVER_UNDO" -eq 1 ]; then
-	[ "$PORT_WANT" != 80 ] || die "ASLCP_TAKEOVER=undo moves ASLCP off port 80; ASLCP_PORT can only name the port to go back to (1024-65535)"
+	[ "$PORT_WANT" != 80 ] || die "NODESPOT_TAKEOVER=undo moves nodespot off port 80; NODESPOT_PORT can only name the port to go back to (1024-65535)"
 elif [ "$TAKEOVER_WANT" -eq 1 ] && [ -z "$PORT_WANT" ]; then
 	PORT_WANT=80
 fi
 
-# --- digital modes (ASLCP_DV) -------------------------------------------------
+# --- digital modes (NODESPOT_DV) -------------------------------------------------
 DV_WANT=0
-DV_VAL="${ASLCP_DV:-}"
+DV_VAL="${NODESPOT_DV:-}"
 case "$DV_VAL" in
 "") ;;
 1 | [Yy][Ee][Ss] | [Tt][Rr][Uu][Ee]) DV_WANT=1 ;;
-*) die "ASLCP_DV must be 1, yes or true (got '$DV_VAL')" ;;
+*) die "NODESPOT_DV must be 1, yes or true (got '$DV_VAL')" ;;
 esac
-[ "$TAKEOVER_UNDO" -eq 0 ] || [ "$DV_WANT" -eq 0 ] || die "ASLCP_TAKEOVER=undo cannot be combined with ASLCP_DV"
+[ "$TAKEOVER_UNDO" -eq 0 ] || [ "$DV_WANT" -eq 0 ] || die "NODESPOT_TAKEOVER=undo cannot be combined with NODESPOT_DV"
 
 # --- architecture: 64-bit only (before anything is changed) -----------------
 [ "$TAKEOVER_UNDO" -eq 1 ] || check_arch
@@ -158,13 +158,13 @@ preflight_busy() {
 	return 1
 }
 
-if [ "${ASLCP_SKIP_PREFLIGHT:-}" != 1 ]; then
+if [ "${NODESPOT_SKIP_PREFLIGHT:-}" != 1 ]; then
 	if busy=$(preflight_busy); then
 		hint=
 		case "$busy" in
 		*"pid "* | *"dpkg lock"*) hint=" If you have an apt prompt open in another terminal, finish it first." ;;
 		esac
-		die "the system is still finishing its first-boot setup or another package manager is running ($busy). It installs updates and may reboot the node. Wait until it is done (usually 20-30 minutes after the first boot), then run this installer again.$hint (To skip this check: ASLCP_SKIP_PREFLIGHT=1.)"
+		die "the system is still finishing its first-boot setup or another package manager is running ($busy). It installs updates and may reboot the node. Wait until it is done (usually 20-30 minutes after the first boot), then run this installer again.$hint (To skip this check: NODESPOT_SKIP_PREFLIGHT=1.)"
 	fi
 fi
 if [ -e /var/run/reboot-required ]; then
@@ -174,7 +174,7 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-# ASLCP_TAKEOVER=undo needs no package work: it only restores what an earlier
+# NODESPOT_TAKEOVER=undo needs no package work: it only restores what an earlier
 # takeover turned off (see takeover_undo below).
 if [ "$TAKEOVER_UNDO" -eq 0 ]; then
 	# --- platform checks -------------------------------------------------------
@@ -183,7 +183,7 @@ if [ "$TAKEOVER_UNDO" -eq 0 ]; then
 	. /etc/os-release
 	case " ${ID:-} ${ID_LIKE:-} " in
 	*" debian "* | *" raspbian "*) ;;
-	*) die "unsupported OS '${PRETTY_NAME:-unknown}'; ASLCP packages target Debian 12 (bookworm) or 13 (trixie)" ;;
+	*) die "unsupported OS '${PRETTY_NAME:-unknown}'; nodespot packages target Debian 12 (bookworm) or 13 (trixie)" ;;
 	esac
 	case "${VERSION_CODENAME:-}" in
 	bookworm | trixie) ;;
@@ -202,7 +202,7 @@ if [ "$TAKEOVER_UNDO" -eq 0 ]; then
 
 	# --- signing key -----------------------------------------------------------
 	say "downloading the repository key"
-	fetch "$APT_URL/aslcp-archive-keyring.gpg" "$tmp/keyring.gpg" || die "could not download $APT_URL/aslcp-archive-keyring.gpg"
+	fetch "$APT_URL/nodespot-archive-keyring.gpg" "$tmp/keyring.gpg" || die "could not download $APT_URL/nodespot-archive-keyring.gpg"
 	[ -s "$tmp/keyring.gpg" ] || die "downloaded key is empty"
 	if head -c 64 "$tmp/keyring.gpg" | grep -q 'BEGIN PGP'; then
 		die "downloaded key is ASCII-armored, expected a binary keyring"
@@ -211,38 +211,38 @@ if [ "$TAKEOVER_UNDO" -eq 0 ]; then
 	install -m 0644 "$tmp/keyring.gpg" "$KEYRING"
 
 	# --- apt source ------------------------------------------------------------
-	SUITE=${ASLCP_CHANNEL:-}
+	SUITE=${NODESPOT_CHANNEL:-}
 	case "$SUITE" in
 	"" | stable | beta) ;;
-	*) die "ASLCP_CHANNEL must be 'stable' or 'beta'" ;;
+	*) die "NODESPOT_CHANNEL must be 'stable' or 'beta'" ;;
 	esac
 	if [ -z "$SUITE" ] && [ -r "$LIST" ]; then
 		# keep the channel chosen earlier (Settings > Updates or an earlier install)
 		SUITE=$(awk '$1 == "deb" && ($(NF-1) == "stable" || $(NF-1) == "beta") { print $(NF-1); exit }' "$LIST")
 	fi
 	[ -n "$SUITE" ] || SUITE=stable
-	printf '%s\n' "deb [signed-by=$KEYRING] $APT_URL $SUITE main" >"$tmp/aslcp.list"
-	if ! cmp -s "$tmp/aslcp.list" "$LIST" 2>/dev/null; then
-		install -m 0644 "$tmp/aslcp.list" "$LIST"
+	printf '%s\n' "deb [signed-by=$KEYRING] $APT_URL $SUITE main" >"$tmp/nodespot.list"
+	if ! cmp -s "$tmp/nodespot.list" "$LIST" 2>/dev/null; then
+		install -m 0644 "$tmp/nodespot.list" "$LIST"
 		say "wrote $LIST"
 	fi
 
 	# --- install ---------------------------------------------------------------
-	say "updating package lists (aslcp source only)"
+	say "updating package lists (nodespot source only)"
 	apt-get update -o DPkg::Lock::Timeout=600 \
-		-o Dir::Etc::sourcelist=sources.list.d/aslcp.list \
+		-o Dir::Etc::sourcelist=sources.list.d/nodespot.list \
 		-o Dir::Etc::sourceparts=- \
 		-o APT::Get::List-Cleanup=0
-	say "installing aslcp"
-	# --force-confold: keep the edited /etc/aslcp/aslcp.conf (for example a changed
+	say "installing nodespot"
+	# --force-confold: keep the edited /etc/nodespot/nodespot.conf (for example a changed
 	# port) if a later package ships a different default, instead of prompting.
-	# ASLCP_INSTALLER=1: the package skips its own "installed" banner; the setup link is printed once at the end.
-	ASLCP_INSTALLER=1 DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confold aslcp
+	# NODESPOT_INSTALLER=1: the package skips its own "installed" banner; the setup link is printed once at the end.
+	NODESPOT_INSTALLER=1 DEBIAN_FRONTEND=noninteractive apt-get install -y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confold nodespot
 fi
 
 # --- first-run setup link ---------------------------------------------------
 # ---8<--- admin-setup (exercised by a local test harness; keep self-contained)
-CONF="${ASLCP_CONF:-/etc/aslcp/aslcp.conf}"
+CONF="${NODESPOT_CONF:-/etc/nodespot/nodespot.conf}"
 
 # conf_get KEY DEFAULT: value of KEY in the [server] section of the config.
 conf_get() {
@@ -281,19 +281,19 @@ port_owner() {
 	printf '%s\n' "${n:-another program}"
 }
 
-# warn_port_clash PORT: warning when a program other than aslcp holds PORT.
+# warn_port_clash PORT: warning when a program other than nodespot holds PORT.
 warn_port_clash() {
 	o=$(port_owner "$1")
 	case "$o" in
-	"" | aslcp) return 0 ;;
+	"" | nodespot) return 0 ;;
 	esac
-	printf '\naslcp-install: WARNING: TCP port %s is already in use by "%s", so ASLCP cannot listen there.\n' "$1" "$o"
+	printf '\nnodespot-install: WARNING: TCP port %s is already in use by "%s", so nodespot cannot listen there.\n' "$1" "$o"
 	printf '  Pick another port: edit "listen" in %s (for example  listen = :8181 ),\n' "$CONF"
-	printf '  then  sudo systemctl restart aslcp ,  or run the installer again with ASLCP_PORT=<port>.\n'
+	printf '  then  sudo systemctl restart nodespot ,  or run the installer again with NODESPOT_PORT=<port>.\n'
 }
 
-# no_users: succeeds when "aslcp admin list --quiet" exits 3 (no accounts).
-no_users() { aslcp admin list --quiet --config "$CONF" >/dev/null 2>&1 && return 1 || [ $? -eq 3 ]; }
+# no_users: succeeds when "nodespot admin list --quiet" exits 3 (no accounts).
+no_users() { nodespot admin list --quiet --config "$CONF" >/dev/null 2>&1 && return 1 || [ $? -eq 3 ]; }
 
 # setup_banner LINK: boxed one-time setup link. Colors only on a terminal.
 setup_banner() {
@@ -304,18 +304,18 @@ setup_banner() {
 	fi
 	bar='================================================================'
 	printf '\n%s%s%s\n' "$B" "$bar" "$R"
-	printf '%s  ASLCP is installed. One more step: open this link%s\n' "$G" "$R"
+	printf '%s  nodespot is installed. One more step: open this link%s\n' "$G" "$R"
 	printf '\n    %s%s%s\n\n' "$Y" "$1" "$R"
 	printf '  The one-time link lets you create the administrator, or\n'
 	printf '  restore a backup from an existing node.\n\n'
-	printf '  Show the code again:  sudo aslcp admin setup-code\n'
-	printf '  Create the admin in the terminal instead:  sudo aslcp admin create\n'
+	printf '  Show the code again:  sudo nodespot admin setup-code\n'
+	printf '  Create the admin in the terminal instead:  sudo nodespot admin create\n'
 	printf '%s%s%s\n' "$B" "$bar" "$R"
 }
 
 setup_admin() {
 	listen=$(conf_get listen :8080)
-	datadir=$(conf_get datadir /var/lib/aslcp)
+	datadir=$(conf_get datadir /var/lib/nodespot)
 	port=${listen##*:}
 	case "$port" in
 	'' | *[!0-9]*) port=8080 ;;
@@ -326,27 +326,27 @@ setup_admin() {
 
 	# The service creates the data directory and database on its first start.
 	n=0
-	while [ ! -f "$datadir/aslcp.db" ] && [ "$n" -lt "${ASLCP_WAIT:-10}" ]; do
+	while [ ! -f "$datadir/nodespot.db" ] && [ "$n" -lt "${NODESPOT_WAIT:-10}" ]; do
 		sleep 1
 		n=$((n + 1))
 	done
 
 	up=1
-	[ -f "$datadir/aslcp.db" ] || up=0
-	if [ "$up" -eq 1 ] && [ -d /run/systemd/system ] && ! systemctl is-active --quiet aslcp 2>/dev/null; then
+	[ -f "$datadir/nodespot.db" ] || up=0
+	if [ "$up" -eq 1 ] && [ -d /run/systemd/system ] && ! systemctl is-active --quiet nodespot 2>/dev/null; then
 		up=0
 	fi
 	warn_port_clash "$port"
 	if [ "$up" -eq 0 ]; then
-		printf '\naslcp-install: WARNING: ASLCP is not running (no database yet, or the service is not active).\n'
-		printf '  See why:  sudo systemctl status aslcp   and   journalctl -u aslcp -n 30\n'
-		printf '  Once it runs, show the setup link code:  sudo aslcp admin setup-code\n'
+		printf '\nnodespot-install: WARNING: nodespot is not running (no database yet, or the service is not active).\n'
+		printf '  See why:  sudo systemctl status nodespot   and   journalctl -u nodespot -n 30\n'
+		printf '  Once it runs, show the setup link code:  sudo nodespot admin setup-code\n'
 		return 0
 	fi
 
 	if no_users; then
 		n=0
-		while [ ! -s "$datadir/setup-code" ] && [ "$n" -lt "${ASLCP_WAIT:-10}" ]; do
+		while [ ! -s "$datadir/setup-code" ] && [ "$n" -lt "${NODESPOT_WAIT:-10}" ]; do
 			sleep 1
 			n=$((n + 1))
 		done
@@ -354,26 +354,26 @@ setup_admin() {
 		if [ -n "$code" ]; then
 			setup_banner "$url/#/setup?code=$code"
 		else
-			printf '\nNo administrator account yet. Run:  sudo aslcp admin setup-code\n'
+			printf '\nNo administrator account yet. Run:  sudo nodespot admin setup-code\n'
 		fi
 	fi
 
-	printf '\nASLCP is running: %s\n' "$url"
-	printf 'Lost the password? Run:  sudo aslcp admin reset-password <user>\n'
+	printf '\nnodespot is running: %s\n' "$url"
+	printf 'Lost the password? Run:  sudo nodespot admin reset-password <user>\n'
 }
 # --->8--- admin-setup
 
 # ---8<--- port-takeover (exercised by the Go tests in internal/pkgscripts; keep self-contained)
-# Paths. The ASLCP_* overrides exist for the tests; nothing sets them for real.
-SD_DIR="${ASLCP_SYSTEMD_DIR:-/run/systemd/system}"
-DROPIN_DIR="${ASLCP_DROPIN_DIR:-/etc/systemd/system/aslcp.service.d}"
+# Paths. The NODESPOT_* overrides exist for the tests; nothing sets them for real.
+SD_DIR="${NODESPOT_SYSTEMD_DIR:-/run/systemd/system}"
+DROPIN_DIR="${NODESPOT_DROPIN_DIR:-/etc/systemd/system/nodespot.service.d}"
 DROPIN="$DROPIN_DIR/port80.conf"
-WEBPORT_STATE="${ASLCP_WEBPORT_STATE:-/var/lib/aslcp-webport}"
-TK_LIST="${ASLCP_TAKEOVER_LIST:-/var/lib/aslcp/takeover.list}"
-TK_RECORD="${ASLCP_DISABLED_UNITS:-/var/lib/aslcp/disabled-units}"
+WEBPORT_STATE="${NODESPOT_WEBPORT_STATE:-/var/lib/nodespot-webport}"
+TK_LIST="${NODESPOT_TAKEOVER_LIST:-/var/lib/nodespot/takeover.list}"
+TK_RECORD="${NODESPOT_DISABLED_UNITS:-/var/lib/nodespot/disabled-units}"
 
 # The units a takeover may turn off, dependents first. Nothing else is ever
-# touched: not aslcp-node, aslcp, asterisk (if an earlier install left it) or
+# touched: not nodespot-node, nodespot, asterisk (if an earlier install left it) or
 # Cockpit.
 TK_UNITS="supermon.service supermon2.service supermon-ng.service asl-web-ui.service allmon3.service apache2.service lighttpd.service nginx.service"
 
@@ -384,11 +384,11 @@ daemon_reload() {
 	systemctl daemon-reload || say "warning: systemctl daemon-reload failed"
 }
 
-restart_aslcp() {
+restart_nodespot() {
 	if have_systemd; then
-		systemctl restart aslcp || say "warning: could not restart aslcp (see: journalctl -u aslcp)"
+		systemctl restart nodespot || say "warning: could not restart nodespot (see: journalctl -u nodespot)"
 	else
-		say "systemd is not running here; restart aslcp yourself to use the new port"
+		say "systemd is not running here; restart nodespot yourself to use the new port"
 	fi
 }
 
@@ -397,8 +397,8 @@ restart_aslcp() {
 write_dropin() {
 	mkdir -p "$DROPIN_DIR" || return 1
 	cat >"$DROPIN" <<'EOD'
-# Written by ASLCP (System tab, Web port). Removed again by "move back" and
-# by "apt purge aslcp".
+# Written by nodespot (System tab, Web port). Removed again by "move back" and
+# by "apt purge nodespot".
 [Service]
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
@@ -417,7 +417,7 @@ port_report() {
 }
 
 # set_port PORT: point "listen" in the config at PORT (an address part is
-# kept), restart aslcp and open the port in firewalld. Port 80 also writes the
+# kept), restart nodespot and open the port in firewalld. Port 80 also writes the
 # capability drop-in first and is refused (status 1, nothing changed) while
 # another program holds it; a port of 1024 or more removes the drop-in again.
 set_port() {
@@ -428,19 +428,19 @@ set_port() {
 			say "port $1 needs the capability drop-in; writing $DROPIN"
 			write_dropin || die "cannot write $DROPIN"
 			daemon_reload
-			restart_aslcp
+			restart_nodespot
 		fi
 		return 0
 	fi
 	say "setting the web port to $1 (was $curport)"
 	o=$(port_owner "$1")
 	case "$o" in
-	"" | aslcp) ;;
+	"" | nodespot) ;;
 	*)
 		if [ "$1" -lt 1024 ]; then
-			printf '\naslcp-install: WARNING: TCP port %s is in use by "%s", so ASLCP was NOT moved there.\n' "$1" "$o"
+			printf '\nnodespot-install: WARNING: TCP port %s is in use by "%s", so nodespot was NOT moved there.\n' "$1" "$o"
 			port_report "$1"
-			printf '  Stop that program, or pick another port with ASLCP_PORT=<port>, then run the installer again.\n'
+			printf '  Stop that program, or pick another port with NODESPOT_PORT=<port>, then run the installer again.\n'
 			return 1
 		fi
 		say "warning: TCP port $1 is already in use by \"$o\""
@@ -454,7 +454,7 @@ set_port() {
 	[ -f "$CONF" ] || die "$CONF not found; set listen = $addr:$1 in it yourself"
 	if [ "$1" -lt 1024 ]; then
 		# Remember where to go back to: the System tab's "Move back" and
-		# ASLCP_TAKEOVER=undo read it.
+		# NODESPOT_TAKEOVER=undo read it.
 		{ mkdir -p "$WEBPORT_STATE" && chmod 0700 "$WEBPORT_STATE"; } || die "cannot create $WEBPORT_STATE"
 		printf '%s\n' "$cur" >"$WEBPORT_STATE/previous-listen"
 		write_dropin || die "cannot write $DROPIN"
@@ -463,10 +463,10 @@ set_port() {
 	awk -v new="$new" '
 		/^[ \t]*\[/ { sec = ($0 ~ /^[ \t]*\[server\][ \t]*$/) }
 		sec && !/^[ \t]*[;#]/ && /^[ \t]*listen[ \t]*=/ { print new; next }
-		{ print }' "$CONF" >"$tmp/aslcp.conf.new"
+		{ print }' "$CONF" >"$tmp/nodespot.conf.new"
 	# Write in place (keeps owner and mode); if no listen line was found,
 	# append one (a later [server] section wins).
-	cat "$tmp/aslcp.conf.new" >"$CONF"
+	cat "$tmp/nodespot.conf.new" >"$CONF"
 	if [ "$(conf_get listen '')" != "$addr:$1" ]; then
 		printf '\n[server]\n%s\n' "$new" >>"$CONF"
 	fi
@@ -475,17 +475,17 @@ set_port() {
 		rm -f "$WEBPORT_STATE/previous-listen"
 		daemon_reload
 	fi
-	restart_aslcp
+	restart_nodespot
 	fw_open "$1"
 }
 
 # fw_open PORT: open PORT in firewalld, if it is running: the packaged service
-# "aslcp" for 8080, else the port itself. Other firewalls are left alone.
+# "nodespot" for 8080, else the port itself. Other firewalls are left alone.
 fw_open() {
 	command -v firewall-cmd >/dev/null 2>&1 || return 0
 	firewall-cmd --state >/dev/null 2>&1 || return 0
 	if [ "$1" = 8080 ]; then
-		q=--query-service=aslcp a=--add-service=aslcp
+		q=--query-service=nodespot a=--add-service=nodespot
 	else
 		q=--query-port=$1/tcp a=--add-port=$1/tcp
 	fi
@@ -517,7 +517,7 @@ tk_unrecord() {
 
 # tk_record UNIT STATE: STATE is "enabled" (it was disabled and stopped) or
 # "active" (it was only running and was stopped). The list sits in a directory
-# the aslcp user owns, so reading it back trusts only the fixed unit names.
+# the nodespot user owns, so reading it back trusts only the fixed unit names.
 tk_record() {
 	[ ! -L "$TK_LIST" ] || die "$TK_LIST is a symbolic link; not using it"
 	mkdir -p "${TK_LIST%/*}"
@@ -525,8 +525,8 @@ tk_record() {
 	printf '%s %s\n' "$1" "$2" >>"$TK_LIST"
 }
 
-# tk_mirror_add / tk_mirror_remove UNIT: the services page of ASLCP (System,
-# ASL services) and "apt purge aslcp" know Apache and Allmon3 by the names in
+# tk_mirror_add / tk_mirror_remove UNIT: the services page of nodespot (System,
+# ASL services) and "apt purge nodespot" know Apache and Allmon3 by the names in
 # disabled-units; keeping that file in step lets them show and restore them.
 tk_mirror_name() {
 	case "$1" in
@@ -594,11 +594,11 @@ takeover_disable() {
 	if [ "$n" -eq 0 ]; then
 		say "  none of the known units was enabled or running; nothing was turned off"
 	fi
-	say "  not touched: aslcp-node and everything else the node needs on the air, aslcp, Cockpit (port 9090)"
+	say "  not touched: nodespot-node and everything else the node needs on the air, nodespot, Cockpit (port 9090)"
 }
 
-# takeover_undo: ASLCP leaves port 80 (back to the saved port, or 8080, or the
-# port in ASLCP_PORT), then each recorded unit is enabled and started again
+# takeover_undo: nodespot leaves port 80 (back to the saved port, or 8080, or the
+# port in NODESPOT_PORT), then each recorded unit is enabled and started again
 # (or only started, when it was merely running). Status 1 if a step failed.
 takeover_undo() {
 	if [ ! -f "$TK_LIST" ] || [ -L "$TK_LIST" ]; then
@@ -649,11 +649,11 @@ takeover_undo() {
 	fi
 	rm -f "$TK_LIST"
 	cur=$(conf_get listen :8080)
-	say "takeover undone: ASLCP listens on port ${cur##*:} again and the recorded units are back"
+	say "takeover undone: nodespot listens on port ${cur##*:} again and the recorded units are back"
 }
 # --->8--- port-takeover
 
-# dv_note: ASLCP_DV is accepted for 2.x one-liners; digital modes are built in.
+# dv_note: NODESPOT_DV is accepted for 2.x one-liners; digital modes are built in.
 DV_RESULT=
 dv_note() {
 	DV_RESULT="built into the node, nothing to enable. Pick a mode in the web UI."
@@ -667,7 +667,7 @@ fi
 if [ "$TAKEOVER_WANT" -eq 1 ]; then
 	takeover_disable
 fi
-# Port 80 is refused while another program holds it: ASLCP then stays where it
+# Port 80 is refused while another program holds it: nodespot then stays where it
 # is and the installer exits with status 1 after the closing lines.
 PORT_FAIL=0
 [ -z "$PORT_WANT" ] || set_port "$PORT_WANT" || PORT_FAIL=1
@@ -680,22 +680,22 @@ fi
 
 cat <<EOM
 
-aslcp-install: done.
-  Configuration:  /etc/aslcp/aslcp.conf     Logs:  journalctl -u aslcp
-  Updates:  Settings > Updates in the web UI, or: sudo apt update && sudo apt install --only-upgrade aslcp
+nodespot-install: done.
+  Configuration:  /etc/nodespot/nodespot.conf     Logs:  journalctl -u nodespot
+  Updates:  Settings > Updates in the web UI, or: sudo apt update && sudo apt install --only-upgrade nodespot
 EOM
 if [ "$TAKEOVER_WANT" -eq 1 ] && [ "$PORT_FAIL" -eq 0 ]; then
 	cat <<EOM
 
-Takeover: the units listed above are turned off and ASLCP answers on port 80.
-  Undo:  curl -fsSL $APT_URL/install.sh | sudo ASLCP_TAKEOVER=undo sh
+Takeover: the units listed above are turned off and nodespot answers on port 80.
+  Undo:  curl -fsSL $APT_URL/install.sh | sudo NODESPOT_TAKEOVER=undo sh
   (record: $TK_LIST)
 EOM
 fi
 if [ "$PORT_FAIL" -ne 0 ]; then
-	printf '\naslcp-install: ASLCP was NOT moved to port %s (see the warning above); it stays on its previous port.\n' "$PORT_WANT" >&2
+	printf '\nnodespot-install: nodespot was NOT moved to port %s (see the warning above); it stays on its previous port.\n' "$PORT_WANT" >&2
 	if [ "$TAKEOVER_WANT" -eq 1 ]; then
-		printf '  The services listed above stay turned off; undo with ASLCP_TAKEOVER=undo.\n' >&2
+		printf '  The services listed above stay turned off; undo with NODESPOT_TAKEOVER=undo.\n' >&2
 	fi
 	exit 1
 fi

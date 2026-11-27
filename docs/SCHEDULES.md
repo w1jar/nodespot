@@ -39,7 +39,7 @@ DST: a start time that does not exist on a given day (spring forward gap) runs a
 - **Overlap check (1.1.24).** Saving a schedule that conflicts with another is refused (`409 schedule_conflict`), see "Overlap check" below.
 - **Connect with an end time (window).** At `start` the scheduler connects. At `end` it disconnects the target if it is linked (whether or not the scheduler made the link). If the target is already linked in the requested mode at `start`, the connect is skipped (`skipped: already connected`) but the window still ends with a disconnect.
 - **Connect without an end, and disconnect.** Single events at `start`. A disconnect of a target that is not linked is `skipped: not connected`.
-- **Catch-up.** When ASLCP starts, or when schedules are re-enabled (switch or per-schedule), a connect window that is running now and has not been handled (and was not cancelled) is connected now. Windows whose end passed while ASLCP was down but which the scheduler had connected are disconnected at startup (if still linked). Single events without an end are never replayed.
+- **Catch-up.** When nodespot starts, or when schedules are re-enabled (switch or per-schedule), a connect window that is running now and has not been handled (and was not cancelled) is connected now. Windows whose end passed while nodespot was down but which the scheduler had connected are disconnected at startup (if still linked). Single events without an end are never replayed.
 - **Failures.** If AMI is down, the node is unknown, or the command fails, the result is `error: …` and the scheduler retries every minute: for a window until its end, for a single event for up to 10 minutes after `start`.
 - **Edits.** Saving a schedule, disabling it, or deleting it forgets its running occurrence without touching the link. If an edited schedule's window is running now and enabled, the normal catch-up applies (already linked → skipped).
 - **Order.** Events due at the same minute run in the order: disconnects (window ends, then disconnect schedules), then connects; ties by schedule id. Commands go through the API's shared `rpt.Client`, so per-node pacing (one app_rpt command slot) is kept.
@@ -48,7 +48,7 @@ DST: a start time that does not exist on a given day (spring forward gap) runs a
 
 - Table `schedules` (migration 4): `id INTEGER PRIMARY KEY, name TEXT, enabled INTEGER, node TEXT, target TEXT, action TEXT, mode TEXT, permanent INTEGER, exclusive INTEGER, days TEXT` (comma-separated, `""` for once), `date TEXT, start TEXT, end_time TEXT, last_run INTEGER` (unix, 0 = never), `last_result TEXT, created INTEGER, updated INTEGER`.
 - Settings keys: `schedules.enabled` (`true`/`false`), `schedules.paused_reason`, `schedules.paused_at` (RFC3339), `schedules.state` (JSON list of occurrences: `{id, start, end, status}` with `status` `connected` | `cancelled`, `start`/`end` RFC3339). Entries are removed once their end has passed (after any disconnect). Since 1.1.24: `schedules.manual_action` (`pause` | `pause_today` | `cancel`; unset or unknown = `pause`), `schedules.resume_at` (RFC3339, `""` = none) and `schedules.last_cancel` (JSON cancel notice, see below).
-- Backups include schedules (the whole ASLCP database); a restore drops `schedules.state` and `schedules.last_cancel` (the notice refers to that state), so a window running at backup time is not acted on. `schedules.resume_at` is kept: it belongs to the switch, which is restored with it; if its time has passed the engine resumes on its first tick.
+- Backups include schedules (the whole nodespot database); a restore drops `schedules.state` and `schedules.last_cancel` (the notice refers to that state), so a window running at backup time is not acted on. `schedules.resume_at` is kept: it belongs to the switch, which is restored with it; if its time has passed the engine resumes on its first tick.
 
 ## Engine (`internal/schedules`)
 
@@ -157,7 +157,7 @@ Handlers call `Engine.ManualAction(node, reason)`; the scheduler's own commands 
 `pause_today` details:
 
 - `schedules.resume_at` (RFC3339) holds the next local midnight (computed like a schedule time, so a missing midnight is the first valid minute). On the first tick at or after it the engine switches on, clears the reason and `resume_at`, drops pending retries, and runs the same no-replay rules as `SetEnabled(true)`, with one difference: single events at or after midnight (within the usual 10 minute retry limit) do run, while those during the pause or before a restart do not. Cancelled occurrences stay cancelled, so a window that crossed midnight and was cancelled is not caught up; a window starting at or after midnight runs normally.
-- `resume_at` survives a restart; if it passed while ASLCP was down, the engine resumes on its first tick.
+- `resume_at` survives a restart; if it passed while nodespot was down, the engine resumes on its first tick.
 - A manual re-enable (`SetEnabled`, either direction) clears `resume_at`.
 - If schedules are already paused for good (the switch, or an earlier `pause` action) a `pause_today` action does not set a resume time: an indefinite pause is never shortened. If paused for today and a `pause`-mode action arrives, `resume_at` is cleared (the pause becomes indefinite). Changing the setting never alters a pause that is already in place.
 

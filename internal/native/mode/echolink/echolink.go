@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	el "github.com/artw1/aslcp/internal/native/echolink"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	el "github.com/w1jar/nodespot/internal/native/echolink"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // Directory is the part of *echolink.Directory the mode uses.
@@ -18,6 +18,9 @@ type Directory interface {
 	Connect(ctx context.Context, target string) (Conn, error)
 	Close() error
 	Status() el.Status
+	// Stations is the directory's station list, downloaded when the
+	// cached copy is older than el.Config.ListMaxAge.
+	Stations(ctx context.Context) ([]el.Station, error)
 }
 
 // Conn is the part of *echolink.Conn the mode uses.
@@ -69,9 +72,13 @@ type Mode struct {
 	linkWG   sync.WaitGroup
 	conn     Conn
 	sending  bool
+	over0    uint64 // the receive queue's overflow when conn connected
 }
 
-var _ mode.Mode = (*Mode)(nil)
+var (
+	_ mode.Mode     = (*Mode)(nil)
+	_ mode.Searcher = (*Mode)(nil)
+)
 
 // New builds the mode from its settings.
 func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
@@ -88,6 +95,7 @@ func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
 		Name:     s.Get(KeyName, ""),
 		Location: s.Get(KeyLocation, ""),
 		Info:     s.Get(KeyInfo, ""),
+		Logger:   env.Logger(),
 	}
 	for _, sv := range strings.Split(s.Get(KeyServers, ""), ",") {
 		if sv = strings.TrimSpace(sv); sv != "" {
@@ -107,7 +115,7 @@ func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
 		opt.Retry = el.DefaultRetry
 	}
 	m := &Mode{env: env, cfg: cfg, opt: opt}
-	m.Init(mode.EchoLink, "EchoLink", env.Clock())
+	m.InitBuffer(mode.EchoLink, "EchoLink", env.Clock(), recvBuffer)
 	return m, nil
 }
 
@@ -204,6 +212,7 @@ func (m *Mode) startLink(t mode.Target) {
 	d := m.dir
 	m.mu.Unlock()
 	m.SetTarget(&t)
+	m.SetLinkStats(nil)
 	m.SetState(mode.StateConnecting, "calling "+t.ID, "")
 	m.linkWG.Add(1)
 	go m.link(ctx, d, t)
@@ -220,9 +229,11 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 		}
 		return
 	}
+	over0 := m.Overflow()
 	m.mu.Lock()
 	m.conn = c
 	m.sending = false
+	m.over0 = over0
 	m.mu.Unlock()
 	st := c.Station()
 	if st.Location != "" && t.Name == "" {
@@ -231,16 +242,27 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 	}
 	m.env.Logger().Info("echolink: connected", "station", st.Callsign)
 	m.SetState(mode.StateConnected, "connected to "+st.Callsign, "")
+	// The counters are the connection's: the receive queue's overflow
+	// counts from over0, and from the start of each transmission for its
+	// log line.
+	stats := func() *mode.LinkStats { return linkStats(c.Status(), m.Overflow()-over0) }
+	spurtOver := over0
+	m.SetLinkStats(stats())
 	defer func() {
 		m.mu.Lock()
 		m.conn = nil
 		m.mu.Unlock()
+		m.SetLinkStats(stats())
 		m.TalkEnd()
 	}()
+	statTick := time.NewTicker(statsEvery)
+	defer statTick.Stop()
 	peerName := ""
 	recv, events := c.Recv(), c.Events()
 	for {
 		select {
+		case <-statTick.C:
+			m.SetLinkStats(stats())
 		case <-ctx.Done():
 			_ = c.Close()
 			return
@@ -266,8 +288,12 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 					call = st.Callsign
 				}
 				m.TalkStart(mode.Talker{Callsign: call, Name: name, Target: t.ID})
+				spurtOver = m.Overflow()
 			case el.EventTalkStop:
 				m.TalkEnd()
+				m.SetLinkStats(stats())
+				m.env.Logger().Info(fmt.Sprintf("echolink: received %d packets (late %d, dropped %d)",
+					ev.Packets, ev.Late, ev.Dropped+m.Overflow()-spurtOver), "station", st.Callsign)
 			case el.EventPeer:
 				peerName = ev.Name
 				m.UpdateTalker("", ev.Name, "")
@@ -290,6 +316,25 @@ func (m *Mode) link(ctx context.Context, d Directory, t mode.Target) {
 			m.Emit(mode.Event{Kind: mode.EventError, Err: msg})
 			return
 		}
+	}
+}
+
+// statsEvery is how often the link counters are copied to the status.
+const statsEvery = time.Second
+
+// recvBuffer is the mode's receive queue, in 20 ms frames: thirty seconds,
+// so a station (the echo test's parrot) that sends faster than real time
+// is queued, not cut short.
+const recvBuffer = 1500
+
+// linkStats converts connection counters for the status. overflow is the
+// frames the mode's receive queue dropped on this connection, counted with
+// the connection's own drops.
+func linkStats(st el.ConnStatus, overflow uint64) *mode.LinkStats {
+	return &mode.LinkStats{
+		Proto:       "echolink",
+		RxVoiceFull: st.RxPackets, TxVoice: st.TxPackets,
+		ParseErrors: st.RxBad, Dropped: st.RxDropped + overflow, Late: st.RxLate, TxErrors: st.TxErrors,
 	}
 }
 
@@ -320,6 +365,44 @@ func (m *Mode) Disconnect(context.Context) error {
 		m.SetState(mode.StateStarting, "logging in to the directory", "")
 	}
 	return nil
+}
+
+// SearchDirectory searches the directory's station list for the UI's
+// target picker. Before the login it reports Loaded false. The list is the
+// one Connect resolves targets with: it is downloaded on the first search
+// and then reused for el.Config.ListMaxAge.
+func (m *Mode) SearchDirectory(ctx context.Context, q string, limit int) (mode.DirResult, error) {
+	m.mu.Lock()
+	d := m.dir
+	m.mu.Unlock()
+	if d == nil {
+		return mode.DirResult{Results: []mode.DirEntry{}}, nil
+	}
+	list, err := d.Stations(ctx)
+	if err != nil {
+		return mode.DirResult{Results: []mode.DirEntry{}, Error: err.Error()}, nil
+	}
+	return mode.DirResult{
+		Loaded:  true,
+		Updated: d.Status().ListUpdated,
+		Results: mode.SearchEntries(DirEntries(list), q, limit),
+	}, nil
+}
+
+// DirEntries converts a station list for the UI.
+func DirEntries(list []el.Station) []mode.DirEntry {
+	out := make([]mode.DirEntry, len(list))
+	for i, s := range list {
+		st := strings.ToLower(s.Status)
+		switch st {
+		case "on":
+			st = "online"
+		case "busy":
+			st = "busy"
+		}
+		out[i] = mode.DirEntry{Node: s.ID, Callsign: s.Callsign, Location: s.Location, Status: st, Kind: s.Kind().String()}
+	}
+	return out
 }
 
 // Stop drops the connection and logs off the directory.
@@ -366,8 +449,10 @@ func (m *Mode) EndTx() {
 	c := m.conn
 	was := m.sending
 	m.sending = false
+	over0 := m.over0
 	m.mu.Unlock()
 	if c != nil && was {
 		_ = c.Flush()
+		m.SetLinkStats(linkStats(c.Status(), m.Overflow()-over0))
 	}
 }

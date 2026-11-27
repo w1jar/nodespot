@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/radio/alsa"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/radio/alsa"
 )
 
 // Parts are the hardware pieces a [Radio] is built from. Open assembles the
@@ -49,6 +49,21 @@ type Mixer interface {
 	CaptureVolume() (float64, error)
 	PlaybackVolume() (float64, error)
 	Close() error
+}
+
+// StepMixer is implemented by a [Mixer] that can say where its controls sit
+// on their hardware steps and what each step is in dB (the alsa mixer does).
+type StepMixer interface {
+	CaptureStep() (alsa.VolumeStep, error)
+	PlaybackStep() (alsa.VolumeStep, error)
+}
+
+// BoostMixer is implemented by a [Mixer] whose chip may have a microphone
+// boost control (the alsa mixer does).
+type BoostMixer interface {
+	BoostAvailable() bool
+	Boost() (bool, error)
+	SetBoost(bool) error
 }
 
 // xruns is implemented by the real stream types.
@@ -217,6 +232,14 @@ func (c *core) SetVolumes(capture, playback float64) error {
 	return errors.Join(c.p.Mixer.SetCaptureVolume(capture), c.p.Mixer.SetPlaybackVolume(playback))
 }
 
+// SetBoost implements Booster.
+func (c *core) SetBoost(on bool) error {
+	if b, ok := c.p.Mixer.(BoostMixer); ok && b.BoostAvailable() {
+		return b.SetBoost(on)
+	}
+	return ErrNoBoost
+}
+
 func (c *core) Levels() Levels {
 	now := time.Now()
 	l := Levels{
@@ -231,6 +254,18 @@ func (c *core) Levels() Levels {
 		if v, err := c.p.Mixer.PlaybackVolume(); err == nil {
 			l.PlaybackVolume = v
 		}
+	}
+	if sm, ok := c.p.Mixer.(StepMixer); ok {
+		if v, err := sm.CaptureStep(); err == nil {
+			l.CaptureSteps, l.CaptureStep, l.CaptureDb, l.CaptureDbs = v.Steps, v.Step, v.Db, v.Dbs
+		}
+		if v, err := sm.PlaybackStep(); err == nil {
+			l.PlaybackSteps, l.PlaybackStep, l.PlaybackDb = v.Steps, v.Step, v.Db
+		}
+	}
+	if b, ok := c.p.Mixer.(BoostMixer); ok && b.BoostAvailable() {
+		l.BoostAvailable = true
+		l.Boost, _ = b.Boost()
 	}
 	for _, s := range []any{c.p.Capture, c.p.Playback} {
 		if x, ok := s.(xrunCounter); ok {

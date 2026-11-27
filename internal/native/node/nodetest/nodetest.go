@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	_ "github.com/artw1/aslcp/internal/native/mode/all" // the mode specs (fields, titles)
-	"github.com/artw1/aslcp/internal/native/mode/modetest"
-	"github.com/artw1/aslcp/internal/native/node"
-	"github.com/artw1/aslcp/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	_ "github.com/w1jar/nodespot/internal/native/mode/all" // the mode specs (fields, titles)
+	"github.com/w1jar/nodespot/internal/native/mode/modetest"
+	"github.com/w1jar/nodespot/internal/native/node"
+	"github.com/w1jar/nodespot/internal/native/radio"
 )
 
 // Rig is a running fake node.
@@ -58,7 +58,7 @@ func Start(cfg *node.Config, o Options) (*Rig, error) {
 	r := &Rig{Radio: radio.NewFake(), fakes: map[string]*modetest.Fake{}, onNew: o.OnBuild, done: make(chan struct{})}
 	dir := o.Dir
 	if dir == "" {
-		d, err := os.MkdirTemp("", "aslcp-nd")
+		d, err := os.MkdirTemp("", "nodespot-nd")
 		if err != nil {
 			return nil, fmt.Errorf("nodetest: %w", err)
 		}

@@ -2,9 +2,10 @@ package mode
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/audio"
 )
 
 // Buffer sizes of the channels Base owns.
@@ -24,6 +25,8 @@ type Base struct {
 
 	recv   chan audio.Frame
 	events chan Event
+	// overflow counts frames Deliver dropped because the queue was full.
+	overflow atomic.Uint64
 
 	mu     sync.Mutex
 	st     Status
@@ -32,11 +35,22 @@ type Base struct {
 
 // Init prepares b for the named mode.
 func (b *Base) Init(name, title string, now func() time.Time) {
+	b.InitBuffer(name, title, now, RecvBuffer)
+}
+
+// InitBuffer is Init with a Recv queue of recv frames, for a mode whose
+// network may send audio in bursts faster than real time (the EchoLink
+// echo test plays a recording back): the queue holds a burst for the
+// radio instead of dropping it.
+func (b *Base) InitBuffer(name, title string, now func() time.Time, recv int) {
 	if now == nil {
 		now = time.Now
 	}
+	if recv <= 0 {
+		recv = RecvBuffer
+	}
 	b.name, b.title, b.now = name, title, now
-	b.recv = make(chan audio.Frame, RecvBuffer)
+	b.recv = make(chan audio.Frame, recv)
 	b.events = make(chan Event, EventBuffer)
 	b.st = Status{Mode: name, Title: title, State: StateIdle, Since: now()}
 }
@@ -54,7 +68,7 @@ func (b *Base) Events() <-chan Event { return b.events }
 func (b *Base) Now() time.Time { return b.now() }
 
 // Deliver queues one frame for the radio, dropping the oldest frame when
-// the node is not keeping up.
+// the node is not keeping up. Dropped frames are counted (Overflow).
 func (b *Base) Deliver(f audio.Frame) {
 	select {
 	case b.recv <- f:
@@ -63,13 +77,19 @@ func (b *Base) Deliver(f audio.Frame) {
 	}
 	select {
 	case <-b.recv:
+		b.overflow.Add(1)
 	default:
 	}
 	select {
 	case b.recv <- f:
 	default:
+		b.overflow.Add(1)
 	}
 }
+
+// Overflow is how many frames Deliver has dropped because the queue for
+// the radio was full, over the life of the mode.
+func (b *Base) Overflow() uint64 { return b.overflow.Load() }
 
 // Emit sends ev, filling Mode and At, dropping it when nobody reads.
 func (b *Base) Emit(ev Event) {

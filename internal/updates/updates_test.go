@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 type fh struct {
@@ -128,7 +128,7 @@ func TestCacheBusterOnlyForManualCheck(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { m.Run(ctx); close(done) }()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for hits.Load() < 4 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -300,7 +300,12 @@ func TestDemoHelper(t *testing.T) {
 	if _, err := d.UpdateApply(ctx); err != helper.ErrBusy {
 		t.Fatalf("concurrent apply: %v", err)
 	}
-	time.Sleep(80 * time.Millisecond)
+	// wait for the demo job (RunTime) to finish instead of a fixed sleep
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		if in = m.Info(ctx); in.Job == helper.JobSucceeded {
+			break
+		}
+	}
 	if in = m.Info(ctx); in.Job != helper.JobSucceeded || in.Upgradable {
 		t.Fatalf("%+v", in)
 	}
@@ -389,7 +394,11 @@ func TestDemoChannels(t *testing.T) {
 	if _, err := m.SetChannel(ctx, ChannelStable); !errors.Is(err, helper.ErrBusy) {
 		t.Fatalf("switch while running: %v", err)
 	}
-	time.Sleep(40 * time.Millisecond)
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		if in = m.Info(ctx); in.Installed == "99.1.0~beta.1" && !in.Upgradable {
+			break
+		}
+	}
 	if in = m.Info(ctx); in.Installed != "99.1.0~beta.1" || in.Upgradable {
 		t.Fatalf("%+v", in)
 	}

@@ -1,0 +1,21 @@
+[Unit]
+Description=nodespot setup hotspot watchdog (one pass)
+Documentation=file:///usr/share/doc/nodespot/README
+After=NetworkManager.service
+# Nothing to do on a node without NetworkManager.
+ConditionPathExists=/usr/bin/nmcli
+
+[Service]
+Type=oneshot
+# Runs as root: starts the open setup hotspot when the node has had no
+# network for the configured time, and stops it when one connects.
+# Started by nodespot-wifi-watchdog.timer; needs no running web server.
+ExecStart=/usr/libexec/nodespot/nodespot-helper wifi-watchdog
+TimeoutStartSec=120
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+LockPersonality=yes

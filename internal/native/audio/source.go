@@ -62,12 +62,6 @@ func NewToneSeq(levelDb float64, segs ...Segment) *ToneSeq {
 	return &ToneSeq{segs: segs, amp: DBFS(levelDb)}
 }
 
-// CourtesyTone returns the default courtesy tone: one 200 ms beep at 1000 Hz,
-// -20 dBFS, after 50 ms of silence.
-func CourtesyTone() *ToneSeq {
-	return NewToneSeq(-20, Segment{0, ms(50)}, Segment{1000, ms(200)})
-}
-
 // Next implements Source.
 func (t *ToneSeq) Next(f *Frame) bool {
 	*f = Frame{}

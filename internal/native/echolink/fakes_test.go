@@ -76,7 +76,7 @@ func (f *fakeClock) hasWaiterWithin(d time.Duration) bool {
 // step waits until a timer is armed within d, then advances by d.
 func (f *fakeClock) step(t *testing.T, d time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for !f.hasWaiterWithin(d) {
 		if time.Now().After(deadline) {
 			t.Fatalf("no timer armed within %v", d)
@@ -98,7 +98,7 @@ func (f *fakeClock) run(t *testing.T, total, d time.Duration) {
 func (f *fakeClock) runUntil(t *testing.T, total, d time.Duration, done <-chan struct{}) {
 	t.Helper()
 	for el := time.Duration(0); el < total; el += d {
-		deadline := time.Now().Add(2 * time.Second)
+		deadline := time.Now().Add(10 * time.Second)
 		for !f.hasWaiterWithin(d) {
 			select {
 			case <-done:
@@ -221,7 +221,7 @@ func (d *fakeDirectory) logonList(t *testing.T) []logon {
 // waitLogons waits until at least n logons have arrived.
 func (d *fakeDirectory) waitLogons(t *testing.T, n int) []logon {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		l := d.logonList(t)
 		if len(l) >= n {
@@ -257,12 +257,14 @@ type fakeStation struct {
 	name     string
 	answer   bool // reply to SDES
 
-	mu       sync.Mutex
-	ctrlFrom netip.AddrPort
-	sdes     int
-	byes     int
-	audioIn  chan []byte
-	ctrlIn   chan rtcpInfo
+	mu        sync.Mutex
+	ctrlFrom  netip.AddrPort
+	audioFrom netip.AddrPort // where the client's audio-port packets come from
+	sdes      int
+	byes      int
+	audioIn   chan []byte // RTP packets
+	textIn    chan []byte // oNDATA packets
+	ctrlIn    chan rtcpInfo
 }
 
 func newFakeStation(t *testing.T, ip string, answer bool) *fakeStation {
@@ -277,7 +279,7 @@ func newFakeStation(t *testing.T, ip string, answer bool) *fakeStation {
 	}
 	s := &fakeStation{
 		t: t, audio: ua, ctrl: uc, callsign: "N1CALL", name: "Test Op", answer: answer,
-		audioIn: make(chan []byte, 100), ctrlIn: make(chan rtcpInfo, 100),
+		audioIn: make(chan []byte, 100), textIn: make(chan []byte, 100), ctrlIn: make(chan rtcpInfo, 100),
 	}
 	go s.readAudio()
 	go s.readCtrl()
@@ -291,12 +293,19 @@ func (s *fakeStation) ctrlPort() int  { return s.ctrl.LocalAddr().(*net.UDPAddr)
 func (s *fakeStation) readAudio() {
 	buf := make([]byte, 2048)
 	for {
-		n, _, err := s.audio.ReadFromUDPAddrPort(buf)
+		n, from, err := s.audio.ReadFromUDPAddrPort(buf)
 		if err != nil {
 			return
 		}
+		s.mu.Lock()
+		s.audioFrom = from
+		s.mu.Unlock()
+		ch := s.audioIn
+		if isText(buf[:n]) {
+			ch = s.textIn
+		}
 		select {
-		case s.audioIn <- append([]byte(nil), buf[:n]...):
+		case ch <- append([]byte(nil), buf[:n]...):
 		default:
 		}
 	}
@@ -359,7 +368,7 @@ func (s *fakeStation) counts() (sdes, byes int) {
 
 func (s *fakeStation) waitCounts(t *testing.T, sdes, byes int) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for {
 		a, b := s.counts()
 		if a >= sdes && b >= byes {
@@ -375,7 +384,7 @@ func (s *fakeStation) waitCounts(t *testing.T, sdes, byes int) {
 // nextEvent waits for an event of kind k, skipping others.
 func nextEvent(t *testing.T, c *Conn, k EventKind) Event {
 	t.Helper()
-	timeout := time.After(3 * time.Second)
+	timeout := time.After(10 * time.Second)
 	for {
 		select {
 		case ev, ok := <-c.Events():

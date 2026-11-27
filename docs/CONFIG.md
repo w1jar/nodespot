@@ -1,6 +1,6 @@
 # Configuration editing (2.0)
 
-> Removed in 3.0: this describes a 2.x feature that needed Asterisk. ASLCP 3 runs its own node; see [NATIVE_NODE.md](NATIVE_NODE.md). Kept for reference.
+> Removed: this describes a feature of the archived aslcp 2.x that needed Asterisk. nodespot runs its own node; see [NATIVE_NODE.md](NATIVE_NODE.md). Kept for reference.
 
 Configuration editing of `docs/DESIGN.md` (sections 4-6), released in 2.0.
 
@@ -32,7 +32,7 @@ type ConfigRequest struct {
     Path    string       `json:"path,omitempty"`    // config-read
     Files   []ConfigFile `json:"files,omitempty"`   // config-apply
     Message string       `json:"message,omitempty"` // commit message (<= 200 chars, one line)
-    Author  string       `json:"author,omitempty"`  // ASLCP username (<= 64, [A-Za-z0-9._-])
+    Author  string       `json:"author,omitempty"`  // nodespot username (<= 64, [A-Za-z0-9._-])
     Commit  string       `json:"commit,omitempty"`  // config-show / config-restore: 7-40 hex
     Limit   int          `json:"limit,omitempty"`   // config-log (1-200)
     Offset  int          `json:"offset,omitempty"`
@@ -58,7 +58,7 @@ Request size limit for config ops: 4 MiB (others stay small).
 | `config-restore` | `commit, author` | `{commit, before}`: writes the files as they were in `commit` (only files that differ; files that did not exist then are left alone and listed in `skipped`) |
 | `asterisk-restart` | - | `{ok}`: `systemctl restart asterisk` |
 
-**History repository:** `/var/lib/aslcp-config-history` (not under `/var/lib/aslcp`: that directory is the `aslcp` user's data dir and is writable by it, so a repository inside it could be tampered with by the unprivileged server), root:root 0700, a bare-style git dir used with `GIT_DIR=<repo> GIT_WORK_TREE=/etc/asterisk`, `core.fileMode=true`, local identity `aslcp <aslcp@localhost>` with `--author` from the request. Initialized on first use with an "Initial snapshot" commit of the current tree. `git` is called with a fixed argv (never through a shell), `-c` options to disable hooks/pager/gpg (`core.hooksPath=/dev/null`, `commit.gpgSign=false`), env `HOME=/nonexistent`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_TERMINAL_PROMPT=0`. The package gains `Depends: git`.
+**History repository:** `/var/lib/nodespot-config-history` (not under `/var/lib/nodespot`: that directory is the `nodespot` user's data dir and is writable by it, so a repository inside it could be tampered with by the unprivileged server), root:root 0700, a bare-style git dir used with `GIT_DIR=<repo> GIT_WORK_TREE=/etc/asterisk`, `core.fileMode=true`, local identity `nodespot <nodespot@localhost>` with `--author` from the request. Initialized on first use with an "Initial snapshot" commit of the current tree. `git` is called with a fixed argv (never through a shell), `-c` options to disable hooks/pager/gpg (`core.hooksPath=/dev/null`, `commit.gpgSign=false`), env `HOME=/nonexistent`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_TERMINAL_PROMPT=0`. The package gains `Depends: git`.
 
 **config-apply pipeline** (one at a time, under a lock shared with restore and update-apply):
 

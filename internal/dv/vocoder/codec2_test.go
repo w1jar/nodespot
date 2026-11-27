@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
 )
 
 var _ vocoder.Codec2 = (*vocoder.C2)(nil)

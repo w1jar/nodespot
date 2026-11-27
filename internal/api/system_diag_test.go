@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // diagSys is a fakeSys that also builds a bundle (a one-file tarball) and
@@ -73,11 +73,11 @@ func TestDiagBundleEndpoint(t *testing.T) {
 	if status != 200 || !bytes.Equal(body, d.body) {
 		t.Fatalf("status %d, body %d bytes", status, len(body))
 	}
-	if hdr.Get("Content-Type") != "application/gzip" || !strings.HasPrefix(hdr.Get("Content-Disposition"), `attachment; filename="aslcp-diagnostics-`) ||
+	if hdr.Get("Content-Type") != "application/gzip" || !strings.HasPrefix(hdr.Get("Content-Disposition"), `attachment; filename="nodespot-diagnostics-`) ||
 		!strings.HasSuffix(hdr.Get("Content-Disposition"), `.tar.gz"`) || hdr.Get("Cache-Control") != "no-store" {
 		t.Errorf("headers %v", hdr)
 	}
-	if !d.req.MaskIdentity || d.req.Version != "test" || !strings.Contains(d.req.Report, "ASLCP") {
+	if !d.req.MaskIdentity || d.req.Version != "test" || !strings.Contains(d.req.Report, "nodespot") {
 		t.Errorf("request %+v", d.req)
 	}
 	if !strings.Contains(d.req.Audit, "system.diagnostics.download") && d.req.Audit != "" {

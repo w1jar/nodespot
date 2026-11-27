@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/artw1/aslcp/internal/store"
+	"github.com/w1jar/nodespot/internal/store"
 )
 
 func TestHashVerify(t *testing.T) {
@@ -184,7 +184,7 @@ func TestSetupRateLimited(t *testing.T) {
 
 func TestCSRF(t *testing.T) {
 	mk := func(method, hdr, origin string) *http.Request {
-		r := httptest.NewRequest(method, "http://aslcp.local/api/x", nil)
+		r := httptest.NewRequest(method, "http://nodespot.local/api/x", nil)
 		if hdr != "" {
 			r.Header.Set(CSRFHeader, hdr)
 		}
@@ -203,7 +203,7 @@ func TestCSRF(t *testing.T) {
 		{"post without header", mk("POST", "", ""), false},
 		{"post wrong header value", mk("POST", "0", ""), false},
 		{"post header no origin", mk("POST", "1", ""), true},
-		{"post same origin", mk("POST", "1", "http://aslcp.local"), true},
+		{"post same origin", mk("POST", "1", "http://nodespot.local"), true},
 		{"post cross origin", mk("POST", "1", "http://evil.example"), false},
 		{"post dev origin", mk("DELETE", "1", "http://localhost:5173"), true},
 		{"post null origin", mk("PUT", "1", "null"), false},
@@ -245,7 +245,7 @@ func TestCookieFlags(t *testing.T) {
 	}
 }
 
-// A code rewritten in the file (by "aslcp admin setup-code") is accepted
+// A code rewritten in the file (by "nodespot admin setup-code") is accepted
 // without a restart; the old in-memory one is not.
 func TestSetupCodeFileWins(t *testing.T) {
 	s := newSvc(t)

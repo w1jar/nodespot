@@ -11,16 +11,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/native/mode"
 
 	// The networks register themselves with internal/dv/network.
-	_ "github.com/artw1/aslcp/internal/dv/network/bm"
-	_ "github.com/artw1/aslcp/internal/dv/network/homebrew"
-	_ "github.com/artw1/aslcp/internal/dv/network/m17"
-	_ "github.com/artw1/aslcp/internal/dv/network/nxdn"
-	_ "github.com/artw1/aslcp/internal/dv/network/p25"
-	_ "github.com/artw1/aslcp/internal/dv/network/ysf"
+	_ "github.com/w1jar/nodespot/internal/dv/network/bm"
+	_ "github.com/w1jar/nodespot/internal/dv/network/homebrew"
+	_ "github.com/w1jar/nodespot/internal/dv/network/m17"
+	_ "github.com/w1jar/nodespot/internal/dv/network/nxdn"
+	_ "github.com/w1jar/nodespot/internal/dv/network/p25"
+	_ "github.com/w1jar/nodespot/internal/dv/network/ysf"
 )
 
 // Setting keys with a meaning of their own. Every other field of a DV
@@ -86,8 +86,8 @@ var defs = []def{
 			callsignField(false),
 			{Key: KeyPassword, Label: "Hotspot password", Kind: mode.FieldPassword, Required: true, Secret: true,
 				Help: "The hotspot security password from your BrandMeister self-care page."},
-			{Key: KeyAddress, Label: "Master server", Kind: mode.FieldText, Required: true,
-				Help: "The BrandMeister master, host or host:port."},
+			{Key: KeyAddress, Label: "Master server", Kind: mode.FieldText, Required: true, HostList: mode.HostListBM,
+				Help: "The BrandMeister master closest to you. Port 54006 unless you type host:port."},
 			advanced("keepalive_ms", "Keepalive (ms)", mode.FieldNumber, "", ""),
 			advanced("timeout_ms", "Master timeout (ms)", mode.FieldNumber, "", ""),
 			advanced("login_timeout_ms", "Login timeout (ms)", mode.FieldNumber, "", ""),
@@ -101,9 +101,9 @@ var defs = []def{
 		fields: []mode.Field{
 			dmrIDField,
 			callsignField(false),
-			{Key: KeyPassword, Label: "Hotspot password", Kind: mode.FieldPassword, Secret: true,
+			{Key: KeyPassword, Label: "Hotspot password", Kind: mode.FieldPassword, Required: true, Secret: true,
 				Help: "The hotspot security password from your TGIF profile."},
-			advanced(KeyAddress, "Master server", mode.FieldText, "", "Default: the TGIF master."),
+			advanced(KeyAddress, "Master server", mode.FieldText, "", "Leave empty for the TGIF master (tgif.network, port 62031)."),
 			slotField,
 			advanced("repeater_id", "Hotspot ID", mode.FieldNumber, "", "Default: the DMR ID."),
 			optionsField,
@@ -116,8 +116,8 @@ var defs = []def{
 			dmrIDField,
 			callsignField(false),
 			{Key: KeyPassword, Label: "Master password", Kind: mode.FieldPassword, Secret: true},
-			{Key: KeyAddress, Label: "Master server", Kind: mode.FieldText, Required: true,
-				Help: "A Homebrew (MMDVM) master, host or host:port."},
+			{Key: KeyAddress, Label: "Master server", Kind: mode.FieldText, Required: true, HostList: mode.HostListDMROther,
+				Help: "A Homebrew (MMDVM) master, host or host:port (port 62031 when none is given)."},
 			slotField,
 			advanced("repeater_id", "Hotspot ID", mode.FieldNumber, "", "Default: the DMR ID."),
 			advanced("colour_code", "Color code", mode.FieldNumber, "1", ""),

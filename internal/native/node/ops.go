@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/radio"
-	"github.com/artw1/aslcp/internal/native/radio/sa818"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/radio/sa818"
 )
 
 // Status is a snapshot of the node for the UI. It never carries a password.
@@ -57,13 +57,30 @@ type RadioStatus struct {
 	SA818    bool   `json:"sa818"`
 	PTT      bool   `json:"ptt"`
 	COS      bool   `json:"cos"`
+	// NeedsTuning is true when a radio is present, its sound chip has a
+	// receive level control and the audio has not been tuned (or the reminder
+	// dismissed) for this hardware: the page shows "tune your audio".
+	NeedsTuning bool `json:"needsTuning"`
 	// Level is the receive level over the last 100 ms (see InputLevel).
-	Level    InputLevel `json:"level"`
-	RxLocked bool       `json:"rxLocked,omitempty"` // a local transmission timed out
-	TxLocked bool       `json:"txLocked,omitempty"` // the network timed out the transmitter
+	Level InputLevel `json:"level"`
+	// LastRx summarizes the last local transmission long enough to judge
+	// (at least half a second of speech); it stays until the next one.
+	LastRx *audio.RxSummary `json:"lastRx,omitempty"`
+	// RxActive: a local station is transmitting into the receiver and its
+	// audio is being sent to the active mode.
+	RxActive bool `json:"rxActive,omitempty"`
+	// NetDropped counts frames of the active mode's audio the node threw
+	// away instead of playing them: a local station was transmitting into
+	// the receiver (it has priority) or the transmit timeout had locked
+	// the network out. It restarts when the active mode changes.
+	NetDropped uint64 `json:"netDropped,omitempty"`
+	RxLocked   bool   `json:"rxLocked,omitempty"` // a local transmission timed out
+	TxLocked   bool   `json:"txLocked,omitempty"` // the network timed out the transmitter
 	// PTTStuck: unkeying the transmitter failed and is being retried, so
 	// it may still be on the air.
 	PTTStuck bool `json:"pttStuck,omitempty"`
+	// TestTone: the transmit test tone is playing or waiting to key up.
+	TestTone bool `json:"testTone,omitempty"`
 }
 
 // InputLevel is the radio's receive level as the node hears it from the sound
@@ -74,6 +91,10 @@ type InputLevel struct {
 	PeakDb float64 `json:"peakDb"`
 	RMSDb  float64 `json:"rmsDb"`
 	COS    bool    `json:"cos"`
+	// LastRx is the summary of the last local transmission, as in the
+	// status's radio.lastRx; only the live level endpoint carries it here,
+	// so the tuning page needs one poll.
+	LastRx *audio.RxSummary `json:"lastRx,omitempty"`
 }
 
 // IDStatus is the station ID.
@@ -87,16 +108,20 @@ type IDStatus struct {
 
 // Status returns a snapshot of the node.
 func (e *Engine) Status() Status {
+	hasCapture := e.hasCaptureControl()
 	e.mu.Lock()
+	needsTuning := hasCapture && !e.cfg.Station.Tuned(HardwareID(e.info))
 	st := Status{
 		Callsign: e.cfg.Station.Callsign,
 		Started:  e.started,
 		Radio: RadioStatus{
 			Present: !e.o.RadioAbsent, PTT: e.sx.ptt, COS: e.sx.cos,
-			Level:  e.inputLevelLocked(),
+			Level: e.inputLevelLocked(), LastRx: e.sx.lastRx,
 			Preset: string(e.info.Interface.Preset), Chip: e.info.Chip, USBID: e.info.USBID,
 			Product: e.info.Product, Detected: e.info.Detected, SA818: e.info.Interface.SA818,
-			RxLocked: e.sx.rfLocked, TxLocked: e.sx.txLocked, PTTStuck: e.sx.pttStuck,
+			RxActive: e.sx.rfOn, NetDropped: e.sx.netDropped, RxLocked: e.sx.rfLocked, TxLocked: e.sx.txLocked, PTTStuck: e.sx.pttStuck,
+			TestTone:    e.sx.tone != nil,
+			NeedsTuning: needsTuning,
 		},
 		ID: IDStatus{
 			Enabled: e.params.id.on, Owed: e.sx.idT.owed,
@@ -214,7 +239,11 @@ func (e *Engine) SaveStation(st Station) error {
 	e.mu.Unlock()
 	old := c.Station
 	st.Active = old.Active
+	st.AudioTuned = old.AudioTuned
 	c.Station = st
+	if r := st.Radio.RxVolume; r != nil && (old.Radio.RxVolume == nil || *old.Radio.RxVolume != *r) {
+		e.markTuned(c, false)
+	}
 	c.Normalize()
 	if err := c.Validate(); err != nil {
 		return err
@@ -256,7 +285,7 @@ func channelChanged(a, b RadioConfig) bool {
 }
 
 // SaveMode merges upd into mode n's saved settings (a blank secret keeps
-// the saved one), checks, saves and applies them. The active mode is
+// the saved one unless upd.Clear names it), checks, saves and applies them. The active mode is
 // restarted on its target when its settings changed.
 func (e *Engine) SaveMode(n string, upd mode.Settings) error {
 	n = strings.ToLower(strings.TrimSpace(n))
@@ -269,8 +298,17 @@ func (e *Engine) SaveMode(n string, upd mode.Settings) error {
 	e.mu.Lock()
 	c := e.cfg.Clone()
 	e.mu.Unlock()
+	if err := sp.CheckClear(upd); err != nil {
+		return err
+	}
 	s := sp.Merge(c.Modes[n], upd)
-	if err := sp.CheckEnv(e.env(c), s); err != nil {
+	// Clearing a required password is allowed (the mode then reports not
+	// ready), so the check sees a placeholder in the cleared fields.
+	chk := s.Clone()
+	for _, k := range upd.Clear {
+		chk.Values[k] = "-"
+	}
+	if err := sp.CheckEnv(e.env(c), chk); err != nil {
 		return err
 	}
 	c.Modes[n] = s
@@ -322,7 +360,7 @@ func (e *Engine) Reload(ctx context.Context) error {
 	}
 	oldRadio := e.cfg.Station.Radio
 	e.cfg = c.Clone()
-	e.params = paramsFor(c)
+	e.params = paramsFor(c, e.info.Interface.SA818)
 	e.mu.Unlock()
 	if same {
 		return nil
@@ -344,9 +382,9 @@ func (e *Engine) Reload(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Tune sets the sound chip's mixer (0 to 1 each; nil keeps a level) and
-// saves the levels.
-func (e *Engine) Tune(rx, tx *float64) error {
+// Tune sets the sound chip's mixer (0 to 1 each; nil keeps a level) and the
+// receive boost (nil keeps it) and saves them.
+func (e *Engine) Tune(rx, tx *float64, boost *bool) error {
 	for _, v := range []*float64{rx, tx} {
 		if v != nil && (*v < 0 || *v > 1) {
 			return errors.New("levels must be 0 to 1")
@@ -360,10 +398,15 @@ func (e *Engine) Tune(rx, tx *float64) error {
 	if rx != nil {
 		v := *rx
 		c.Station.Radio.RxVolume = &v
+		e.markTuned(c, false)
 	}
 	if tx != nil {
 		v := *tx
 		c.Station.Radio.TxVolume = &v
+	}
+	if boost != nil {
+		v := *boost
+		c.Station.Radio.RxBoost = &v
 	}
 	if err := e.applyVolumes(c.Station.Radio); err != nil {
 		return err
@@ -371,9 +414,52 @@ func (e *Engine) Tune(rx, tx *float64) error {
 	return e.commit(c, false)
 }
 
+// hasCaptureControl reports whether a radio is present and its sound chip has
+// a receive level control. A chip's controls do not change while it is open,
+// so the mixer is read once (a positive answer is kept; a fake that gains
+// steps later is asked again).
+func (e *Engine) hasCaptureControl() bool {
+	if e.o.RadioAbsent {
+		return false
+	}
+	if e.capture.Load() {
+		return true
+	}
+	ok := e.o.Radio.Levels().CaptureSteps > 0
+	e.capture.Store(ok)
+	return ok
+}
+
+// markTuned records in c that the audio is tuned (or, with dismissed, that the
+// reminder was dismissed) for the hardware in use.
+func (e *Engine) markTuned(c *Config, dismissed bool) {
+	c.Station.AudioTuned = &AudioTuned{At: e.now().UTC().Truncate(time.Second), Interface: HardwareID(e.info), Dismissed: dismissed}
+}
+
+// DismissTuning records that an admin dismissed the "tune your audio"
+// reminder for this hardware and saves it.
+func (e *Engine) DismissTuning() error {
+	e.opMu.Lock()
+	defer e.opMu.Unlock()
+	e.mu.Lock()
+	c := e.cfg.Clone()
+	e.mu.Unlock()
+	e.markTuned(c, true)
+	return e.commit(c, false)
+}
+
 func (e *Engine) applyVolumes(r RadioConfig) error {
+	var errs []error
+	if r.RxBoost != nil {
+		// A chip with no boost control has nothing to apply: not an error.
+		if b, ok := e.o.Radio.(radio.Booster); ok && e.o.Radio.Levels().BoostAvailable {
+			if err := b.SetBoost(*r.RxBoost); err != nil {
+				errs = append(errs, fmt.Errorf("radio receive boost: %w", err))
+			}
+		}
+	}
 	if r.RxVolume == nil && r.TxVolume == nil {
-		return nil
+		return errors.Join(errs...)
 	}
 	cur := e.o.Radio.Levels()
 	rx, tx := cur.CaptureVolume, cur.PlaybackVolume
@@ -384,9 +470,9 @@ func (e *Engine) applyVolumes(r RadioConfig) error {
 		tx = *r.TxVolume
 	}
 	if err := e.o.Radio.SetVolumes(rx, tx); err != nil {
-		return fmt.Errorf("radio levels: %w", err)
+		errs = append(errs, fmt.Errorf("radio levels: %w", err))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Levels returns the radio's levels.
@@ -491,6 +577,19 @@ type RadioDetail struct {
 	// resolve.
 	Resolved        *radio.Interface `json:"resolved,omitempty"`
 	RestartRequired bool             `json:"restartRequired,omitempty"`
+	// SA818Filters is what the SA818's audio filters were last programmed to,
+	// from the state file. It is absent when the module has never been
+	// programmed by this node (the filters are then unknown).
+	SA818Filters *ProgrammedFilters `json:"sa818Filters,omitempty"`
+}
+
+// ProgrammedFilters are the SA818 filter flags last sent to the module, true
+// meaning the filter is on (wire value 0; 1 bypasses it), and when.
+type ProgrammedFilters struct {
+	Emphasis bool      `json:"emphasis"`
+	HighPass bool      `json:"highPass"`
+	LowPass  bool      `json:"lowPass"`
+	At       time.Time `json:"at"`
 }
 
 // RadioInfo describes the radio interface.
@@ -503,6 +602,13 @@ func (e *Engine) RadioInfo() RadioDetail {
 	if iface, err := r.Interface(e.info.SHARI); err == nil {
 		d.Resolved = &iface
 	}
+	if e.hasSA818() {
+		// Read only: showing the saved state sends nothing to the module.
+		if st, err := radio.SavedSA818(e.o.RadioConfig); err == nil {
+			f := st.Settings.Filters
+			d.SA818Filters = &ProgrammedFilters{Emphasis: f.Emphasis, HighPass: f.HighPass, LowPass: f.LowPass, At: st.AppliedAt}
+		}
+	}
 	return d
 }
 
@@ -514,7 +620,9 @@ const inputStale = 200 * time.Millisecond
 func (e *Engine) InputLevel() InputLevel {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.inputLevelLocked()
+	l := e.inputLevelLocked()
+	l.LastRx = e.sx.lastRx
+	return l
 }
 
 func (e *Engine) inputLevelLocked() InputLevel {

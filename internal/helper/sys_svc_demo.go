@@ -25,7 +25,7 @@ func (d *DemoSystem) svcState() *demoSvcState {
 }
 
 func (s *demoSvcState) status() SvcStatus {
-	res := SvcStatus{Available: true, PortsAvailable: true, Firewalld: true, AslcpPort: s.port, AslcpOn80: s.port == 80,
+	res := SvcStatus{Available: true, PortsAvailable: true, Firewalld: true, NodespotPort: s.port, NodespotOn80: s.port == 80,
 		Scopes: []SvcScopeState{}, Ports: []SvcPort{}}
 	for _, sc := range svcScopeOrder {
 		on := !s.off[sc]

@@ -1,0 +1,14 @@
+[Unit]
+Description=nodespot setup hotspot watchdog timer
+Documentation=file:///usr/share/doc/nodespot/README
+
+[Timer]
+# The first pass comes one minute after boot; the 3 minute "no network" clock
+# counts from boot, so the hotspot opens about 3 minutes after the system
+# started.
+OnBootSec=60
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

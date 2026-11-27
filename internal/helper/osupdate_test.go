@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/artw1/aslcp/internal/legacy"
+	"github.com/w1jar/nodespot/internal/legacy"
 )
 
 const simUpgrade = `NOTE: This is only a simulation!
@@ -135,9 +135,9 @@ const (
 func osOps(t *testing.T, r map[string]resp) (*Ops, *fakeRunner) {
 	t.Helper()
 	idleJob(r)
-	r["systemctl list-units"] = resp{out: loadedUnit + "aslcp-osupgrade.service loaded inactive dead x\n"}
-	r["systemctl show aslcp-osupgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
-	r["journalctl -u aslcp-osupgrade"] = resp{}
+	r["systemctl list-units"] = resp{out: loadedUnit + "nodespot-osupgrade.service loaded inactive dead x\n"}
+	r["systemctl show nodespot-osupgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
+	r["journalctl -u nodespot-osupgrade"] = resp{}
 	f := &fakeRunner{rules: r}
 	dir := t.TempDir()
 	return &Ops{Run: f, RebootFile: filepath.Join(dir, "rr"), RebootPkgsFile: filepath.Join(dir, "rr.pkgs")}, f
@@ -195,13 +195,13 @@ func TestOSCheckLockHeld(t *testing.T) {
 func TestOSCheckRefusedWhileJobRuns(t *testing.T) {
 	r := map[string]resp{cmdUpdate: {}, cmdSim: {}}
 	o, f := osOps(t, r)
-	r["systemctl show aslcp-osupgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+	r["systemctl show nodespot-osupgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 	if _, err := o.OSCheck(context.Background()); !errors.Is(err, ErrBusy) {
 		t.Fatalf("%v", err)
 	}
-	// the aslcp upgrade counts too
-	r["systemctl show aslcp-osupgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+	// the nodespot upgrade counts too
+	r["systemctl show nodespot-osupgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 	if _, err := o.OSCheck(context.Background()); !errors.Is(err, ErrBusy) {
 		t.Fatalf("%v", err)
 	}
@@ -213,12 +213,12 @@ func TestOSCheckRefusedWhileJobRuns(t *testing.T) {
 func TestOSApply(t *testing.T) {
 	r := map[string]resp{"systemd-run": {}}
 	o, f := osOps(t, r)
-	o.SelfPath = "/usr/libexec/aslcp/aslcp-helper"
+	o.SelfPath = "/usr/libexec/nodespot/nodespot-helper"
 	st, err := o.OSApply(context.Background())
 	if err != nil || st.Job != JobRunning {
 		t.Fatalf("%+v %v", st, err)
 	}
-	want := "systemd-run --no-block --unit=aslcp-osupgrade --collect --property=Type=oneshot --setenv=DEBIAN_FRONTEND=noninteractive --setenv=APT_LISTCHANGES_FRONTEND=none /bin/sh -c " +
+	want := "systemd-run --no-block --unit=nodespot-osupgrade --collect --property=Type=oneshot --setenv=DEBIAN_FRONTEND=noninteractive --setenv=APT_LISTCHANGES_FRONTEND=none /bin/sh -c " +
 		o.osUpgradeScript()
 	if f.called(want) != 1 {
 		t.Fatalf("calls: %v", f.calls)
@@ -228,20 +228,20 @@ func TestOSApply(t *testing.T) {
 		t.Fatal("must be a plain upgrade")
 	}
 	for _, w := range []string{"LC_ALL=C apt-get update -q -o DPkg::Lock::Timeout=600 > '" + osUpdateOutFile + "'",
-		"'/usr/libexec/aslcp/aslcp-helper' dv-step " + StepAptUpdateCheck + " '" + osUpdateOutFile + "' || exit \"$rc\"", "\napt-get upgrade -y -q"} {
+		"'/usr/libexec/nodespot/nodespot-helper' dv-step " + StepAptUpdateCheck + " '" + osUpdateOutFile + "' || exit \"$rc\"", "\napt-get upgrade -y -q"} {
 		if !strings.Contains(script, w) {
 			t.Fatalf("script lacks %q:\n%s", w, script)
 		}
 	}
-	// not while the aslcp upgrade runs, and not while a check runs
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+	// not while the nodespot upgrade runs, and not while a check runs
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 	if _, err := o.OSApply(context.Background()); !errors.Is(err, ErrBusy) {
 		t.Fatalf("%v", err)
 	}
 	if f.called("systemd-run") != 1 {
 		t.Fatal("second unit started")
 	}
-	r["systemctl show aslcp-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
+	r["systemctl show nodespot-upgrade"] = resp{out: "ActiveState=inactive\nResult=success\n"}
 	o.osCheckMu.Lock()
 	if _, err := o.OSApply(context.Background()); !errors.Is(err, ErrBusy) {
 		t.Fatalf("during check: %v", err)
@@ -249,10 +249,10 @@ func TestOSApply(t *testing.T) {
 	o.osCheckMu.Unlock()
 }
 
-func TestAslcpApplyRefusedWhileOSJobRuns(t *testing.T) {
-	r := map[string]resp{"dpkg-query -W -f=${Version} aslcp": {out: "0.2.0"}, "systemd-run": {}}
+func TestNodespotApplyRefusedWhileOSJobRuns(t *testing.T) {
+	r := map[string]resp{"dpkg-query -W -f=${Version} nodespot": {out: "0.2.0"}, "systemd-run": {}}
 	o, f := osOps(t, r)
-	r["systemctl show aslcp-osupgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+	r["systemctl show nodespot-osupgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 	if _, err := o.UpdateApply(context.Background()); !errors.Is(err, ErrBusy) {
 		t.Fatalf("%v", err)
 	}
@@ -267,7 +267,7 @@ func TestReboot(t *testing.T) {
 	if res, err := o.Reboot(context.Background()); err != nil || !res.OK || f.called("systemctl --no-block reboot") != 1 {
 		t.Fatalf("%+v %v %v", res, err, f.calls)
 	}
-	r["systemctl show aslcp-osupgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
+	r["systemctl show nodespot-osupgrade"] = resp{out: "ActiveState=active\nResult=success\n"}
 	if _, err := o.Reboot(context.Background()); !errors.Is(err, ErrBusy) {
 		t.Fatalf("%v", err)
 	}
@@ -299,13 +299,13 @@ func TestOSOpsOverSocket(t *testing.T) {
 	}
 }
 
-func TestAslcpRestart(t *testing.T) {
-	o, f := osOps(t, map[string]resp{"systemctl --no-block restart aslcp.service": {}})
-	if res, err := o.AslcpRestart(context.Background()); err != nil || !res.OK || f.called("systemctl --no-block restart aslcp.service") != 1 {
+func TestNodespotRestart(t *testing.T) {
+	o, f := osOps(t, map[string]resp{"systemctl --no-block restart nodespot.service": {}})
+	if res, err := o.NodespotRestart(context.Background()); err != nil || !res.OK || f.called("systemctl --no-block restart nodespot.service") != 1 {
 		t.Fatalf("%+v %v %v", res, err, f.calls)
 	}
 	o, _ = osOps(t, map[string]resp{"systemctl --no-block restart": {code: 1, out: "Failed"}})
-	if _, err := o.AslcpRestart(context.Background()); err == nil {
+	if _, err := o.NodespotRestart(context.Background()); err == nil {
 		t.Fatal("expected error")
 	}
 }

@@ -1,7 +1,7 @@
-// Package hostlists keeps the reflector and master lists the digital modes
-// panel offers (DMR masters, YSF and M17 reflectors, P25 and NXDN talkgroups): it
-// downloads them once a day while digital modes are enabled, serves them to
-// the pickers and resolves a picked entry to a tune target.
+// Package hostlists keeps the reflector and master lists the Modes page
+// offers (DMR masters, YSF and M17 reflectors, P25 and NXDN talkgroups): it
+// downloads them once a day (sooner after a failure), serves them to the
+// pickers and resolves a picked entry to a tune target.
 package hostlists
 
 import (
@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	proto "github.com/artw1/aslcp/internal/dv/m17"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	proto "github.com/w1jar/nodespot/internal/dv/m17"
 )
 
 const (
@@ -41,6 +41,9 @@ const (
 	Jitter   = time.Hour
 	// FirstDelay is the wait before the first check after the start.
 	FirstDelay = 60 * time.Second
+	// RetryAfter is the wait before the next check after a failed one (no
+	// network yet at boot, a clock not yet set, the server down).
+	RetryAfter = 10 * time.Minute
 	// ManualEvery is the least time between two manual refreshes.
 	ManualEvery = 10 * time.Minute
 	// Timeout bounds one file's download.
@@ -83,7 +86,7 @@ type Settings interface {
 type Options struct {
 	// Dir is the directory the files are kept in (required).
 	Dir      string
-	Version  string // for the User-Agent "ASLCP/<version>"
+	Version  string // for the User-Agent "nodespot/<version>"
 	Client   *http.Client
 	Settings Settings // nil: the default base URL
 	Logger   *log.Logger
@@ -95,6 +98,8 @@ type Options struct {
 	FirstDelay time.Duration
 	// Interval overrides the period between checks (Jitter is added).
 	Interval time.Duration
+	// Retry overrides RetryAfter.
+	Retry time.Duration
 	// OnChange is called after the status changed.
 	OnChange func()
 }
@@ -156,6 +161,9 @@ func New(o Options) *Manager {
 	}
 	if o.Interval <= 0 {
 		o.Interval = Interval
+	}
+	if o.Retry <= 0 {
+		o.Retry = RetryAfter
 	}
 	return &Manager{o: o, lists: map[string]*loaded{}, meta: map[string]fileMeta{}, errs: map[string]string{}}
 }
@@ -348,7 +356,8 @@ func (m *Manager) Status() Status {
 }
 
 // Run loads the files, checks for new ones after FirstDelay and then about
-// once a day (with jitter) while digital modes are enabled, until ctx ends.
+// once a day (with jitter), until ctx ends. A failed check is tried again
+// after Retry instead of a day later.
 func (m *Manager) Run(ctx context.Context) {
 	m.Load()
 	d := m.o.FirstDelay
@@ -363,7 +372,8 @@ func (m *Manager) Run(ctx context.Context) {
 		next := m.o.Interval + time.Duration(rand.Int63n(int64(2*Jitter))) - Jitter
 		if m.enabled() {
 			if err := m.refresh(ctx, false); err != nil && !errors.Is(err, ErrBusy) {
-				m.o.Logger.Printf("hostlists: %v", err)
+				m.o.Logger.Printf("hostlists: %v (trying again in %s)", err, m.o.Retry)
+				next = m.o.Retry
 			}
 		} else {
 			next = 5 * time.Minute // look again soon: the enable may come any time
@@ -390,7 +400,17 @@ func (m *Manager) Refresh(ctx context.Context) error {
 	}
 	m.lastManual = m.o.Now()
 	m.mu.Unlock()
-	return m.refresh(ctx, true)
+	err := m.refresh(ctx, true)
+	if err != nil && !errors.Is(err, ErrBusy) {
+		// A refresh that got nothing does not count: the admin may try again
+		// at once (the network was down, say).
+		m.mu.Lock()
+		if len(m.errs) >= len(Modes) {
+			m.lastManual = time.Time{}
+		}
+		m.mu.Unlock()
+	}
+	return err
 }
 
 // refresh downloads every list; the first error is returned, the others are
@@ -452,7 +472,7 @@ func (m *Manager) fetch(ctx context.Context, mode string, force bool) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "ASLCP/"+m.o.Version)
+	req.Header.Set("User-Agent", "nodespot/"+m.o.Version)
 	if !force && have {
 		if mt.ETag != "" {
 			req.Header.Set("If-None-Match", mt.ETag)

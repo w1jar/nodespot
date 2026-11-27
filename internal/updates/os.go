@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/helper"
+	"github.com/w1jar/nodespot/internal/helper"
 )
 
 // OSHelper is the part of the helper client the OS update manager needs.
@@ -330,7 +330,7 @@ func (m *OSManager) jobDone(ctx context.Context) bool {
 }
 
 // watchJob re-checks once the upgrade has finished. If the server restarts
-// meanwhile (the aslcp package was upgraded), Run picks the persisted flag up.
+// meanwhile (the nodespot package was upgraded), Run picks the persisted flag up.
 func (m *OSManager) watchJob(ctx context.Context) {
 	tick := m.Tick
 	if tick <= 0 || tick > 5*time.Second {

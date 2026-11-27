@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<service>
-  <short>ASLCP</short>
-  <description>ASLCP, the web control panel of the native node (HTTP on the default port 8080; another port is opened by port number).</description>
-  <port protocol="tcp" port="8080"/>
-</service>

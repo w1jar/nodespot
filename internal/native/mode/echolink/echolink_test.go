@@ -1,15 +1,17 @@
 package echolink
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	el "github.com/artw1/aslcp/internal/native/echolink"
-	"github.com/artw1/aslcp/internal/native/mode"
+	el "github.com/w1jar/nodespot/internal/native/echolink"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 type fakeConn struct {
@@ -33,7 +35,13 @@ func (c *fakeConn) Err() error              { c.mu.Lock(); defer c.mu.Unlock(); 
 func (c *fakeConn) Send(el.Frame) error     { c.mu.Lock(); c.sent++; c.mu.Unlock(); return nil }
 func (c *fakeConn) Flush() error            { c.mu.Lock(); c.flushes++; c.mu.Unlock(); return nil }
 func (c *fakeConn) Station() el.Station     { return c.st }
-func (c *fakeConn) Status() el.ConnStatus   { return el.ConnStatus{Station: c.st} }
+func (c *fakeConn) Status() el.ConnStatus {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// The counters follow what the mode did: a packet per two frames sent.
+	return el.ConnStatus{Station: c.st, TxPackets: uint64(c.sent / 2), RxPackets: 5,
+		RxLate: 1, RxBad: 2, RxDropped: 3, TxErrors: 4}
+}
 func (c *fakeConn) Close() error {
 	c.mu.Lock()
 	c.closed = true
@@ -51,9 +59,12 @@ func (c *fakeConn) end(err error) {
 }
 
 type fakeDir struct {
-	mu     sync.Mutex
-	conns  []*fakeConn
-	closed bool
+	mu       sync.Mutex
+	conns    []*fakeConn
+	closed   bool
+	stations []el.Station
+	listErr  error
+	fetches  int
 }
 
 func (d *fakeDir) Connect(_ context.Context, target string) (Conn, error) {
@@ -69,6 +80,12 @@ func (d *fakeDir) Connect(_ context.Context, target string) (Conn, error) {
 }
 func (d *fakeDir) Close() error      { d.mu.Lock(); d.closed = true; d.mu.Unlock(); return nil }
 func (d *fakeDir) Status() el.Status { return el.Status{LoggedIn: true, Server: "dir.example.net"} }
+func (d *fakeDir) Stations(context.Context) ([]el.Station, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.fetches++
+	return d.stations, d.listErr
+}
 func (d *fakeDir) conn(t *testing.T, n int) *fakeConn {
 	t.Helper()
 	waitFor(t, "conn", func() bool { d.mu.Lock(); defer d.mu.Unlock(); return len(d.conns) >= n })
@@ -79,7 +96,7 @@ func (d *fakeDir) conn(t *testing.T, n int) *fakeConn {
 
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second) // generous for a loaded CI runner
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -121,11 +138,15 @@ func (g *loginGate) login(ctx context.Context, cfg el.Config) (Directory, error)
 
 func newMode(t *testing.T, g *loginGate, vals map[string]string) *Mode {
 	t.Helper()
+	return newModeEnv(t, g, vals, mode.Env{Callsign: "n0call"})
+}
+
+func newModeEnv(t *testing.T, g *loginGate, vals map[string]string, env mode.Env) *Mode {
+	t.Helper()
 	s := mode.Settings{Values: map[string]string{KeyPassword: "pw-secret"}}
 	for k, v := range vals {
 		s.Values[k] = v
 	}
-	env := mode.Env{Callsign: "n0call"}
 	if err := Spec().CheckEnv(env, s); err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +198,7 @@ func TestPendingTargetAndAudio(t *testing.T) {
 		if got[3] != 7 {
 			t.Fatal("frame")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("no audio")
 	}
 	waitFor(t, "talker", func() bool { tk := m.Status().Talker; return tk != nil && tk.Callsign == "N1CALL" })
@@ -192,6 +213,11 @@ func TestPendingTargetAndAudio(t *testing.T) {
 	c.mu.Unlock()
 	if sent != 2 || fl != 1 {
 		t.Fatalf("sent %d flushes %d", sent, fl)
+	}
+	// The end of the transmission updates the link counters at once.
+	want := mode.LinkStats{Proto: "echolink", RxVoiceFull: 5, TxVoice: 1, Late: 1, ParseErrors: 2, Dropped: 3, TxErrors: 4}
+	if l := m.Status().Link; l == nil || *l != want {
+		t.Fatalf("link stats %+v, want %+v", l, want)
 	}
 	// Remote bye: back to ready, still logged in.
 	c.end(el.ErrRemoteBye)
@@ -241,4 +267,100 @@ func TestNotFound(t *testing.T) {
 		t.Fatalf("error %q", m.Status().Error)
 	}
 	_ = m.Stop()
+}
+
+// syncBuf is a goroutine-safe log sink.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *syncBuf) Write(p []byte) (int, error) { b.mu.Lock(); defer b.mu.Unlock(); return b.b.Write(p) }
+func (b *syncBuf) String() string              { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+// TestReceivedLogAndOverflow: frames the mode's receive queue drops count
+// as dropped, in the link counters and in the info line logged at the end
+// of each received transmission.
+func TestReceivedLogAndOverflow(t *testing.T) {
+	var buf syncBuf
+	env := mode.Env{Callsign: "n0call", Log: slog.New(slog.NewTextHandler(&buf, nil))}
+	g := &loginGate{dir: &fakeDir{}}
+	m := newModeEnv(t, g, nil, env)
+	if cap(m.Recv()) != recvBuffer {
+		t.Fatalf("receive queue %d frames, want %d", cap(m.Recv()), recvBuffer)
+	}
+	_ = m.Start(context.Background())
+	defer m.Stop()
+	_ = m.Connect(context.Background(), mode.Target{ID: "*ECHOTEST*"})
+	c := g.dir.conn(t, 1)
+	waitFor(t, "connected", func() bool { return m.Status().State == mode.StateConnected })
+	c.events <- el.Event{Kind: el.EventTalkStart, Callsign: "*ECHOTEST*"}
+	waitFor(t, "talker", func() bool { return m.Talking() })
+	var f el.Frame
+	for i := 0; i < recvBuffer+7; i++ { // nobody plays the queue
+		c.recv <- f
+	}
+	waitFor(t, "overflow", func() bool { return m.Overflow() == 7 })
+	c.events <- el.Event{Kind: el.EventTalkStop, Packets: 377, Late: 2, Dropped: 1}
+	waitFor(t, "log", func() bool {
+		return strings.Contains(buf.String(), `msg="echolink: received 377 packets (late 2, dropped 8)" station=*ECHOTEST*`)
+	})
+	if l := m.Status().Link; l == nil || l.Dropped != 3+7 {
+		t.Fatalf("link stats %+v, want dropped %d", l, 3+7)
+	}
+}
+
+func TestSearchDirectory(t *testing.T) {
+	dir := &fakeDir{stations: []el.Station{
+		{Callsign: "N0CALL-L", ID: 1997, Location: "Springfield, ST", Status: "ON"},
+		{Callsign: "*ECHOTEST*", ID: 9999, Location: "Test server", Status: "ON"},
+		{Callsign: "N1CALL-R", ID: 2001, Location: "Shelbyville, XX", Status: "BUSY"},
+		{Callsign: "*TEST*", ID: 2002, Location: "Test conference"},
+		{Callsign: "N1CALL", ID: 1998, Location: "Metropolis, ST", Status: "ON"},
+	}}
+	g := &loginGate{dir: dir, open: make(chan struct{})}
+	m := newMode(t, g, nil)
+	ctx := context.Background()
+
+	// Before the login there is nothing to search.
+	r, err := m.SearchDirectory(ctx, "n0", 10)
+	if err != nil || r.Loaded || len(r.Results) != 0 || r.Results == nil {
+		t.Fatalf("before start: %+v %v", r, err)
+	}
+	_ = m.Start(ctx)
+	r, _ = m.SearchDirectory(ctx, "n0", 10)
+	if r.Loaded {
+		t.Fatalf("before login: %+v", r)
+	}
+	close(g.open)
+	waitFor(t, "login", func() bool { return m.Status().State == mode.StateReady })
+	defer m.Stop()
+
+	r, err = m.SearchDirectory(ctx, "n1call", 10)
+	if err != nil || !r.Loaded || len(r.Results) != 2 || r.Results[0].Callsign != "N1CALL" || r.Results[1].Callsign != "N1CALL-R" {
+		t.Fatalf("n1call: %+v %v", r, err)
+	}
+	if e := r.Results[1]; e.Kind != "repeater" || e.Status != "busy" || e.Node != 2001 || e.Location != "Shelbyville, XX" {
+		t.Fatalf("entry %+v", e)
+	}
+	r, _ = m.SearchDirectory(ctx, "199", 10)
+	if len(r.Results) != 2 || r.Results[0].Node != 1997 || r.Results[0].Kind != "link" || r.Results[0].Status != "online" {
+		t.Fatalf("node prefix: %+v", r.Results)
+	}
+	r, _ = m.SearchDirectory(ctx, "*test*", 10)
+	if len(r.Results) != 2 || r.Results[0].Callsign != "*TEST*" || r.Results[0].Kind != "conference" || r.Results[1].Callsign != "*ECHOTEST*" {
+		t.Fatalf("conference: %+v", r.Results)
+	}
+	r, _ = m.SearchDirectory(ctx, "call", 2)
+	if len(r.Results) != 2 {
+		t.Fatalf("limit: %+v", r.Results)
+	}
+
+	dir.mu.Lock()
+	dir.listErr = errors.New("echolink: directory: dial: refused")
+	dir.mu.Unlock()
+	r, err = m.SearchDirectory(ctx, "n0", 10)
+	if err != nil || r.Loaded || r.Error == "" || len(r.Results) != 0 {
+		t.Fatalf("download failure: %+v %v", r, err)
+	}
 }

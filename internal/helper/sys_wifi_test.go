@@ -186,13 +186,13 @@ func TestCountNeighbors(t *testing.T) {
 }
 
 func TestHotspotSSID(t *testing.T) {
-	if s := hotspotSSID("node2001"); s != "ASLCP-node2001" {
+	if s := hotspotSSID("node2001"); s != "nodespot-node2001" {
 		t.Error(s)
 	}
-	if s := hotspotSSID("Node_2001.example"); s != "ASLCP-node2001example" {
+	if s := hotspotSSID("Node_2001.example"); s != "nodespot-node2001example" {
 		t.Error(s)
 	}
-	if s := hotspotSSID(""); s != "ASLCP-node" {
+	if s := hotspotSSID(""); s != "nodespot-node" {
 		t.Error(s)
 	}
 	if s := hotspotSSID(strings.Repeat("a", 63)); len(s) > 32 {
@@ -209,7 +209,7 @@ func TestWifiStatusAndList(t *testing.T) {
 	if len(st.Devices) != 2 || st.Devices[1].Addrs[0] != "192.0.2.20" {
 		t.Errorf("devices %+v", st.Devices)
 	}
-	if !st.Hotspot.Enabled || st.Hotspot.SSID != "ASLCP-node2001" || st.Hotspot.DelaySeconds != 180 || st.Hotspot.Address != "10.42.0.1" {
+	if !st.Hotspot.Enabled || st.Hotspot.SSID != "nodespot-node2001" || st.Hotspot.DelaySeconds != 180 || st.Hotspot.Address != "10.42.0.1" {
 		t.Errorf("hotspot defaults %+v", st.Hotspot)
 	}
 	l, err := o.WifiList(context.Background())
@@ -298,7 +298,7 @@ func TestWifiConnectNew(t *testing.T) {
 		t.Errorf("%+v", res)
 	}
 	noSecretInArgv(t, f, "example-pass")
-	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "aslcp-*.nmconnection"))
+	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "nodespot-*.nmconnection"))
 	if len(files) != 1 {
 		t.Fatalf("keyfile not written: %v", files)
 	}
@@ -328,7 +328,7 @@ func TestWifiConnectReplacesSameSSID(t *testing.T) {
 	if f.called("nmcli connection delete uuid "+idA) != 1 {
 		t.Error("old profile not deleted")
 	}
-	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "aslcp-*.nmconnection"))
+	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "nodespot-*.nmconnection"))
 	b, _ := os.ReadFile(files[0])
 	if !strings.Contains(string(b), "autoconnect-priority=100\n") {
 		t.Errorf("priority not kept:\n%s", b)
@@ -345,7 +345,7 @@ func TestWifiConnectFailureRollsBackAndRedacts(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "example-pass") || !strings.Contains(err.Error(), "password may be wrong") {
 		t.Fatalf("%v", err)
 	}
-	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "aslcp-*.nmconnection"))
+	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "nodespot-*.nmconnection"))
 	if len(files) != 0 {
 		t.Error("keyfile left behind")
 	}
@@ -388,7 +388,7 @@ func TestWifiConnectOpenAndSAE(t *testing.T) {
 	if _, err := o.WifiConnect(context.Background(), "Wpa3Only", "example-pass", false); err != nil {
 		t.Fatal(err)
 	}
-	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "aslcp-*.nmconnection"))
+	files, _ := filepath.Glob(filepath.Join(o.Wifi.NMDir, "nodespot-*.nmconnection"))
 	var open, sae bool
 	for _, f := range files {
 		b, _ := os.ReadFile(f)
@@ -483,7 +483,7 @@ func TestHotspotSetOffAndOn(t *testing.T) {
 	if err != nil || !st.Hotspot.Enabled || st.Hotspot.DelaySeconds != 300 {
 		t.Fatalf("%v %+v", err, st)
 	}
-	if f.called("nmcli connection add type wifi con-name aslcp-hotspot ifname wlan0 ssid ASLCP-node2001") != 1 {
+	if f.called("nmcli connection add type wifi con-name nodespot-hotspot ifname wlan0 ssid nodespot-node2001") != 1 {
 		t.Errorf("profile not created: %v", f.calls)
 	}
 	for _, c := range f.calls {
@@ -510,19 +510,19 @@ func TestHotspotFirewalldZone(t *testing.T) {
 	r := wifiRules()
 	r["nmcli connection"] = resp{}
 	r["firewall-cmd --state"] = resp{out: "running\n"}
-	r["firewall-cmd --permanent --get-zones"] = resp{out: "public aslcp-hotspot\n"}
+	r["firewall-cmd --permanent --get-zones"] = resp{out: "public nodespot-hotspot\n"}
 	r["firewall-cmd"] = resp{}
 	o, f := newWifiOps(t, r)
 	if _, err := o.WifiHotspotSet(context.Background(), true, 0); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"firewall-cmd --permanent --delete-zone=aslcp-hotspot",
-		"firewall-cmd --permanent --new-zone=aslcp-hotspot",
-		"firewall-cmd --permanent --zone=aslcp-hotspot --set-target=DROP",
-		"firewall-cmd --permanent --zone=aslcp-hotspot --add-port=8080/tcp",
-		"firewall-cmd --permanent --zone=aslcp-hotspot --add-service=dhcp",
-		"firewall-cmd --permanent --zone=aslcp-hotspot --add-service=dns",
+		"firewall-cmd --permanent --delete-zone=nodespot-hotspot",
+		"firewall-cmd --permanent --new-zone=nodespot-hotspot",
+		"firewall-cmd --permanent --zone=nodespot-hotspot --set-target=DROP",
+		"firewall-cmd --permanent --zone=nodespot-hotspot --add-port=8080/tcp",
+		"firewall-cmd --permanent --zone=nodespot-hotspot --add-service=dhcp",
+		"firewall-cmd --permanent --zone=nodespot-hotspot --add-service=dns",
 		"firewall-cmd --reload",
 	} {
 		if f.called(want) == 0 {
@@ -531,7 +531,7 @@ func TestHotspotFirewalldZone(t *testing.T) {
 	}
 	zoned := false
 	for _, c := range f.calls {
-		if strings.HasPrefix(c, "nmcli connection add") && strings.Contains(c, "connection.zone aslcp-hotspot") {
+		if strings.HasPrefix(c, "nmcli connection add") && strings.Contains(c, "connection.zone nodespot-hotspot") {
 			zoned = true
 		}
 	}
@@ -655,7 +655,7 @@ func watchRules(devices string) map[string]resp {
 	r := wifiRules()
 	r["nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device status"] = resp{out: devices}
 	r["nmcli connection"] = resp{}
-	r["nmcli --wait 30 connection up id aslcp-hotspot"] = resp{}
+	r["nmcli --wait 30 connection up id nodespot-hotspot"] = resp{}
 	r["nmcli device connect"] = resp{}
 	r["firewall-cmd"] = resp{err: errors.New("not found")}
 	r["ip neigh show dev wlan0"] = resp{out: ""}
@@ -679,7 +679,7 @@ func TestWatchdogStartsAfterDelay(t *testing.T) {
 	if err := o.RunWifiWatchdog(context.Background(), &log); err != nil {
 		t.Fatal(err)
 	}
-	if f.called("nmcli connection add type wifi con-name aslcp-hotspot") != 1 || f.called("nmcli --wait 30 connection up id aslcp-hotspot ifname wlan0") != 1 {
+	if f.called("nmcli connection add type wifi con-name nodespot-hotspot") != 1 || f.called("nmcli --wait 30 connection up id nodespot-hotspot ifname wlan0") != 1 {
 		t.Errorf("hotspot not started: %v\nlog: %s", f.calls, log.String())
 	}
 }
@@ -695,12 +695,12 @@ func TestWatchdogStopsWhenNetworkConnects(t *testing.T) {
 		t.Error("stopped something that was not running")
 	}
 	// the hotspot is up and Ethernet appears
-	o, f = newWifiOps(t, watchRules("eth0:ethernet:connected:x\nwlan0:wifi:connected:aslcp-hotspot\n"))
+	o, f = newWifiOps(t, watchRules("eth0:ethernet:connected:x\nwlan0:wifi:connected:nodespot-hotspot\n"))
 	o.Now = func() time.Time { return time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC) }
 	if err := o.RunWifiWatchdog(context.Background(), &strings.Builder{}); err != nil {
 		t.Fatal(err)
 	}
-	if f.called("nmcli connection down id aslcp-hotspot") != 1 {
+	if f.called("nmcli connection down id nodespot-hotspot") != 1 {
 		t.Errorf("hotspot not stopped: %v", f.calls)
 	}
 }
@@ -764,7 +764,7 @@ func TestWifiOpsViaHandler(t *testing.T) {
 	if _, err := o.HandleRequest(context.Background(), Request{Op: OpWifiHotspot, Sys: &SysRequest{}}); err == nil {
 		t.Error("hotspot-set without enabled accepted")
 	}
-	if !ValidLogUnit("aslcp-wifi-watchdog") {
+	if !ValidLogUnit("nodespot-wifi-watchdog") {
 		t.Error("watchdog log unit missing")
 	}
 }

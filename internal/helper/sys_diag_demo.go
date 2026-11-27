@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/artw1/aslcp/internal/diag"
+	"github.com/w1jar/nodespot/internal/diag"
 )
 
 // DiagBundle builds a small bundle from canned data for --demo. It runs the
@@ -25,10 +25,10 @@ func (d *DemoSystem) DiagBundle(_ context.Context, req DiagRequest) (io.ReadClos
 	if err != nil {
 		return nil, err
 	}
-	b.add("report.txt", "ASLCP status report (demo)", orDefault(req.Report, "ASLCP demo report\nnode 2001 N0CALL at 192.0.2.10\n"), diag.KindText, DiagMaxReport)
-	b.add("versions.txt", "Versions (demo)", "ASLCP: "+orDefault(req.Version, "demo")+"\naslcp-node (demo)\n", diag.KindText, diagMaxFile)
+	b.add("report.txt", "nodespot status report (demo)", orDefault(req.Report, "nodespot demo report\nnode 2001 N0CALL at 192.0.2.10\n"), diag.KindText, DiagMaxReport)
+	b.add("versions.txt", "Versions (demo)", "nodespot: "+orDefault(req.Version, "demo")+"\nnodespot-node (demo)\n", diag.KindText, diagMaxFile)
 	b.add("network.txt", "Network status (demo)", "eth0: UP\n    inet 192.0.2.10/24 scope global\n", diag.KindText, diagMaxFile)
-	b.add("journal/aslcp-node.txt", "Journal of aslcp-node (demo)", "2026-11-20T12:00:00+0000 node2001 aslcp-node[412]: allstar: N0CALL registered from 192.0.2.10 with example-pass\n", diag.KindText, diagMaxFile)
+	b.add("journal/nodespot-node.txt", "Journal of nodespot-node (demo)", "2026-11-20T12:00:00+0000 node2001 nodespot-node[412]: allstar: N0CALL registered from 192.0.2.10 with example-pass\n", diag.KindText, diagMaxFile)
 	b.add("config/node.json", "Node configuration (demo, mode passwords removed)", conf, diag.KindConf, diagMaxConf)
 	b.add("audit.txt", "Recent audit log entries (demo)", orDefault(req.Audit, "(demo)\n"), diag.KindText, DiagMaxAudit)
 	bundle, err := b.pack()

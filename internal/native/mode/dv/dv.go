@@ -4,16 +4,17 @@ import (
 	"context"
 
 	"fmt"
+	"log/slog"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/artw1/aslcp/internal/dv/ctl"
-	"github.com/artw1/aslcp/internal/dv/imbe"
-	"github.com/artw1/aslcp/internal/dv/network"
-	"github.com/artw1/aslcp/internal/dv/vocoder"
-	"github.com/artw1/aslcp/internal/native/audio"
-	"github.com/artw1/aslcp/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/dv/ctl"
+	"github.com/w1jar/nodespot/internal/dv/imbe"
+	"github.com/w1jar/nodespot/internal/dv/network"
+	"github.com/w1jar/nodespot/internal/dv/vocoder"
+	"github.com/w1jar/nodespot/internal/native/audio"
+	"github.com/w1jar/nodespot/internal/native/mode"
 )
 
 // DefaultMD380 is the md380-emu address used when the node gives none.
@@ -195,6 +196,11 @@ func (m *Mode) Start(context.Context) error {
 		m.mu.Unlock()
 		m.SetState(mode.StateError, "", err.Error())
 		return fmt.Errorf("%s: %w", m.d.title, err)
+	}
+	// A network that has debug lines (BrandMeister) logs to the node's
+	// logger, so they show with the node's -debug flag.
+	if l, ok := n.(interface{ SetLogger(*slog.Logger) }); ok {
+		l.SetLogger(m.env.Logger())
 	}
 	m.gen++
 	gen := m.gen

@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/artw1/aslcp/internal/native/mode"
-	"github.com/artw1/aslcp/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/mode"
+	"github.com/w1jar/nodespot/internal/native/radio"
 )
 
 // ErrUnavailable wraps every failure to reach the node (no socket, the
@@ -225,11 +225,25 @@ func (c *Client) InputLevel(ctx context.Context) (InputLevel, error) {
 	return out, err
 }
 
-// RadioTune sets the sound chip's receive and transmit levels (nil keeps
-// one) and saves them.
-func (c *Client) RadioTune(ctx context.Context, rx, tx *float64) (radio.Levels, error) {
+// RadioTune sets the sound chip's receive and transmit levels and the
+// receive boost (nil keeps one) and saves them.
+func (c *Client) RadioTune(ctx context.Context, rx, tx *float64, boost *bool) (radio.Levels, error) {
 	var out radio.Levels
-	err := c.Call(ctx, OpRadioTune, map[string]*float64{"rxVolume": rx, "txVolume": tx}, &out)
+	err := c.Call(ctx, OpRadioTune, map[string]any{"rxVolume": rx, "txVolume": tx, "rxBoost": boost}, &out)
+	return out, err
+}
+
+// AutosetRx starts the receive auto-set, or cancels it.
+func (c *Client) AutosetRx(ctx context.Context, cancel bool) (AutosetStatus, error) {
+	var out AutosetStatus
+	err := c.Call(ctx, OpAutosetRx, map[string]any{"cancel": cancel}, &out)
+	return out, err
+}
+
+// AutosetStatus returns the state of the receive auto-set.
+func (c *Client) AutosetStatus(ctx context.Context) (AutosetStatus, error) {
+	var out AutosetStatus
+	err := c.Call(ctx, OpAutosetStat, nil, &out)
 	return out, err
 }
 
@@ -248,10 +262,36 @@ func (c *Client) RadioProgram(ctx context.Context) (Status, error) {
 	return out, err
 }
 
+// RadioTuningDismiss dismisses the "tune your audio" reminder for the
+// radio interface in use and saves it.
+func (c *Client) RadioTuningDismiss(ctx context.Context) (Status, error) {
+	var out Status
+	err := c.Call(ctx, OpTuningDismiss, nil, &out)
+	return out, err
+}
+
+// TestTone keys the radio with the 1 kHz test tone for seconds (0: the
+// default 5, at most 10), or with stop ends it early.
+func (c *Client) TestTone(ctx context.Context, seconds float64, stop bool) (Status, error) {
+	var out Status
+	err := c.Call(ctx, OpTestTone, map[string]any{"seconds": seconds, "stop": stop}, &out)
+	return out, err
+}
+
 // Reload makes the node read its config file again.
 func (c *Client) Reload(ctx context.Context) (Status, error) {
 	var out Status
 	err := c.Call(ctx, OpReload, nil, &out)
+	return out, err
+}
+
+// SearchDirectory searches the station directory of mode name (EchoLink).
+func (c *Client) SearchDirectory(ctx context.Context, name, q string, limit int) (mode.DirResult, error) {
+	var out mode.DirResult
+	err := c.Call(ctx, OpDirSearch, map[string]any{"mode": name, "q": q, "limit": limit}, &out)
+	if out.Results == nil {
+		out.Results = []mode.DirEntry{}
+	}
 	return out, err
 }
 
