@@ -44,6 +44,7 @@ func (s *Server) nodeRoutes() {
 	m.HandleFunc("GET /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetGet))
 	m.HandleFunc("POST /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetStart))
 	m.HandleFunc("DELETE /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetCancel))
+	m.HandleFunc("POST /api/radio/tuning/dismiss", s.authed(store.RoleAdmin, s.handleTuningDismiss))
 	m.HandleFunc("POST /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestTone))
 	m.HandleFunc("DELETE /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestToneStop))
 	m.HandleFunc("GET /api/hostlists", s.authed(store.RoleOperator, s.handleHostLists))
@@ -503,6 +504,25 @@ func (s *Server) handleRadioProgram(w http.ResponseWriter, r *http.Request, u st
 		return
 	}
 	s.audit(u, "radio.program", nil)
+	s.adopt(st)
+	writeJSON(w, 200, s.nw.json())
+}
+
+// handleTuningDismiss dismisses the "tune your audio" reminder for the radio
+// interface in use (it comes back if the hardware changes) and answers the
+// node status.
+func (s *Server) handleTuningDismiss(w http.ResponseWriter, r *http.Request, u store.User) {
+	if !s.nodeReady(w) {
+		return
+	}
+	ctx, cancel := nodeCtx(r)
+	defer cancel()
+	st, err := s.d.Node.RadioTuningDismiss(ctx)
+	if err != nil {
+		s.nodeErr(w, err)
+		return
+	}
+	s.audit(u, "radio.tuning.dismiss", nil)
 	s.adopt(st)
 	writeJSON(w, 200, s.nw.json())
 }

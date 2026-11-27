@@ -144,6 +144,8 @@ export const api = {
   radioAutoset: () => req<AutosetStatus>('GET', '/radio/autoset'),
   startAutoset: () => req<AutosetStatus>('POST', '/radio/autoset'),
   cancelAutoset: () => req<AutosetStatus>('DELETE', '/radio/autoset'),
+  /** Dismisses the "tune your audio" reminder for the radio in use (admin). */
+  dismissTuning: () => req<NodeJSON>('POST', '/radio/tuning/dismiss'),
   radioInput: () => req<InputLevel>('GET', '/radio/input'),
   radioInfo: () => req<RadioInfo>('GET', '/radio/info'),
   radioProgram: () => req<NodeJSON>('POST', '/radio/program'),

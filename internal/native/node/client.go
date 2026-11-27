@@ -262,6 +262,14 @@ func (c *Client) RadioProgram(ctx context.Context) (Status, error) {
 	return out, err
 }
 
+// RadioTuningDismiss dismisses the "tune your audio" reminder for the
+// radio interface in use and saves it.
+func (c *Client) RadioTuningDismiss(ctx context.Context) (Status, error) {
+	var out Status
+	err := c.Call(ctx, OpTuningDismiss, nil, &out)
+	return out, err
+}
+
 // TestTone keys the radio with the 1 kHz test tone for seconds (0: the
 // default 5, at most 10), or with stop ends it early.
 func (c *Client) TestTone(ctx context.Context, seconds float64, stop bool) (Status, error) {

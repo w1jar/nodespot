@@ -42,27 +42,28 @@ type Response struct {
 
 // Control ops.
 const (
-	OpStatus      = "status"       // -> Status
-	OpModes       = "modes"        // -> []ModeInfo (passwords never returned)
-	OpSaveStation = "save_station" // {station} -> Status
-	OpSaveMode    = "save_mode"    // {mode, settings} -> ModeInfo list
-	OpDeleteMode  = "delete_mode"  // {mode}
-	OpSelect      = "select"       // {mode, target?} -> Status ("" or "none": idle)
-	OpConnect     = "connect"      // {target} on the active mode -> Status
-	OpDisconnect  = "disconnect"   // -> Status
-	OpLastHeard   = "last_heard"   // {limit?} -> []mode.Heard
-	OpNowCalling  = "now_calling"  // -> *Calling (null when nobody is talking)
-	OpRadioLevels = "radio_levels" // -> radio.Levels
-	OpInputLevel  = "input_level"  // -> InputLevel
-	OpRadioTune   = "radio_tune"   // {rxVolume?, txVolume?, rxBoost?} -> radio.Levels
-	OpRadioProg   = "radio_program"
-	OpRadioInfo   = "radio_info"     // -> RadioDetail
-	OpTestTone    = "test_tone"      // {seconds?, stop?} -> Status (seconds 0: 5, at most 10)
-	OpAutosetRx   = "autoset_rx"     // {cancel?} -> AutosetStatus (starts, or cancels, the receive auto-set)
-	OpAutosetStat = "autoset_status" // -> AutosetStatus
-	OpConfig      = "config"         // -> the station settings (no mode passwords)
-	OpReload      = "reload"         // read the config file again
-	OpSubscribe   = "subscribe"      // the connection then streams Event lines
+	OpStatus        = "status"       // -> Status
+	OpModes         = "modes"        // -> []ModeInfo (passwords never returned)
+	OpSaveStation   = "save_station" // {station} -> Status
+	OpSaveMode      = "save_mode"    // {mode, settings} -> ModeInfo list
+	OpDeleteMode    = "delete_mode"  // {mode}
+	OpSelect        = "select"       // {mode, target?} -> Status ("" or "none": idle)
+	OpConnect       = "connect"      // {target} on the active mode -> Status
+	OpDisconnect    = "disconnect"   // -> Status
+	OpLastHeard     = "last_heard"   // {limit?} -> []mode.Heard
+	OpNowCalling    = "now_calling"  // -> *Calling (null when nobody is talking)
+	OpRadioLevels   = "radio_levels" // -> radio.Levels
+	OpInputLevel    = "input_level"  // -> InputLevel
+	OpRadioTune     = "radio_tune"   // {rxVolume?, txVolume?, rxBoost?} -> radio.Levels
+	OpRadioProg     = "radio_program"
+	OpRadioInfo     = "radio_info"           // -> RadioDetail
+	OpTestTone      = "test_tone"            // {seconds?, stop?} -> Status (seconds 0: 5, at most 10)
+	OpAutosetRx     = "autoset_rx"           // {cancel?} -> AutosetStatus (starts, or cancels, the receive auto-set)
+	OpAutosetStat   = "autoset_status"       // -> AutosetStatus
+	OpTuningDismiss = "radio_tuning_dismiss" // -> Status (dismisses the "tune your audio" reminder)
+	OpConfig        = "config"               // -> the station settings (no mode passwords)
+	OpReload        = "reload"               // read the config file again
+	OpSubscribe     = "subscribe"            // the connection then streams Event lines
 )
 
 // Server serves the control API on a Unix socket.
@@ -320,6 +321,11 @@ func (s *Server) do(ctx context.Context, req Request) (any, error) {
 		return e.Levels(), nil
 	case OpRadioInfo:
 		return e.RadioInfo(), nil
+	case OpTuningDismiss:
+		if err := e.DismissTuning(); err != nil {
+			return nil, err
+		}
+		return e.Status(), nil
 	case OpAutosetStat:
 		return e.AutosetStatus(), nil
 	case OpAutosetRx:

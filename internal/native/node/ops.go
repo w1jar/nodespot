@@ -57,6 +57,10 @@ type RadioStatus struct {
 	SA818    bool   `json:"sa818"`
 	PTT      bool   `json:"ptt"`
 	COS      bool   `json:"cos"`
+	// NeedsTuning is true when a radio is present, its sound chip has a
+	// receive level control and the audio has not been tuned (or the reminder
+	// dismissed) for this hardware: the page shows "tune your audio".
+	NeedsTuning bool `json:"needsTuning"`
 	// Level is the receive level over the last 100 ms (see InputLevel).
 	Level InputLevel `json:"level"`
 	// LastRx summarizes the last local transmission long enough to judge
@@ -104,7 +108,9 @@ type IDStatus struct {
 
 // Status returns a snapshot of the node.
 func (e *Engine) Status() Status {
+	hasCapture := e.hasCaptureControl()
 	e.mu.Lock()
+	needsTuning := hasCapture && !e.cfg.Station.Tuned(HardwareID(e.info))
 	st := Status{
 		Callsign: e.cfg.Station.Callsign,
 		Started:  e.started,
@@ -114,7 +120,8 @@ func (e *Engine) Status() Status {
 			Preset: string(e.info.Interface.Preset), Chip: e.info.Chip, USBID: e.info.USBID,
 			Product: e.info.Product, Detected: e.info.Detected, SA818: e.info.Interface.SA818,
 			RxActive: e.sx.rfOn, NetDropped: e.sx.netDropped, RxLocked: e.sx.rfLocked, TxLocked: e.sx.txLocked, PTTStuck: e.sx.pttStuck,
-			TestTone: e.sx.tone != nil,
+			TestTone:    e.sx.tone != nil,
+			NeedsTuning: needsTuning,
 		},
 		ID: IDStatus{
 			Enabled: e.params.id.on, Owed: e.sx.idT.owed,
@@ -232,7 +239,11 @@ func (e *Engine) SaveStation(st Station) error {
 	e.mu.Unlock()
 	old := c.Station
 	st.Active = old.Active
+	st.AudioTuned = old.AudioTuned
 	c.Station = st
+	if r := st.Radio.RxVolume; r != nil && (old.Radio.RxVolume == nil || *old.Radio.RxVolume != *r) {
+		e.markTuned(c, false)
+	}
 	c.Normalize()
 	if err := c.Validate(); err != nil {
 		return err
@@ -387,6 +398,7 @@ func (e *Engine) Tune(rx, tx *float64, boost *bool) error {
 	if rx != nil {
 		v := *rx
 		c.Station.Radio.RxVolume = &v
+		e.markTuned(c, false)
 	}
 	if tx != nil {
 		v := *tx
@@ -399,6 +411,40 @@ func (e *Engine) Tune(rx, tx *float64, boost *bool) error {
 	if err := e.applyVolumes(c.Station.Radio); err != nil {
 		return err
 	}
+	return e.commit(c, false)
+}
+
+// hasCaptureControl reports whether a radio is present and its sound chip has
+// a receive level control. A chip's controls do not change while it is open,
+// so the mixer is read once (a positive answer is kept; a fake that gains
+// steps later is asked again).
+func (e *Engine) hasCaptureControl() bool {
+	if e.o.RadioAbsent {
+		return false
+	}
+	if e.capture.Load() {
+		return true
+	}
+	ok := e.o.Radio.Levels().CaptureSteps > 0
+	e.capture.Store(ok)
+	return ok
+}
+
+// markTuned records in c that the audio is tuned (or, with dismissed, that the
+// reminder was dismissed) for the hardware in use.
+func (e *Engine) markTuned(c *Config, dismissed bool) {
+	c.Station.AudioTuned = &AudioTuned{At: e.now().UTC().Truncate(time.Second), Interface: HardwareID(e.info), Dismissed: dismissed}
+}
+
+// DismissTuning records that an admin dismissed the "tune your audio"
+// reminder for this hardware and saves it.
+func (e *Engine) DismissTuning() error {
+	e.opMu.Lock()
+	defer e.opMu.Unlock()
+	e.mu.Lock()
+	c := e.cfg.Clone()
+	e.mu.Unlock()
+	e.markTuned(c, true)
 	return e.commit(c, false)
 }
 

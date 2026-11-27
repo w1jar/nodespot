@@ -2,7 +2,8 @@
   // Overview: the station (radio, PTT/COS, levels, ID), the active mode and target, who is talking,
   // pinned favorites, schedules and one Last heard list across all modes.
   import { api } from '../lib/api';
-  import { app, canOperate, clock } from '../lib/store.svelte';
+  import { app, canOperate, clock, refreshNode } from '../lib/store.svelte';
+  import { TUNE_HREF, showTuneBanner } from '../lib/tuning';
   import { toast, toastError } from '../lib/toast.svelte';
   import { favoriteActive, modeTitle, pinnedFavorites, stateText, targetBody, targetText } from '../lib/modes';
   import { agoText, who } from '../lib/nowcalling';
@@ -15,6 +16,7 @@
   import Mic from '@lucide/svelte/icons/mic';
   import Unplug from '@lucide/svelte/icons/unplug';
   import PinFace from './PinFace.svelte';
+  import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
   import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 
   const op = $derived(canOperate());
@@ -41,6 +43,13 @@
     if (node?.registration && !node.registration.registered && node.active === 'allstar') a.push({ key: 'reg', text: `AllStarLink registration: ${node.registration.lastError || 'not registered yet'}`, href: '/modes?mode=allstar' });
     return a;
   });
+
+  const tuneBanner = $derived(showTuneBanner(app.user?.role, node));
+  async function dismissTune() {
+    if (busy) return;
+    busy = 'tune';
+    try { await api.dismissTuning(); await refreshNode(); } catch (e) { toastError(e); } finally { busy = ''; }
+  }
 
   let busy = $state('');
   async function unlink() {
@@ -70,6 +79,16 @@
     <p class="py-10 text-center text-sm text-muted" role="status">Loading node status…</p>
   {:else}
     <SchedulesCard />
+    {#if tuneBanner}
+      <section class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm" aria-label="Tune your audio" data-testid="tune-banner">
+        <SlidersHorizontal size={15} class="shrink-0 text-warn" aria-hidden="true" />
+        <p class="min-w-0 flex-1 basis-48">Your radio audio hasn't been tuned yet.</p>
+        <div class="flex shrink-0 items-center gap-2">
+          <a class="btn btn-primary btn-sm" href={TUNE_HREF} data-testid="tune-now">Tune now</a>
+          <button type="button" class="btn btn-sm" disabled={!!busy} data-testid="tune-dismiss" onclick={dismissTune}>Dismiss</button>
+        </div>
+      </section>
+    {/if}
     {#if alerts.length}
       <section class="space-y-1" aria-label="Alerts" data-testid="alerts">
         {#each alerts as a (a.key)}

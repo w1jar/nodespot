@@ -47,6 +47,47 @@ type Station struct {
 	// configs only (it seeds the mode's remembered tune); see Tune.
 	Active   *Selection `json:"active,omitempty"`
 	Advanced Advanced   `json:"advanced"`
+	// AudioTuned records that the receive audio was tuned (or the reminder
+	// dismissed) for one radio interface. The node sets it; see AudioTuned.
+	AudioTuned *AudioTuned `json:"audioTuned,omitempty"`
+}
+
+// AudioTuned remembers that the node's receive audio has been tuned: by
+// Auto-set, by setting the receive level by hand, by an admin dismissing the
+// "tune your audio" reminder, or (for a config that predates this record) by
+// an audio level already being stored. It belongs to one radio interface: when
+// the detected interface or sound chip is another one, the node is untuned
+// again, a dismissal included.
+type AudioTuned struct {
+	// At is when it was recorded (RFC 3339).
+	At time.Time `json:"at"`
+	// Interface identifies the hardware it was recorded for: the interface
+	// preset in use and the sound chip's USB id, "shari:0d8c:0012" (see
+	// HardwareID).
+	Interface string `json:"interface"`
+	// Dismissed is true when an admin dismissed the reminder instead of tuning.
+	Dismissed bool `json:"dismissed,omitempty"`
+}
+
+// HardwareID is the identity a tuning record is kept for: the interface
+// preset in use and the USB id of the detected sound chip.
+func HardwareID(i radio.Info) string {
+	return string(i.Interface.Preset) + ":" + i.USBID
+}
+
+// Tuned reports whether the audio counts as tuned (or dismissed) for the
+// hardware hw.
+func (s Station) Tuned(hw string) bool {
+	return s.AudioTuned != nil && s.AudioTuned.Interface == hw
+}
+
+// legacyTuned reports whether a config without an AudioTuned record shows the
+// audio was set up already: any stored audio level (receive or transmit
+// volume, receive boost, a static gain or an AGC target).
+func (s Station) legacyTuned() bool {
+	r, a := s.Radio, s.Advanced
+	return r.RxVolume != nil || r.TxVolume != nil || r.RxBoost != nil ||
+		a.RxGainDB != 0 || a.TxGainDB != 0 || a.RxAGCTarget != 0 || a.TxAGCTarget != 0 || a.AGCMax != 0
 }
 
 // Largest station digital IDs: DMR IDs are 24 bits, NXDN unit IDs 16 bits.

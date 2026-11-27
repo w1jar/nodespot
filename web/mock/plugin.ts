@@ -87,6 +87,8 @@ let programmedFilters: { emphasis: boolean; highPass: boolean; lowPass: boolean;
 let stationSet = process.env.MOCK_STATION_SETUP !== '1';
 if (!stationSet) { station.callsign = ''; delete station.dmrId; }
 const radioPresent = process.env.MOCK_NO_RADIO !== '1';
+// The audio starts untuned (the dashboard reminder shows); Auto-set, a hand-set receive level or Dismiss clear it. MOCK_TUNED=1 starts tuned.
+let audioTuned = process.env.MOCK_TUNED === '1';
 // The radio interface presets, as the node lists them. MOCK_NO_RADIO=1 is a node with no USB interface.
 const iface = (preset: string, audio: boolean, o: Record<string, unknown>) => ({ preset, audio, pttPin: 0, pttActiveLow: false, cos: 'none', cosActiveLow: false, ctcss: 'none', ctcssActiveLow: false, sa818: false, ...o });
 const presets = [
@@ -158,14 +160,14 @@ const autoStatus = () => {
   if (!auto.applied) {
     const max = Number(station.advanced.agcMaxDb ?? 18), floor = -22 - max + 6, step = Math.min(CAP_STEPS, Math.max(0, Math.ceil(floor + 52)));
     station.radio.rxVolume = step / CAP_STEPS;
-    auto.applied = true; auto.result = { step, steps: CAP_STEPS, db: capDb(step), speechDb: -52 + step, peakDb: -36 + step };
+    auto.applied = true; audioTuned = true; auto.result = { step, steps: CAP_STEPS, db: capDb(step), speechDb: -52 + step, peakDb: -36 + step };
   }
   return { state: 'done', result: auto.result };
 };
 const nodeJSON = () => ({
   callsign: station.callsign || undefined, started,
   echoTest: { at: iso(now() - 30e3), frames: 160, durationMs: 3200, peakDb: -9.4, rmsDb: -21.8, voicedFrames: 142, clipped: 0 },
-  radio: { present: radioPresent && resolved().audio, level: (({ lastRx: _l, ...l }) => l)(inputLevel() as any), ...(radioPresent ? { lastRx: lastRx() } : {}), ptt, cos, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818, ...(testTone ? { testTone: true } : {}) },
+  radio: { present: radioPresent && resolved().audio, level: (({ lastRx: _l, ...l }) => l)(inputLevel() as any), ...(radioPresent ? { lastRx: lastRx() } : {}), ptt, cos, needsTuning: radioPresent && resolved().audio && !audioTuned, preset: resolved().preset, ...usbChip, detected: radioPresent, sa818: resolved().sa818, ...(testTone ? { testTone: true } : {}) },
   active: active || undefined, since: active ? since : undefined,
   mode: active ? modeStatus(active) : undefined,
   id: { enabled: station.id.enabled, owed: false, last: iso(now() - 240e3) },
@@ -458,9 +460,13 @@ export function mockApi(): Plugin {
         if (p === '/heard' && m === 'GET') return json(res, 200, heardJSON().slice(0, +(url.searchParams.get('limit') ?? 50)));
         if (p === '/radio' && (m === 'GET' || m === 'PUT')) {
           if (m === 'PUT') { if (!isAdmin) return forbid(); for (const k of ['rxVolume', 'txVolume']) if (body[k] != null && !(typeof body[k] === 'number' && body[k] >= 0 && body[k] <= 1)) return err(res, 400, `${k} must be 0 to 1`, 'bad_request');
-            if (typeof body.rxVolume === 'number') station.radio.rxVolume = Math.round(body.rxVolume * CAP_STEPS) / CAP_STEPS; if (typeof body.txVolume === 'number') station.radio.txVolume = Math.round(body.txVolume * PLAY_STEPS) / PLAY_STEPS; if (typeof body.rxBoost === 'boolean') station.radio.rxBoost = body.rxBoost; }
+            if (typeof body.rxVolume === 'number') { station.radio.rxVolume = Math.round(body.rxVolume * CAP_STEPS) / CAP_STEPS; audioTuned = true; pushNode(); } if (typeof body.txVolume === 'number') station.radio.txVolume = Math.round(body.txVolume * PLAY_STEPS) / PLAY_STEPS; if (typeof body.rxBoost === 'boolean') station.radio.rxBoost = body.rxBoost; }
           if (!radioPresent) return err(res, 404, 'this node has no radio', 'no_radio');
           return json(res, 200, radioLevels());
+        }
+        if (p === '/radio/tuning/dismiss' && m === 'POST') {
+          if (!isAdmin) return forbid();
+          audioTuned = true; pushNode(); return json(res, 200, nodeJSON());
         }
         if (p === '/radio/autoset' && (m === 'GET' || m === 'POST' || m === 'DELETE')) {
           if (!isAdmin) return forbid();
@@ -470,7 +476,9 @@ export function mockApi(): Plugin {
             auto = { t0: now() };
           }
           if (m === 'DELETE') auto = null;
-          return json(res, 200, autoStatus());
+          const was = audioTuned, st = autoStatus();
+          if (audioTuned !== was) pushNode(); // Auto-set just succeeded
+          return json(res, 200, st);
         }
         if (p === '/radio/input' && m === 'GET') {
           if (!isAdmin) return forbid();

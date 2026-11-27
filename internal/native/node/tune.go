@@ -228,6 +228,12 @@ func (e *Engine) migrate() {
 			}
 		}
 	}
+	if c.Station.AudioTuned == nil && c.Station.legacyTuned() {
+		// A config from before the tuning record that already has audio
+		// levels was set up: never remind it.
+		e.markTuned(c, false)
+		cfgChanged = true
+	}
 	e.mu.Unlock()
 	if tuneChanged {
 		if err := e.saveTunes(); err != nil {

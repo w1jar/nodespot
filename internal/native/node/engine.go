@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/w1jar/nodespot/internal/native/audio"
@@ -82,6 +83,7 @@ type Engine struct {
 	active   *instance
 	since    time.Time
 	info     radio.Info
+	capture  atomic.Bool // the sound chip has a receive level control (see hasCaptureControl)
 	sx       simplex
 	started  time.Time
 

@@ -86,6 +86,8 @@ export interface NodeJSON {
     lastRx?: RxSummary;
     /** True while the test tone (POST /api/radio/tone) is keyed. */
     testTone?: boolean;
+    /** True when a radio with a receive level control has not been tuned (or the reminder dismissed) for this hardware. */
+    needsTuning?: boolean;
   };
   /** The active mode ("" or absent when the node is idle) and its status. */
   active?: string; since?: string; mode?: ModeStatus; registration?: Registration;

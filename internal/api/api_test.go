@@ -474,6 +474,8 @@ func TestRoles(t *testing.T) {
 		{"op", "PUT", "/api/radio"},
 		{"op", "GET", "/api/radio/info"},
 		{"op", "POST", "/api/radio/program"},
+		{"op", "POST", "/api/radio/tuning/dismiss"},
+		{"viewer", "POST", "/api/radio/tuning/dismiss"},
 		{"op", "POST", "/api/radio/tone"},
 		{"op", "DELETE", "/api/radio/tone"},
 		{"op", "POST", "/api/node/reload"},
@@ -1424,5 +1426,62 @@ func TestRadioAutoset(t *testing.T) {
 	}
 	if c := e.do("admin", "DELETE", "/api/radio/autoset", nil, &st); c != 200 || st.State != "idle" {
 		t.Fatalf("cancel: %d %+v", c, st)
+	}
+}
+
+func TestRadioTuningNeeded(t *testing.T) {
+	e := newEnv(t, opts{})
+	// No capture control yet: nothing to tune.
+	if n := e.nodeJSON(); n.Radio.NeedsTuning {
+		t.Fatalf("no capture control: %+v", n.Radio)
+	}
+	e.node.Radio.SetCaptureSteps([]float64{0, 1, 2, 3, 4})
+	e.do("admin", "POST", "/api/node/reload", nil, nil) // a config event refreshes the status
+	e.waitNode("needs tuning", func(n api.NodeJSON) bool { return n.Radio.NeedsTuning })
+
+	// Roles: only an admin may dismiss.
+	for _, r := range []string{"viewer", "op"} {
+		expectErr(t, e, r, "POST", "/api/radio/tuning/dismiss", nil, 403, "forbidden")
+	}
+	expectErr(t, e, "", "POST", "/api/radio/tuning/dismiss", nil, 401, "unauthorized")
+	if !e.nodeJSON().Radio.NeedsTuning {
+		t.Fatal("a refused dismiss changed the node")
+	}
+
+	// A hand-set receive level tunes it.
+	if c := e.do("admin", "PUT", "/api/radio", map[string]any{"rxVolume": 0.5}, nil); c != 200 {
+		t.Fatalf("PUT /api/radio: %d", c)
+	}
+	e.waitNode("tuned by hand", func(n api.NodeJSON) bool { return !n.Radio.NeedsTuning })
+	// A viewer sees the field too (the page shows the banner to admins only).
+	var n api.NodeJSON
+	if c := e.do("viewer", "GET", "/api/node", nil, &n); c != 200 || n.Radio.NeedsTuning {
+		t.Fatalf("viewer node: %d %+v", c, n.Radio)
+	}
+}
+
+func TestRadioTuningDismiss(t *testing.T) {
+	e := newEnv(t, opts{})
+	e.node.Radio.SetCaptureSteps([]float64{0, 1, 2, 3, 4})
+	e.do("admin", "POST", "/api/node/reload", nil, nil) // a config event refreshes the status
+	e.waitNode("needs tuning", func(n api.NodeJSON) bool { return n.Radio.NeedsTuning })
+	var out api.NodeJSON
+	if c := e.do("admin", "POST", "/api/radio/tuning/dismiss", nil, &out); c != 200 || out.Radio.NeedsTuning {
+		t.Fatalf("dismiss: %d %+v", c, out.Radio)
+	}
+	if e.nodeJSON().Radio.NeedsTuning {
+		t.Fatal("still needs tuning")
+	}
+	cfg, err := node.LoadConfig(e.node.ConfigPath)
+	if err != nil || cfg.Station.AudioTuned == nil || !cfg.Station.AudioTuned.Dismissed {
+		t.Fatalf("saved config: %v %+v", err, cfg.Station.AudioTuned)
+	}
+	aud, _ := e.st.ListAudit(20)
+	found := false
+	for _, a := range aud {
+		found = found || a.Action == "radio.tuning.dismiss"
+	}
+	if !found {
+		t.Errorf("not audited: %v", aud)
 	}
 }

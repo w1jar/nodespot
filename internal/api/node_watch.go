@@ -34,6 +34,7 @@ type Node interface {
 	AutosetStatus(ctx context.Context) (node.AutosetStatus, error)
 	RadioInfo(ctx context.Context) (node.RadioDetail, error)
 	RadioProgram(ctx context.Context) (node.Status, error)
+	RadioTuningDismiss(ctx context.Context) (node.Status, error)
 	TestTone(ctx context.Context, seconds float64, stop bool) (node.Status, error)
 	Reload(ctx context.Context) (node.Status, error)
 	Subscribe(ctx context.Context) (node.Status, <-chan node.Event, error)

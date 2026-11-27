@@ -5,6 +5,8 @@
   import { untrack } from 'svelte';
   import { api } from '../../lib/api';
   import { app, isAdmin, refreshNode } from '../../lib/store.svelte';
+  import { router } from '../../lib/router.svelte';
+  import { wantsAutosetFocus } from '../../lib/tuning';
   import { toast, toastError } from '../../lib/toast.svelte';
   import { AGC_DEFAULTS, AGC_FIELDS, AGC_TARGET_FIELDS, AUDIO_ADV_KEYS, GAIN_FIELDS, audioBody, audioDirty, audioError, fieldError, withKeys } from '../../lib/audio';
   import type { NumField } from '../../lib/audio';
@@ -51,11 +53,24 @@
       // A finished run from before this page opened is not shown again.
       const was = autoRunning, st = await api.radioAutoset();
       auto = was || autosetRunning(st) ? st : null;
-      if (was && !autosetRunning(st)) await loadLevels();
+      if (was && !autosetRunning(st)) { await loadLevels(); await refreshNode(); }
     } catch { /* the node may be down */ }
   }
   $effect(() => { if (present) untrack(pollAuto); });
   $effect(() => { if (!autoRunning) return; const t = setInterval(pollAuto, 500); return () => clearInterval(t); });
+  // Opened from the dashboard reminder ("Tune now", #/settings/station/audio?tune=1): step 1 is open, and Auto-set scrolls into view and
+  // is highlighted for a few seconds once it is drawn (it needs the chip's levels, which load after the page).
+  const focusAuto = wantsAutosetFocus(untrack(() => router.query));
+  let autoBtn = $state<HTMLButtonElement | null>(null), emphasize = $state(false);
+  $effect(() => {
+    if (!focusAuto || !autoBtn) return;
+    const b = autoBtn;
+    b.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    b.focus({ preventScroll: true });
+    emphasize = true;
+    const t = setTimeout(() => (emphasize = false), 4000);
+    return () => clearTimeout(t);
+  });
   async function startAuto() { try { auto = await api.startAutoset(); } catch (e) { toastError(e); } }
   async function cancelAuto() { try { auto = await api.cancelAutoset(); } catch (e) { toastError(e); } }
 
@@ -64,7 +79,7 @@
   const txSteps = $derived(lv && playback && hasSteps(lv.PlaybackSteps) ? lv.PlaybackSteps : 0);
   let rxDrag = $state<number | null>(null), txDrag = $state<number | null>(null);
 
-  async function setLevel(p: { rxVolume?: number; txVolume?: number }) { try { lv = await api.setRadio(p); } catch (e) { toastError(e); } }
+  async function setLevel(p: { rxVolume?: number; txVolume?: number }) { try { lv = await api.setRadio(p); await refreshNode(); } catch (e) { toastError(e); } }
   // A tuning gain slider saves that one key at once, over the station as saved now.
   async function setGain(key: 'rxGainDb' | 'txGainDb', v: number) {
     adv[key] = v || undefined;
@@ -177,7 +192,7 @@
         {#if autoRunning}
           <button type="button" class="btn btn-bad-outline" onclick={cancelAuto}>Cancel</button>
         {:else}
-          <button type="button" class="btn btn-primary" onclick={startAuto}>Auto-set</button>
+          <button type="button" class="btn btn-primary {emphasize ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg motion-safe:animate-pulse' : ''}" data-testid="autoset-btn" data-emphasis={emphasize ? 'on' : undefined} bind:this={autoBtn} onclick={startAuto}>Auto-set</button>
         {/if}
         {#if autosetText(auto)}<span class="text-sm {auto?.state === 'failed' ? 'text-warn' : 'text-muted'}" role="status" data-testid="autoset-status">{autosetText(auto)}</span>{/if}
       </div>
