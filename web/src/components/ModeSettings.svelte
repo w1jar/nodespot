@@ -56,7 +56,7 @@
     } catch (e) { toastError(e); } finally { busy = false; }
   }
 
-  // The md380-emu vocoder (AMBE modes): installing is a helper job, the page above polls until it ends.
+  // The software AMBE vocoder (AMBE modes): installing is a helper job, the page above polls until it ends.
   let vocBusy = $state(false);
   const vocNeeded = $derived(needsVocoder(info, vocoder));
   async function installVocoder() {
@@ -70,7 +70,7 @@
   {#if !info.configured}<p class="text-sm text-warn" role="status" data-testid="not-ready">{notReadyText(info)}</p>{/if}
   {#if vocNeeded}
     <div class="flex flex-wrap items-center gap-2 rounded border border-warn/60 bg-warn/5 px-3 py-2 text-sm" role="status" data-testid="vocoder-notice">
-      <span class="min-w-0 flex-1">Needs the AMBE vocoder (md380-emu){#if vocoder && !vocoder.supported && vocoder.reason}. {vocoder.reason}{/if}</span>
+      <span class="min-w-0 flex-1">Needs the software AMBE vocoder{#if vocoder && !vocoder.supported && vocoder.reason}. {vocoder.reason}{/if}</span>
       {#if vocoder?.supported !== false}
         <button type="button" class="btn btn-primary btn-sm" disabled={vocBusy || vocoderBusy(vocoder)} onclick={installVocoder}>{vocBusy || vocoderBusy(vocoder) ? 'Installing…' : 'Install'}</button>
       {/if}

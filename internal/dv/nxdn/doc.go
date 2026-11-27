@@ -42,7 +42,7 @@
 // MMDVMHost's NXDNAudio::decode removes the FEC and PRNG and packs two frames
 // back to back into 14 bytes: bits 0..48 frame A, bits 49..97 frame B, bits
 // 98..111 zero, each frame ordered a(12) b(12) c(25), MSB first. That is the
-// same 49-bit frame as the md380 vocoder (network.VoiceFrame.Data: 7 bytes,
+// same 49-bit frame as the software AMBE vocoder (network.VoiceFrame.Data: 7 bytes,
 // bytes 0..5 MSB first and bit 49 in the MSB of byte 6), so a network
 // payload's four frames are copied bit for bit with no transcoding
 // (PackFrames/UnpackFrames). The air-side 72-bit FEC (Golay tables and the

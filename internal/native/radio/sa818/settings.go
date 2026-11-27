@@ -113,6 +113,9 @@ type Settings struct {
 	// Volume is 1 to 8.
 	Volume  int     `json:"volume"`
 	Filters Filters `json:"filters"`
+	// Tail is the tail tone (AT+SETTAIL): true opens it (1), false closes it
+	// (0). Nil sends nothing and leaves the module's own setting alone.
+	Tail *bool `json:"tail,omitempty"`
 }
 
 // DefaultSettings returns a simplex starting point: wide, squelch 4, volume 8,
@@ -167,7 +170,8 @@ func bypass(on bool) int {
 }
 
 // Commands formats the AT commands that program the settings, in the order
-// they are sent: group (frequencies, tones, squelch), volume, filters.
+// they are sent: group (frequencies, tones, squelch), volume, filters, and the
+// tail tone when Tail is set.
 func (s Settings) Commands() ([]string, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
@@ -178,11 +182,19 @@ func (s Settings) Commands() ([]string, error) {
 	if s.Bandwidth == Wide {
 		bw = 1
 	}
-	return []string{
+	cmds := []string{
 		fmt.Sprintf("AT+DMOSETGROUP=%d,%.4f,%.4f,%s,%d,%s", bw, s.TxMHz, s.RxMHz, tx, s.Squelch, rx),
 		fmt.Sprintf("AT+DMOSETVOLUME=%d", s.Volume),
 		fmt.Sprintf("AT+SETFILTER=%d,%d,%d", bypass(s.Filters.Emphasis), bypass(s.Filters.HighPass), bypass(s.Filters.LowPass)),
-	}, nil
+	}
+	if s.Tail != nil {
+		t := 0
+		if *s.Tail {
+			t = 1
+		}
+		cmds = append(cmds, fmt.Sprintf("AT+SETTAIL=%d", t))
+	}
+	return cmds, nil
 }
 
 // Summary is a one-line description for logs, with no secrets in it.

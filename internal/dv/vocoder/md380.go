@@ -21,7 +21,7 @@ const (
 
 // ErrDown is returned (with a silence frame) while the vocoder is down and
 // the retry backoff has not elapsed.
-var ErrDown = errors.New("vocoder: md380-emu is down")
+var ErrDown = errors.New("vocoder: the software AMBE vocoder is down")
 
 // MD380 is a client of md380-emu's headerless UDP protocol: encode is 320
 // bytes (160 s16 LE samples) out and 7 bytes in; decode is 7 out and 320 in.
@@ -55,7 +55,7 @@ func NewMD380(addr string, timeout time.Duration) *MD380 {
 	return &MD380{addr: addr, timeout: timeout}
 }
 
-// Addr is the md380-emu address.
+// Addr is the vocoder address.
 func (m *MD380) Addr() string {
 	m.pmu.RLock()
 	defer m.pmu.RUnlock()

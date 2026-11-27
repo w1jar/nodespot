@@ -23,7 +23,7 @@ func (r *RX) LC() (LC, bool) { return r.lc, r.haveLC }
 // the network sent with it.
 //
 // Voice LC headers and terminators give the LC directly; voice bursts give
-// three md380 frames each, and the embedded LC of bursts B-E gives the LC to
+// three AMBE frames each, and the embedded LC of bursts B-E gives the LC to
 // a receiver that missed the header (late entry). Only group and private
 // voice LCs (FLCO 0 and 3) are reported; other embedded LCs (talker alias,
 // GPS) are ignored. A terminator sets End and resets the parser.

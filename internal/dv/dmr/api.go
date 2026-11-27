@@ -5,7 +5,7 @@ package dmr
 
 const (
 	BurstLen   = 33 // one DMR burst, 264 bits
-	AMBELen    = 7  // md380 AMBE+2 frame, 49 bits
+	AMBELen    = 7  // AMBE+2 frame, 49 bits
 	AMBE72Len  = 9  // DMR air-interface AMBE+2 frame, 72 bits with FEC
 	LCLen      = 9  // full link control, 72 bits
 	DMRDLen    = 55 // Homebrew DMRD packet with BER and RSSI
@@ -16,7 +16,7 @@ const (
 // payload, a 48-bit SYNC or EMB+embedded field, 108 bits of payload.
 type Burst [BurstLen]byte
 
-// AMBE is one 20 ms md380 AMBE+2 frame: 49 bits, MSB first in bytes 0-5, bit 49
+// AMBE is one 20 ms AMBE+2 frame: 49 bits, MSB first in bytes 0-5, bit 49
 // in the MSB of byte 6 (the low 7 bits of byte 6 are zero).
 type AMBE [AMBELen]byte
 
@@ -167,7 +167,7 @@ type RXResult struct {
 	LCValid      bool
 	LCFromHeader bool // from a voice LC header or terminator, not embedded
 	NewCall      bool // first LC of the stream (header or late entry)
-	// Voice holds the three md380 frames of a voice burst (Voice true).
+	// Voice holds the three AMBE frames of a voice burst (Voice true).
 	Voice     [3]AMBE
 	HasVoice  bool
 	FECErrors int  // corrected bit errors in this burst's AMBE frames
@@ -175,7 +175,7 @@ type RXResult struct {
 }
 
 var (
-	// SilenceAMBE is the md380 49-bit form of the AMBE+2 silence frame
+	// SilenceAMBE is the AMBE 49-bit form of the AMBE+2 silence frame
 	// (DecodeAMBE(SilenceAMBE72), 0 bit errors). It pads a trailing partial
 	// burst. Note: {b9 e8 81 52 61 73 00} is NOT the 49-bit silence; it is the
 	// first 7 bytes of the 72-bit air-interface frame.

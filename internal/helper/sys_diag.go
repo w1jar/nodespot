@@ -134,7 +134,7 @@ func DiagPlanInfo() DiagPlan {
 		Items: []DiagItem{
 			{"README.txt", "What was collected, what was redacted, and what could not be collected"},
 			{"report.txt", "nodespot status report: versions, the node's modes and links, updates, recent nodespot log"},
-			{"versions.txt", "nodespot, operating system, kernel, and the md380-emu and nodespot package versions"},
+			{"versions.txt", "nodespot, operating system, kernel, and the vocoder and nodespot package versions"},
 			{"system.txt", "Uptime and load, memory, disk use"},
 			{"services.txt", "State of the node, nodespot, network and time services, and listening ports"},
 			{"network.txt", "Interfaces, addresses, default gateway, DNS servers (no WiFi passwords or saved networks)"},

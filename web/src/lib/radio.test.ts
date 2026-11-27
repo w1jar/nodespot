@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hasSA818, pickPreset, pinError, radioBody, resolveInterface, presetName, detectedLabel } from './radio.ts';
+import { COS_SOURCES, CTCSS_SOURCES, hasSA818, pickPreset, pinError, radioBody, resolveInterface, presetName, detectedLabel } from './radio.ts';
 import type { RadioInterface, RadioPreset, Station } from './types.ts';
 
 const base = { audio: false, pttPin: 0, pttActiveLow: false, cos: 'none', cosActiveLow: false, ctcss: 'none', ctcssActiveLow: false, sa818: false };
@@ -65,4 +65,12 @@ test('pin conflicts', () => {
 test('detected label', () => {
   assert.equal(detectedLabel({ chip: 'CM108B', usbId: '0d8c:0012' }), 'CM108B (0d8c:0012)');
   assert.equal(detectedLabel({}), '');
+});
+
+test('tone input sources have their own wording and no always-open', () => {
+  assert.equal(CTCSS_SOURCES[0]!.value, 'none');
+  assert.equal(CTCSS_SOURCES[0]!.label, 'None (no tone input)');
+  assert.equal(CTCSS_SOURCES.some((o) => o.value === 'always'), false);
+  assert.deepEqual(CTCSS_SOURCES.slice(1).map((o) => o.value), ['gpio1', 'gpio2', 'gpio3', 'gpio4']);
+  assert.equal(COS_SOURCES[0]!.label, 'None (squelch is not read)');
 });

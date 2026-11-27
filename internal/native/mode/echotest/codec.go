@@ -15,7 +15,7 @@ import (
 // Codec names: the values of the "codec" setting.
 const (
 	CodecPlain  = "plain"  // no codec: 8 kHz linear, as AllStar sounds with ulaw
-	CodecAMBE   = "ambe"   // DMR, YSF, NXDN (md380-emu)
+	CodecAMBE   = "ambe"   // DMR, YSF, NXDN (the software AMBE vocoder)
 	CodecIMBE   = "imbe"   // P25
 	CodecCodec2 = "codec2" // M17, 3200 mode
 	CodecGSM    = "gsm"    // EchoLink
@@ -95,7 +95,7 @@ func (c gsmCoder) Code(_ context.Context, f audio.Frame) (audio.Frame, bool) {
 	})
 }
 
-// ambeCoder codes through the md380-emu vocoder. When it does not answer
+// ambeCoder codes through the software AMBE vocoder. When it does not answer
 // (a timeout, or it is down) the frame is left as it was and the failure
 // is counted, so the mode can say the vocoder is not working.
 type ambeCoder struct {

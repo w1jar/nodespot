@@ -24,7 +24,7 @@
       <label class="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" class="size-4 accent-[var(--accent)]" bind:checked={secrets} disabled={bbusy} />Include the mode passwords</label>
     {/if}
     <div class="rounded border border-warn bg-warn/10 p-3 text-sm" role="note">
-      <strong class="text-warn">The backup file is NOT encrypted.</strong> It can contain the nodespot password hashes{#if secrets && binfo?.secrets} and the passwords of the modes (AllStar, EchoLink, DMR masters){/if}. Store it like a password and never share it.
+      <strong class="text-warn">The backup file is NOT encrypted.</strong> It can contain the nodespot password hashes{#if secrets && binfo?.secrets} and the passwords of the modes (ASL, EchoLink, DMR masters){/if}. Store it like a password and never share it.
     </div>
     <div class="flex flex-wrap gap-2">
       <button class="btn btn-primary" disabled={bbusy || !binfo} onclick={downloadBackup}><Download size={14} class={bbusy ? 'animate-pulse' : ''} />{bbusy ? 'Preparing…' : 'Download backup'}</button>

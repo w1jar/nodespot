@@ -17,8 +17,11 @@ const DefaultStatePath = "/etc/nodespot/sa818.json"
 // stateVersion is the file format version. Version 1 files were written by
 // builds that sent the filter flags inverted (1 for "on"), so what they say
 // was programmed is not what the module has: they read as no state, and the
-// node programs the module again.
-const stateVersion = 2
+// node programs the module again. Version 2 files have no tail tone field;
+// they record the volume and filters as sent, and nodespot never sent a tail
+// tone then, so they still read as valid (tail unset) and an upgrade does not
+// program the module again.
+const stateVersion = 3
 
 // State is the saved copy of what the module was last programmed with.
 type State struct {
@@ -43,7 +46,7 @@ func LoadState(path string) (State, error) {
 	if err := json.Unmarshal(b, &st); err != nil {
 		return State{}, fmt.Errorf("sa818: parse state %s: %w", path, err)
 	}
-	if st.Version != stateVersion {
+	if st.Version != stateVersion && st.Version != 2 {
 		return State{}, fmt.Errorf("sa818: state %s has version %d, want %d", path, st.Version, stateVersion)
 	}
 	return st, nil

@@ -161,7 +161,7 @@ type ModeInfo struct {
 	TargetLabel string       `json:"targetLabel,omitempty"`
 	TargetHelp  string       `json:"targetHelp,omitempty"`
 	NeedsHost   bool         `json:"needsHost,omitempty"`
-	NeedsAmbe   bool         `json:"needsAmbe,omitempty"` // needs the md380-emu AMBE vocoder
+	NeedsAmbe   bool         `json:"needsAmbe,omitempty"` // needs the software AMBE vocoder
 	Fields      []mode.Field `json:"fields"`
 	// Settings are the saved settings with every secret blank; SecretsSet
 	// says which secrets have a value.
@@ -281,7 +281,33 @@ func (e *Engine) hasSA818() bool { return !e.o.RadioAbsent && e.info.Interface.S
 
 func channelChanged(a, b RadioConfig) bool {
 	return a.FrequencyMHz != b.FrequencyMHz || a.Tone != b.Tone ||
-		a.SquelchLevel() != b.SquelchLevel() || a.Narrow != b.Narrow || a.SA818Port != b.SA818Port
+		a.SquelchLevel() != b.SquelchLevel() || a.Narrow != b.Narrow || a.SA818Port != b.SA818Port ||
+		moduleValuesChanged(a, b)
+}
+
+// moduleValuesChanged reports whether the SA818's volume, tail tone or
+// filters differ between a and b.
+func moduleValuesChanged(a, b RadioConfig) bool {
+	return !sameModuleValues(sa818.Settings{Volume: a.sa818Volume(), Tail: a.SA818Tail, Filters: a.Filters()},
+		sa818.Settings{Volume: b.sa818Volume(), Tail: b.SA818Tail, Filters: b.Filters()})
+}
+
+func (r RadioConfig) sa818Volume() int {
+	if r.SA818Volume != nil {
+		return *r.SA818Volume
+	}
+	return sa818.DefaultSettings().Volume
+}
+
+func sameModuleValues(a, b sa818.Settings) bool {
+	return a.Volume == b.Volume && a.Filters == b.Filters && equalTail(a.Tail, b.Tail)
+}
+
+func equalTail(a, b *bool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // SaveMode merges upd into mode n's saved settings (a blank secret keeps
@@ -492,8 +518,9 @@ func (e *Engine) ProgramRadio() error {
 	return e.program(r)
 }
 
-// ProgramIfChanged programs the SA818 at boot when the station's channel
-// differs from what the module was last programmed with.
+// ProgramIfChanged programs the SA818 at boot when the station's channel,
+// volume, tail tone or filters differ from what the module was last
+// programmed with (or nothing is recorded).
 func (e *Engine) ProgramIfChanged() error {
 	e.mu.Lock()
 	r := e.cfg.Station.Radio
@@ -505,7 +532,7 @@ func (e *Engine) ProgramIfChanged() error {
 	if err != nil {
 		return err
 	}
-	if st, err := radio.SavedSA818(e.o.RadioConfig); err == nil && sameChannel(st.Settings, want) {
+	if st, err := radio.SavedSA818(e.o.RadioConfig); err == nil && sameChannel(st.Settings, want) && sameModuleValues(st.Settings, want) {
 		return nil
 	}
 	return e.program(r)
@@ -581,6 +608,20 @@ type RadioDetail struct {
 	// from the state file. It is absent when the module has never been
 	// programmed by this node (the filters are then unknown).
 	SA818Filters *ProgrammedFilters `json:"sa818Filters,omitempty"`
+	// SA818Programmed is everything the channel and module values were last
+	// programmed to, from the same state file. Absent when unknown.
+	SA818Programmed *ProgrammedSA818 `json:"sa818Programmed,omitempty"`
+}
+
+// ProgrammedSA818 is what the SA818 was last programmed with besides the
+// frequency and tone. Tail is absent when nodespot sent no tail command, so
+// the module's own setting is unknown.
+type ProgrammedSA818 struct {
+	Squelch int               `json:"squelch"`
+	Volume  int               `json:"volume"`
+	Tail    *bool             `json:"tail,omitempty"`
+	Filters ProgrammedFilters `json:"filters"`
+	At      time.Time         `json:"at"`
 }
 
 // ProgrammedFilters are the SA818 filter flags last sent to the module, true
@@ -607,6 +648,8 @@ func (e *Engine) RadioInfo() RadioDetail {
 		if st, err := radio.SavedSA818(e.o.RadioConfig); err == nil {
 			f := st.Settings.Filters
 			d.SA818Filters = &ProgrammedFilters{Emphasis: f.Emphasis, HighPass: f.HighPass, LowPass: f.LowPass, At: st.AppliedAt}
+			d.SA818Programmed = &ProgrammedSA818{Squelch: st.Settings.Squelch, Volume: st.Settings.Volume,
+				Tail: st.Settings.Tail, Filters: *d.SA818Filters, At: st.AppliedAt}
 		}
 	}
 	return d

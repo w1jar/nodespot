@@ -32,11 +32,11 @@
 # Digital modes are built into the native node (nodespot-node): there is
 # nothing to install. NODESPOT_DV, which enabled them in 2.x, is still accepted
 # and does nothing.
-# AMBE vocoder (md380-emu, for the DMR and other digital voice modes): by default it is
+# Software AMBE vocoder (for the DMR and other digital voice modes): by default it is
 # installed later, on demand, from the Modes page. NODESPOT_VOCODER=1 (or yes, true)
 # installs it during the install, after nodespot is installed and started, with the
 # same code as the Modes page (nodespot-helper vocoder-install --wait): it adds the
-# md380-emu apt repository with its pinned key, installs the packages and keeps the
+# apt repository for it with its pinned key, installs the packages and keeps the
 # service local-only. It can take a few minutes.
 #   curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo NODESPOT_VOCODER=1 sh
 # If the vocoder cannot be installed (unsupported system, no network, apt error)
@@ -684,7 +684,7 @@ dv_note() {
 VOCODER_RESULT=
 install_vocoder() {
 	helper="${NODESPOT_HELPER:-/usr/libexec/nodespot/nodespot-helper}"
-	say "installing the AMBE vocoder (md380-emu); this can take a few minutes"
+	say "installing the software AMBE vocoder; this can take a few minutes"
 	if [ ! -x "$helper" ]; then
 		VOCODER_RESULT="not installed (warning: $helper not found)"
 	elif "$helper" vocoder-install --wait; then

@@ -96,7 +96,7 @@ func ReadDCH(frame []byte) (dt [10]byte, ok bool) {
 
 func vchOffset(j int) int { return 40 + j*144 }
 
-// WriteVCH writes AMBE frame a (md380 layout) into VCH j (0..4) of a V/D
+// WriteVCH writes AMBE frame a (vocoder layout) into VCH j (0..4) of a V/D
 // mode 2 frame (MMDVM_CM ModeConv::encodeYSF packing).
 func WriteVCH(frame []byte, j int, a [AMBELen]byte) {
 	var buf [13]byte
@@ -118,7 +118,7 @@ func WriteVCH(frame []byte, j int, a [AMBELen]byte) {
 	}
 }
 
-// ReadVCH extracts the AMBE frame (md380 layout) from VCH j (0..4) of a
+// ReadVCH extracts the AMBE frame (vocoder layout) from VCH j (0..4) of a
 // V/D mode 2 frame. errs counts the corrected repetition triplets
 // (MMDVMHost processVDMode2Audio, MMDVM_CM ModeConv::putYSF).
 func ReadVCH(frame []byte, j int) (a [AMBELen]byte, errs int) {

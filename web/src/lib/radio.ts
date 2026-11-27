@@ -12,7 +12,10 @@ export const COS_SOURCES: { value: string; label: string }[] = [
   { value: 'gpio3', label: 'GPIO 3 (mute playback)' },
   { value: 'gpio4', label: 'GPIO 4 (mute record)' },
 ];
-export const CTCSS_SOURCES = COS_SOURCES.filter((s) => s.value !== 'always');
+export const CTCSS_SOURCES: { value: string; label: string }[] = [
+  { value: 'none', label: 'None (no tone input)' },
+  ...COS_SOURCES.filter((s) => s.value.startsWith('gpio')),
+];
 export const PTT_PINS = [1, 2, 3, 4];
 
 /** The override fields of the station's radio settings, which an empty value leaves to the preset. */

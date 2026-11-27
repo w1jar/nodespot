@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// The md380-emu package repository keyring is checked with the Go standard
+// The the software AMBE vocoder package repository keyring is checked with the Go standard
 // library only (no gpg dependency): the file is dearmored if needed and parsed
 // as OpenPGP packets, and the SHA-1 fingerprint of every primary key must match
 // the pinned one exactly.

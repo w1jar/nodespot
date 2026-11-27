@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { audioBody, audioDirty, audioError, effectivePL, fieldError, filterOn, programmedText, withKeys, AGC_DEFAULTS, AGC_FIELDS, AUDIO_ADV_KEYS, RADIO_ADV_KEYS, SA818_FILTER_DEFAULTS, DELAY_FIELDS, GAIN_FIELDS, TIMER_FIELDS, ID_FIELDS } from './audio.ts';
+import { audioBody, audioDirty, audioError, effectivePL, fieldError, filterOn, programmedText, sa818Body, sa818VolumeError, tailChoice, tailValue, TAIL_CHOICES, withKeys, AGC_DEFAULTS, AGC_FIELDS, AUDIO_ADV_KEYS, RADIO_ADV_KEYS, SA818_FILTER_DEFAULTS, DELAY_FIELDS, GAIN_FIELDS, TIMER_FIELDS, ID_FIELDS } from './audio.ts';
 import type { Station } from './types';
 
 const base = (): Station => ({ callsign: 'N0CALL', radio: { frequencyMHz: 146.52 }, id: { enabled: true, wpm: 20, extra: 1 }, advanced: { hangMs: 700, md380: '127.0.0.1:2470', modeAgc: false }, dmrId: 1234567 });
@@ -71,22 +71,48 @@ test('SA818 filter defaults: emphasis off, high-pass and low-pass on', () => {
   assert.equal(filterOn({ emphasis: true, lowPass: false }, 'lowPass'), false);
 });
 
-test('SA818 filters in the body', () => {
-  const b = base();
-  assert.equal(audioBody(b, b.advanced, b.id, { emphasis: false, highPass: true, lowPass: true }).radio.sa818Filter, undefined);
-  assert.deepEqual(audioBody(b, b.advanced, b.id, { emphasis: true, highPass: true }).radio.sa818Filter, { emphasis: true });
-  assert.deepEqual(audioBody(b, b.advanced, b.id, { emphasis: false, highPass: false }).radio.sa818Filter, { highPass: false });
-  assert.equal(audioBody(b, b.advanced, b.id).radio.sa818Filter, undefined); // not given: radio untouched
-  const s: Station = { ...b, radio: { ...b.radio, sa818Filter: { lowPass: false } } };
-  assert.equal(audioDirty(s, s.advanced, s.id), false);
-  assert.equal(audioDirty(s, s.advanced, s.id, { lowPass: false }), false);
-  assert.equal(audioDirty(s, s.advanced, s.id, { lowPass: true }), true);
-  assert.equal(audioDirty(b, b.advanced, b.id, { highPass: false }), true);
+test('SA818 values in the body', () => {
+  const r = (o: Record<string, unknown>) => sa818Body({ frequencyMHz: 146.52, ...o });
+  assert.equal(r({ sa818Filter: { emphasis: false, highPass: true, lowPass: true } }).sa818Filter, undefined);
+  assert.deepEqual(r({ sa818Filter: { emphasis: true, highPass: true } }).sa818Filter, { emphasis: true });
+  assert.deepEqual(r({ sa818Filter: { emphasis: false, highPass: false } }).sa818Filter, { highPass: false });
+  assert.equal(r({}).sa818Filter, undefined);
+  assert.equal(r({ sa818Volume: '' as unknown as number }).sa818Volume, undefined);
+  assert.equal(r({ sa818Volume: 8 }).sa818Volume, undefined); // 8 is the default
+  assert.equal(r({ sa818Volume: 5 }).sa818Volume, 5);
+  assert.equal(r({ sa818Volume: '3' as unknown as number }).sa818Volume, 3);
+  assert.equal('sa818Tail' in r({}), false);
+  assert.equal(r({ sa818Tail: true }).sa818Tail, true);
+  assert.equal(r({ sa818Tail: false }).sa818Tail, false); // closed is a value of its own
+  assert.equal(r({ sa818Tail: undefined }).frequencyMHz, 146.52); // other keys carried over
 });
 
-test('programmed filters text', () => {
+test('SA818 volume and tail helpers', () => {
+  assert.equal(sa818VolumeError(undefined), '');
+  assert.equal(sa818VolumeError(''), '');
+  assert.equal(sa818VolumeError(1), '');
+  assert.equal(sa818VolumeError(8), '');
+  assert.notEqual(sa818VolumeError(0), '');
+  assert.notEqual(sa818VolumeError(9), '');
+  assert.notEqual(sa818VolumeError(2.5), '');
+  assert.equal(tailChoice(undefined), 'keep');
+  assert.equal(tailChoice(true), 'open');
+  assert.equal(tailChoice(false), 'closed');
+  assert.equal(tailValue('keep'), undefined);
+  assert.equal(tailValue('open'), true);
+  assert.equal(tailValue('closed'), false);
+  assert.deepEqual(TAIL_CHOICES.map((c) => c.value), ['keep', 'open', 'closed']);
+});
+
+test('programmed text', () => {
   assert.match(programmedText(undefined), /unknown/i);
-  assert.match(programmedText({ emphasis: true, highPass: false, lowPass: true }), /emphasis on, high-pass off, low-pass on/);
+  assert.match(programmedText({}), /unknown/i);
+  const filters = { emphasis: true, highPass: false, lowPass: true };
+  assert.match(programmedText({ sa818Filters: filters }), /emphasis on, high-pass off, low-pass on/);
+  assert.equal(programmedText({ sa818Programmed: { squelch: 4, volume: 6, tail: true, filters } }),
+    'Last programmed: squelch 4, volume 6, tail tone open, emphasis on, high-pass off, low-pass on');
+  assert.match(programmedText({ sa818Programmed: { squelch: 2, volume: 8, tail: false, filters } }), /tail tone closed/);
+  assert.match(programmedText({ sa818Programmed: { squelch: 2, volume: 8, filters } }), /tail tone not set/);
 });
 
 test('field checks', () => {

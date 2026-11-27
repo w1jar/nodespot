@@ -63,7 +63,7 @@ func TestEchoTest(t *testing.T) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.hdr) != 1 || s.hdr[0].Src != "ECHO TEST" || s.hdr[0].TG != 0 || s.hdr[0].Private {
+	if len(s.hdr) != 1 || s.hdr[0].Src != "PARROT" || s.hdr[0].TG != 0 || s.hdr[0].Private {
 		t.Fatalf("%+v", s.hdr)
 	}
 	if len(s.frames) != 10 {

@@ -31,7 +31,7 @@ const (
 )
 
 // logUnits is the allowlist of the journal viewer: no unit name comes from a
-// client except to select one of these. md380-emu is the AMBE vocoder the
+// client except to select one of these. The software AMBE vocoder is the vocoder the
 // DMR, YSF, P25 and NXDN modes use.
 func logUnits() []string {
 	return []string{nodeService, "nodespot", "nodespot-helper", "md380-emu", "NetworkManager", "systemd-networkd", "nodespot-wifi-watchdog"}

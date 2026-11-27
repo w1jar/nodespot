@@ -23,7 +23,7 @@
 //
 // # Voice
 //
-// The network codec is network.CodecAMBE: VoiceFrame.Data is a 7-byte md380
+// The network codec is network.CodecAMBE: VoiceFrame.Data is a 7-byte
 // AMBE+2 frame. Transmissions are sent in V/D mode 2 ("DN"): a header frame
 // (FI=0, CSD1 = "ALL" + source callsign, CSD2 blank), one communications
 // frame per five 20 ms frames (FT=6, FN 0..6 cycling, DCH: FN0 destination,

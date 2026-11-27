@@ -210,15 +210,15 @@ func (m *Mode) Start(context.Context) error {
 // Connect links to node t.ID, dropping the current link.
 func (m *Mode) Connect(ctx context.Context, t mode.Target) error {
 	if !ValidNode(t.ID) {
-		return fmt.Errorf("allstar: %q is not a node number", t.ID)
+		return fmt.Errorf("ASL: %q is not a node number", t.ID)
 	}
 	if t.ID == m.node {
-		return errors.New("allstar: cannot link to our own node")
+		return errors.New("ASL: cannot link to our own node")
 	}
 	m.mu.Lock()
 	if !m.started {
 		m.mu.Unlock()
-		return errors.New("allstar: mode is not started")
+		return errors.New("ASL: mode is not started")
 	}
 	m.mu.Unlock()
 	m.drop()

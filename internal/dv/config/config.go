@@ -32,7 +32,7 @@ var knownModes = map[string]bool{
 }
 
 // Default is the config used when no file exists: the standard USRP ports,
-// md380-emu on loopback and the echo test network.
+// the software AMBE vocoder on loopback and the echo test network.
 func Default() ctl.Config {
 	c := ctl.Config{Version: ctl.ConfigVersion}
 	c.USRP.AGCMax = ctl.DefaultAGCMax

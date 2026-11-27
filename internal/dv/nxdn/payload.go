@@ -44,7 +44,7 @@ type Parsed struct {
 	// from a voice frame (valid when HasL3).
 	L3    Layer3
 	HasL3 bool
-	// Frames are the AMBE+2 frames (7 bytes each, md380 layout): 4, 2 or 0.
+	// Frames are the AMBE+2 frames (7 bytes each, vocoder layout): 4, 2 or 0.
 	Frames [][7]byte
 }
 

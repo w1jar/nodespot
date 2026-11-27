@@ -15,7 +15,7 @@ Lines:
 - `fich <4 info bytes> <25 coded bytes>`: CYSFFICH::encode
 - `dch <10-char word> <25 coded bytes>`: the five 5-byte DCH slices
 - `csd <90-byte payload>`: CYSFPayload::writeHeader, CSD1 `ALL       N0CALL    `, CSD2 blanks
-- `vch <7-byte md380 AMBE> <13-byte interleaved VCH>`
+- `vch <7-byte AMBE> <13-byte interleaved VCH>`
 - `imbeNN` / `vwblockNN`: synthetic 11-byte IMBE frames and the 18-byte
   interleaved Voice FR codewords CP25Audio::encode produced for them
 

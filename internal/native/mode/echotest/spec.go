@@ -13,17 +13,17 @@ func init() { mode.Register(Spec()) }
 func Spec() mode.Spec {
 	return mode.Spec{
 		Name:  mode.EchoTest,
-		Title: "Echo test",
+		Title: "Parrot",
 		TargetHelp: "Talk, release, and your transmission plays back about a second later. " +
 			"The Radio tune page shows the levels of the last recording.",
 		Fields: []mode.Field{
 			{Key: KeyCodec, Label: "Codec", Kind: mode.FieldSelect, Options: Codecs, Default: CodecPlain,
-				Help: "What the playback goes through, so it sounds like that network: plain (no codec, like AllStar), " +
-					"ambe (DMR, YSF, NXDN; needs the vocoder), imbe (P25), codec2 (M17), gsm (EchoLink), ulaw (AllStar)."},
+				Help: "What the playback goes through, so it sounds like that network: plain (no codec, like ASL), " +
+					"ambe (DMR, YSF, NXDN; needs the vocoder), imbe (P25), codec2 (M17), gsm (EchoLink), ulaw (ASL)."},
 			{Key: KeyDelay, Label: "Playback delay (ms)", Kind: mode.FieldNumber, Advanced: true,
 				Default: "1000", Help: "Pause between the end of your transmission and the playback."},
 		},
-		// Only the AMBE codec needs the md380-emu vocoder.
+		// Only the AMBE codec needs the software AMBE vocoder.
 		AMBEFor: func(s mode.Settings) bool {
 			return strings.EqualFold(s.Get(KeyCodec, CodecPlain), CodecAMBE)
 		},

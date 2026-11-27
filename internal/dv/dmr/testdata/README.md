@@ -9,7 +9,7 @@ bits of repeater ID 123456701).
 
 | line       | content                                                                       |
 |------------|-------------------------------------------------------------------------------|
-| `ambe`     | md380 49-bit frame, its 72-bit DMR frame (built with `DMR_A/B/C_TABLE`, `encode24128`, `encode23127`, `PRNG_TABLE`), the PRNG word |
+| `ambe`     | AMBE 49-bit frame, its 72-bit DMR frame (built with `DMR_A/B/C_TABLE`, `encode24128`, `encode23127`, `PRNG_TABLE`), the PRNG word |
 | `regen`    | 33-byte burst in, `CAMBEFEC::regenerateDMR` burst out, error count (36 bursts of clean frames with 0-5 bit errors per frame, 4 random bursts) |
 | `prngfnv`  | FNV-1a 32 of all 4096 `PRNG_TABLE[i] >> 1` (3 bytes each, big endian)         |
 | `emb`      | CC, PI, LCSS, burst bytes 13..19 after `CDMREMB::getData` (QR 16,7,6)        |

@@ -145,6 +145,12 @@ type RadioConfig struct {
 	// channel). Unset is sa818.DefaultFilters: emphasis off, high-pass and
 	// low-pass on. Saving it sends nothing.
 	SA818Filter *SA818Filter `json:"sa818Filter,omitempty"`
+	// SA818Volume is the SA818's volume, 1 to 8, sent when the module is
+	// programmed. Unset is 8.
+	SA818Volume *int `json:"sa818Volume,omitempty"`
+	// SA818Tail is the SA818's tail tone: true opens it, false closes it.
+	// Unset sends nothing and leaves the module's own setting.
+	SA818Tail *bool `json:"sa818Tail,omitempty"`
 }
 
 // SA818Filter is the SA818's three audio filters (AT+SETFILTER=emphasis,
@@ -465,6 +471,12 @@ func (r RadioConfig) SA818() (sa818.Settings, error) {
 	s.RxTone, s.TxTone = t, t
 	s.Squelch = r.SquelchLevel()
 	s.Filters = r.Filters()
+	if r.SA818Volume != nil {
+		s.Volume = *r.SA818Volume
+	}
+	if r.SA818Tail != nil {
+		s.Tail = ptrTo(*r.SA818Tail)
+	}
 	if r.Narrow {
 		s.Bandwidth = sa818.Narrow
 	}
@@ -518,6 +530,9 @@ func (c *Config) Validate() error {
 	}
 	if r.Squelch != nil && (*r.Squelch < 0 || *r.Squelch > 8) {
 		errs = append(errs, errors.New("radio: squelch must be 0 to 8"))
+	}
+	if r.SA818Volume != nil && (*r.SA818Volume < 1 || *r.SA818Volume > 8) {
+		errs = append(errs, errors.New("radio: SA818 volume must be 1 to 8"))
 	}
 	for name, v := range map[string]*float64{"receive volume": r.RxVolume, "transmit volume": r.TxVolume} {
 		if v != nil && (*v < 0 || *v > 1) {
@@ -657,3 +672,5 @@ func SaveConfig(path string, c *Config) error {
 	b = append(b, '\n')
 	return writeFileAtomic(path, b)
 }
+
+func ptrTo[T any](v T) *T { return &v }

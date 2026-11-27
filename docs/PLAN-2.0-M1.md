@@ -3,10 +3,10 @@
 Worktree: /home/user/wt-200 (branch try/2.0, from main 3832711). Everything below is one commit.
 
 M1 does five things:
-- It ships the `nodespot-dv` binary and unit, with a working USRP <-> md380 AMBE path and a loopback (parrot) network.
+- It ships the `nodespot-dv` binary and unit, with a working USRP <-> AMBE vocoder path and a loopback (parrot) network.
 - It moves host-list downloading into the nodespot server.
 - It deletes every line that drives the previous stack.
-- It turns "Enable digital modes" into "install md380-emu, start nodespot-dv".
+- It turns "Enable digital modes" into "install the software AMBE vocoder, start nodespot-dv".
 - It reserves the IMBE interface.
 
 The DMR, YSF, P25 and NXDN protocols are out of scope. Their cards show "not yet available in this build".
@@ -29,7 +29,7 @@ browser ──HTTP/SSE──> nodespot (User=nodespot)
                         ▼
                      nodespot-dv (User=nodespot-dv, loopback only)
                         │ UDP 127.0.0.1:34001 (rx from Asterisk) / → 127.0.0.1:32001 (tx to Asterisk)
-                        │ UDP → 127.0.0.1:2470 md380-emu (AMBE+2)
+                        │ UDP → 127.0.0.1:2470 software AMBE vocoder (AMBE+2)
                         ▼
                      Asterisk chan_usrp (private bridge node, rxchannel=USRP/127.0.0.1:34001:32001)
 ```
@@ -46,7 +46,7 @@ Responsibilities:
 | `usrp.Endpoint.readLoop` | usrp | Blocks on ReadFromUDP on 127.0.0.1:34001. It decodes packets and pushes `usrp.Packet` onto `rx chan` (cap 64). It drops packets whose source is not the configured peer IP. |
 | `usrp.Endpoint` tx pacer | usrp | `time.Ticker` at 20 ms. It writes queued VOICE frames to 32001 and sends the keyup=0 header on end. The seq counter is per endpoint. The queue is capped at 50 frames (1 s); when full, the oldest frame is dropped. |
 | `bridge.Router.Run` | bridge | The single owner of call state. It selects on USRP rx, network inbound, ctl commands and a 1 s housekeeping ticker. It emits events. |
-| `vocoder.Worker` x1 per direction | vocoder | Encode worker (PCM to AMBE) and decode worker (AMBE to PCM). Each has its own UDP socket to md380-emu, so replies cannot be confused across directions. md380-emu is single-threaded; two sockets just queue there. |
+| `vocoder.Worker` x1 per direction | vocoder | Encode worker (PCM to AMBE) and decode worker (AMBE to PCM). Each has its own UDP socket to the vocoder, so replies cannot be confused across directions. The vocoder is single-threaded; two sockets just queue there. |
 | `network.Network.Run` | per network | M1 has only `loopback`. |
 | `ctl.Server.Serve` + one goroutine per conn | ctl | Request/response, plus a per-subscriber writer with a 256-event buffer. A slow subscriber is disconnected with an `overflow` event rather than blocking the router. |
 | signal handler | main | SIGTERM cancels the root ctx; the program sends keyup=0 if TX is active and exits within 2 s. SIGHUP equals `reload`. |
@@ -58,7 +58,7 @@ Router data flow:
 - Call header: `TalkStart{Dir:"rx"}`. Terminator, or 1.5 s silence: pacer end (keyup=0) and `TalkEnd`.
 - A USRP TEXT (0x08 metadata) packet is sent to Asterisk at each rx call start: `TEXT` type with TLV tag 0x08, value `"<call> <tg>"` ASCII, at most 64 bytes. TX-side TEXT and DTMF from Asterisk are parsed and logged, but not acted on in M1. DTMF is reserved for M2 (dial-a-TG).
 
-### A.3 md380 client and timeouts
+### A.3 vocoder client and timeouts
 
 - One request in flight per socket. Encode is 320 bytes out, 7 bytes in; decode is 7 bytes out, 320 bytes in. The reply length is checked.
 - Read deadline 60 ms (config `vocoder.timeout_ms`, default 60).
@@ -85,7 +85,7 @@ Router data flow:
 - nodespot-dv validates the file strictly (DisallowUnknownFields, version 1).
   - A bad file at start: exit 78 (EX_CONFIG), so systemd's RestartPreventExitStatus=78 stops the loop.
   - A bad file on `reload`: the old config is kept and `{"ok":false,"code":"bad_config"}` is returned.
-- Without a file, the engine starts with the default USRP 34001/32001, md380 127.0.0.1:2470 and the loopback network, so a fresh enable works before the private node exists.
+- Without a file, the engine starts with the default USRP 34001/32001, vocoder 127.0.0.1:2470 and the loopback network, so a fresh enable works before the private node exists.
 
 ### A.6 systemd unit `packaging/systemd/nodespot-dv.service`
 
@@ -140,8 +140,8 @@ WantedBy=multi-user.target
 ```
 
 - A Nice of -5 needs no capability, because systemd applies it before dropping privileges.
-- On enable, the helper also writes a drop-in `/etc/systemd/system/md380-emu.service.d/nodespot.conf` with `IPAddressDeny=any` and `IPAddressAllow=localhost`, because md380-emu binds 0.0.0.0:2470.
-- The drop-in is removed by disable only if the helper's marker says nodespot installed md380-emu. Otherwise it stays; it is harmless.
+- On enable, the helper also writes a drop-in `/etc/systemd/system/md380-emu.service.d/nodespot.conf` with `IPAddressDeny=any` and `IPAddressAllow=localhost`, because the vocoder binds 0.0.0.0:2470.
+- The drop-in is removed by disable only if the helper's marker says nodespot installed the vocoder. Otherwise it stays; it is harmless.
 
 ### A.7 Binary `cmd/nodespot-dv`
 
@@ -183,7 +183,7 @@ Paths are relative to /home/user/wt-200. Tags: [T1]/[T2]/[T3] = track owner.
 | internal/dv/usrp/endpoint.go, endpoint_test.go [T1] | UDP rx loop and 20 ms tx pacer, peer filter. |
 | internal/dv/vocoder/vocoder.go [T1] | AMBE and IMBE interfaces, silence frames, Stats. |
 | internal/dv/vocoder/md380.go, md380_test.go [T1] | UDP client with deadlines and re-dial (A.3). |
-| internal/dv/vocoder/fake/fake.go [T1] | In-process fake md380 UDP server (deterministic codec, configurable delay/drop), used by tests and `bench -fake`. |
+| internal/dv/vocoder/fake/fake.go [T1] | In-process fake vocoder UDP server (deterministic codec, configurable delay/drop), used by tests and `bench -fake`. |
 | internal/dv/network/network.go [T1] | Network interface and the frame/target/login types. |
 | internal/dv/network/loopback/loopback.go, loopback_test.go [T1] | Parrot network. |
 | internal/dv/bridge/router.go, router_test.go [T1] | Call state machine, timeouts, events. |
@@ -267,7 +267,7 @@ Paths are relative to /home/user/wt-200. Tags: [T1]/[T2]/[T3] = track owner.
 | packaging/install.sh [T3] | `NODESPOT_DV=1` runs `nodespot dv enable`; the old variable is dropped. |
 | packaging/README.package [T1] | Mention nodespot-dv and its state dir. |
 | .github/workflows/ci.yml [T1] | Package-contents check for nodespot-dv; add `npm test` in web; add `go run ./cmd/nodespot-dv bench -fake -frames 200`. |
-| web/src/components/DigitalModes.svelte [T3] | Becomes "Digital modes": an Enable/Disable button, job log (via dv-job), status of nodespot-dv/md380-emu, restore-pending notice. No uninstall. |
+| web/src/components/DigitalModes.svelte [T3] | Becomes "Digital modes": an Enable/Disable button, job log (via dv-job), status of nodespot-dv and the vocoder, restore-pending notice. No uninstall. |
 | web/src/components/DvSetup.svelte [T3] | Keep Resume, the per-mode cards, DvBridge (private node) and favorites. A card whose mode has `available:false` shows "Not yet available in this build" and disabled controls; loopback shows as "Parrot (test)". |
 | web/src/components/DvCard.svelte, lib/dvpanel, dvmodes, dvlist, dvmsg, dvnetworks, dvbridge (+tests) [T3] | Adapt to the snapshot changes (C.3); dvnetworks stays read-only. |
 | web/src/lib/store.svelte.ts [T3] | The `dv` SSE stays; the type gains the new fields. |
@@ -316,14 +316,14 @@ The enable job is a transient unit. The script `dvEnableScript`, as root, runs t
 3. Simulate `apt-get install md380-emu [qemu-user-static if arch != armhf]`, then `nodespot-helper dv-step install-plan`. The plan step keeps the existing unexpected_deps guard and the marker.
 4. Install.
 5. For each legacy unit of analog_bridge, mmdvm_bridge, netcheck, ysfgateway, p25gateway, nxdngateway and stfu that is loaded: `systemctl disable --now`. This frees port 34001; nothing is purged.
-6. Write the md380-emu drop-in.
+6. Write the vocoder drop-in.
 7. `nodespot-helper dv-step config`.
 8. `systemctl daemon-reload` and `systemctl enable --now md380-emu nodespot-dv`.
 9. `nodespot-helper dv-step check`. It waits up to 10 s for /run/nodespot-dv/ctl.sock and a `status` with `vocoder.ok`, and prints a warning otherwise.
 
 Steps of `RunDVStep`: install-plan, config, check. ARMv6 (detected through /proc/cpuinfo or `dpkg --print-architecture` = armhf plus no `v7l`/`v8`) returns `Supported:false, Reason:"armv6_unsupported"`.
 
-`dv-disable` runs `systemctl disable --now nodespot-dv` and keeps md380-emu and the marker.
+`dv-disable` runs `systemctl disable --now nodespot-dv` and keeps the vocoder and the marker.
 
 ### C.2 API endpoints (all under /api/dv, roles unchanged)
 
@@ -358,7 +358,7 @@ GET /job is kept as the job log for the enable unit, so the UI's job poller logi
 
 ### C.3 Snapshot changes (DVSnapshot)
 
-- `Installed` means md380-emu is installed. `Running` means ctl is connected. `Configured` means config.json exists.
+- `Installed` means the vocoder is installed. `Running` means ctl is connected. `Configured` means config.json exists.
 - `Modes[i]` gains `Available bool`: M1 marks only `LOOP` true; BM, TGIF, DMR, YSF, P25 and NXDN are false.
 - `Services` becomes `[{nodespot-dv},{md380-emu}]`.
 - `Bridge.Source` becomes "nodespot-dv".
@@ -759,9 +759,9 @@ func MetaTLV(s string) []byte // tag 0x08, len, ASCII (<= 64)
 ### E.1 Risks and mitigations
 
 1. **Port 34001 is held by Analog_Bridge** on upgraded nodes. The enable job stops the legacy units. nodespot-dv retries the bind every 2 s and reports `usrp.listen` errors in status. The UI shows the legacy-units notice.
-2. **The headerless md380 protocol mismatches replies after a timeout.** Mitigated by the per-direction socket and re-dial on timeout (A.3); covered by a test with fake delay > timeout.
+2. **The headerless vocoder protocol mismatches replies after a timeout.** Mitigated by the per-direction socket and re-dial on timeout (A.3); covered by a test with fake delay > timeout.
 3. **qemu-user-static speed on arm64/amd64.** The bench gate (2x real-time, p99 at most 15 ms) is run on real hardware before release; results go in DV.md. The fallback (out of M1) is native IMBE only for P25.
-4. **md380-emu binds 0.0.0.0.** The drop-in IP restriction is written by enable.
+4. **The vocoder binds 0.0.0.0.** The drop-in IP restriction is written by enable.
 5. **Secrets leakage.** Config 0600 nodespot-dv, `Status` never carries NetConfig, diagnostics mask passwords, and the server never reads the file.
 6. **Socket permissions after upgrade.** The nodespot process gains group nodespot-dv only after restart; postinst restarts nodespot.service after `adduser`. SO_PEERCRED is the real gate anyway.
 7. **Hard cut-over loses features** (BM/TGIF/DMR/YSF/P25/NXDN until later milestones). This is clearly stated in the CHANGELOG and the UI; settings (networks.json, favorites, resume) are kept so later milestones pick them up.
@@ -799,18 +799,18 @@ func MetaTLV(s string) []byte // tag 0x08, len, ASCII (<= 64)
 - [ ] `grep -rn "Analog_Bridge\|STFU\|dv-" internal cmd web/src` shows only ini/, backup, migration stubs and comments
 - [ ] Placeholder scan: no real callsigns, IDs or IPs in new tests (only N0CALL, 1234567, 1997/1998/1999, 192.0.2.x, node2001)
 - [ ] On a Pi (bookworm, armhf), manual:
-  - enable from the UI; md380-emu and nodespot-dv are active and the legacy units are stopped;
+  - enable from the UI; the vocoder and nodespot-dv are active and the legacy units are stopped;
   - `ss -ulpn` shows 34001 on 127.0.0.1 only;
   - the parrot echo is heard via the private node;
   - Now Calling shows PARROT;
-  - disable stops nodespot-dv and md380-emu stays installed;
+  - disable stops nodespot-dv and the vocoder stays installed;
   - the real bench passes on armhf and on one arm64 board.
 - [ ] Upgrade from 1.4.x with the previous stack configured: favorites, resume, networks.json and the private node survive; the cards show "Not yet available in this build".
 
 ### E.4 CHANGELOG (operator-visible only)
 
 - Digital modes now run on the built-in nodespot engine; the previous stack is no longer used, and its services are stopped when you enable digital modes.
-- "Enable digital modes" installs only the md380-emu vocoder (plus qemu-user-static on 64-bit and x86 systems). ARMv6 boards are not supported.
+- "Enable digital modes" installs only the software AMBE vocoder (plus qemu-user-static on 64-bit and x86 systems). ARMv6 boards are not supported.
 - BrandMeister, TGIF, DMR, YSF, P25 and NXDN show "Not yet available in this build". Your settings and favorites are kept.
 - New Parrot test mode echoes your transmission back through the bridge node.
 - nodespot downloads the YSF, P25, NXDN and DMR host lists itself, once a day, while digital modes are enabled.

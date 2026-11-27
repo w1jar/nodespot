@@ -97,7 +97,7 @@ const ROWS: [string, string][] = [['dmr', 'DMR masters'], ['ysf', 'YSF reflector
 export function listRows(st: HostListsStatus | null): ListRow[] {
   if (!st) return [];
   const rows: ListRow[] = [];
-  if (st.nodelist) rows.push({ id: 'nodelist', label: 'AllStar nodes', count: st.nodelist.count, updated: st.nodelist.updated ?? '', error: st.nodelist.error ?? '' });
+  if (st.nodelist) rows.push({ id: 'nodelist', label: 'ASL nodes', count: st.nodelist.count, updated: st.nodelist.updated ?? '', error: st.nodelist.error ?? '' });
   for (const [id, label] of ROWS) {
     const l = st.lists?.[id];
     rows.push({ id, label, count: l?.entries ?? 0, updated: l?.updated ?? '', error: l?.error ?? '' });

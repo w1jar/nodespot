@@ -33,18 +33,18 @@ const (
 	// the playback.
 	DefaultDelay = time.Second
 	// Callsign is the pseudo callsign of the playback in the heard list.
-	Callsign = "ECHO TEST"
+	Callsign = "PARROT"
 	// queued is how many frames the playback keeps waiting for the node;
 	// the node takes one every 20 ms, so the playback follows its pace.
 	queued = 3
 
-	// DefaultMD380 is the md380-emu address used when the node gives none.
+	// DefaultMD380 is the software AMBE vocoder address used when the node gives none.
 	DefaultMD380 = "127.0.0.1:2470"
 )
 
 // Options are injectable for tests.
 type Options struct {
-	// AMBE is the vocoder for the ambe codec; default md380-emu at
+	// AMBE is the vocoder for the ambe codec; default is the software AMBE vocoder at
 	// Env.MD380.
 	AMBE vocoder.AMBE
 	// Tick is the playback interval (20 ms). A negative Tick runs no
@@ -106,7 +106,7 @@ func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
 		opt.Tick = audio.FrameDuration
 	}
 	m := &Mode{env: env, codec: codec, delay: time.Duration(ms) * time.Millisecond, opt: opt}
-	m.Init(mode.EchoTest, "Echo test", env.Clock())
+	m.Init(mode.EchoTest, "Parrot", env.Clock())
 	return m, nil
 }
 
@@ -129,7 +129,7 @@ func (m *Mode) Start(context.Context) error {
 		go m.tick(ctx, m.opt.Tick)
 	}
 	m.mu.Unlock()
-	m.SetTarget(&mode.Target{ID: "echo", Name: "Echo test"})
+	m.SetTarget(&mode.Target{ID: "echo", Name: "Parrot"})
 	m.SetState(mode.StateConnected, "talk to hear yourself"+m.codecNote(), "")
 	return nil
 }
@@ -251,7 +251,7 @@ func (m *Mode) EndTx() {
 	go m.code(ctx, gen, frames)
 }
 
-// ambeVocoder returns the AMBE vocoder, building the md380-emu client the
+// ambeVocoder returns the AMBE vocoder, building the vocoder client the
 // first time. Called by the coding worker.
 func (m *Mode) ambeVocoder() ambeCoder {
 	if m.opt.AMBE != nil {
@@ -294,7 +294,7 @@ func (m *Mode) code(ctx context.Context, gen uint64, in []audio.Frame) {
 	if failed > 0 {
 		// The recording still plays back, without the codec on the
 		// frames the vocoder missed.
-		msg := fmt.Sprintf("the AMBE vocoder (md380-emu) did not answer for %d of %d frames: it is not running or not reachable. Install or start it on the Modes page", failed, len(in))
+		msg := fmt.Sprintf("the software AMBE vocoder did not answer for %d of %d frames: it is not running or not reachable. Install or start it on the Modes page", failed, len(in))
 		m.env.Logger().Warn("echotest: " + msg)
 		m.SetState(mode.StateConnected, "AMBE vocoder not working: playing back as recorded", msg)
 	}

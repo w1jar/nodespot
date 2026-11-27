@@ -25,9 +25,9 @@ test('heardItems: one row per heard entry with the mode title and links', () => 
   assert.equal(heardItems([h({ callsign: '' })])[0].call, 'Unknown');
 });
 
-test('callItems: AllStar rows show the node description', () => {
+test('callItems: ASL rows show the node description', () => {
   const [r] = callItems([c({ desc: 'Hub (fake)', node: '1000' })]);
-  assert.equal(r.mode, 'AllStar');
+  assert.equal(r.mode, 'ASL');
   assert.equal(r.person, 'Hub (fake)');
   assert.equal(r.target, 'Node 1000');
 });
@@ -52,7 +52,7 @@ test('callItems: the place is "City, ST" for US callers and "City, Country" othe
   assert.equal(as.person, 'Hub (fake)');
 });
 
-test('mergeHeard: the same AllStar transmission from both sources is one row, the resolved one', () => {
+test('mergeHeard: the same ASL transmission from both sources is one row, the resolved one', () => {
   const heard = [h({ mode: 'allstar', callsign: '1997', name: 'Fav Hub', target: '1997', start: '2026-11-20T10:05:01Z', end: '2026-11-20T10:05:09Z' })];
   const recent = [c({ call: 'N1CALL', target: '1997', desc: 'Example Hub', node: '1997', start: '2026-11-20T10:05:00Z', end: '2026-11-20T10:05:09Z' })];
   const rows = mergeHeard(recent, heard);

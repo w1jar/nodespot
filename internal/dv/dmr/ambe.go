@@ -2,7 +2,7 @@ package dmr
 
 // AMBE+2 (AMBE 3600x2450) FEC for the DMR air interface.
 //
-// A 49-bit md380 frame u[0..48] splits into
+// A 49-bit AMBE frame u[0..48] splits into
 //
 //	a = u[0..11]  -> Golay(24,12) -> C0, 24 bits
 //	b = u[12..23] -> Golay(23,12) -> C1, 23 bits, XORed with a PRNG seeded by a
@@ -11,7 +11,7 @@ package dmr
 //
 // and C0..C3 (72 bits) are interleaved into the 72-bit DMR frame. The bit
 // order of the 49-bit frame is that of mbelib's ambe_d[] (mbe_eccAmbe3600x2450Data),
-// which is what md380-emu and the other AMBE+2 tools exchange. The interleave
+// which is what the software AMBE vocoder and the other AMBE+2 tools exchange. The interleave
 // schedule (rW/rX/rY/rZ) is the one of DSD dmr_const.h (ISC), the PRNG is
 // mbelib's mbe_demodulateAmbe3600x2450Data (ISC); the result is cross-checked
 // against MMDVMHost AMBEFEC.cpp (DMR_A/B/C_TABLE, PRNG_TABLE) in the tests.
@@ -60,7 +60,7 @@ func deinterleave72(in AMBE72) (c ambeFrames) {
 	return c
 }
 
-// EncodeAMBE converts an md380 49-bit frame to the 72-bit DMR frame.
+// EncodeAMBE converts an AMBE 49-bit frame to the 72-bit DMR frame.
 func EncodeAMBE(f AMBE) AMBE72 {
 	a := getBits(f[:], 0, 12)
 	b := getBits(f[:], 12, 12)
@@ -72,7 +72,7 @@ func EncodeAMBE(f AMBE) AMBE72 {
 	return interleave72(c)
 }
 
-// DecodeAMBE converts a 72-bit DMR frame to the md380 49-bit form and returns
+// DecodeAMBE converts a 72-bit DMR frame to the AMBE 49-bit form and returns
 // the number of bit errors corrected in C0 and C1.
 //
 // As in MMDVMHost, a frame whose C0 is uncorrectable, or that has too many

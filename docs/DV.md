@@ -4,7 +4,7 @@
 
 Digital modes (DMR, YSF, P25, NXDN) run on the nodespot engine, `nodespot-dv`, a small service that ships in the nodespot package. aslcp 2.0 replaces the previous third-party digital voice stack with it: that stack is no longer installed, configured or restarted by nodespot.
 
-> **You have to redo the digital-modes configuration in 2.0.** The BrandMeister, TGIF, DMR - Other, YSF, P25 and NXDN settings and your identity (callsign and DMR ID) are not carried over from the previous stack, and nothing is imported from its ini files. The previous stack is removed on upgrade, except md380-emu. See "Upgrading from 1.x" below.
+> **You have to redo the digital-modes configuration in 2.0.** The BrandMeister, TGIF, DMR - Other, YSF, P25 and NXDN settings and your identity (callsign and DMR ID) are not carried over from the previous stack, and nothing is imported from its ini files. The previous stack is removed on upgrade, except the software AMBE vocoder. See "Upgrading from 1.x" below.
 
 Status in 2.0.0: the engine, the control socket, the vocoder link, the **Echo test** (`LOOP`, a local audio test), **BrandMeister** (`BM`, a native Rewind client), **TGIF** and **DMR - Other** (native Homebrew clients), **NXDN**, **YSF** and **P25** (native reflector clients) are all in. YSF carries voice in DN (V/D mode 2) and Voice FR (VW); P25 carries IMBE. All modes are available.
 
@@ -15,7 +15,7 @@ browser  <-- REST + SSE -->  nodespot (user nodespot)
                                |-- ctl socket /run/nodespot-dv/ctl.sock --> nodespot-dv (user nodespot-dv)
                                |-- helper socket /run/nodespot/helper.sock --> nodespot-helper (root)
 nodespot-dv <-- USRP UDP 34001/32001 --> Asterisk chan_usrp (the bridge node)
-nodespot-dv <-- UDP 127.0.0.1:2470 --> md380-emu (the vocoder)
+nodespot-dv <-- UDP 127.0.0.1:2470 --> software AMBE vocoder
 ```
 
 - `nodespot-dv` reads `/var/lib/nodespot-dv/config.json`. The root helper renders it (`dv-config`); nodespot never writes it itself.
@@ -26,11 +26,11 @@ nodespot-dv <-- UDP 127.0.0.1:2470 --> md380-emu (the vocoder)
 
 `nodespot dv enable` (as root) or the Enable button of the digital modes page runs one job, `nodespot-dv-enable`:
 
-1. apt installs the md380-emu vocoder. Nothing else is installed on purpose; qemu-user-static comes along only because the md380-emu package depends on it (the vocoder is an ARM binary). On arm64 that package ships its own `/opt/md380-emu/qemu-arm-static` and its service runs that directly.
+1. apt installs the software AMBE vocoder. Nothing else is installed on purpose; qemu-user-static comes along only because the vocoder package depends on it (the vocoder is an ARM binary). On arm64 that package ships its own `/opt/md380-emu/qemu-arm-static` and its service runs that directly.
 2. The previous stack that nodespot installed is removed (see "Upgrading from 1.x"); this step is also the retry if the removal after the upgrade failed.
 3. The engine config is rendered and `nodespot-dv` is enabled and started.
 
-If the md380-emu repository becomes unavailable, OS updates still work, with a warning, and digital modes keep running with the md380-emu already installed.
+If the vocoder repository becomes unavailable, OS updates still work, with a warning, and digital modes keep running with the software AMBE vocoder already installed.
 
 `nodespot dv status [--json]` shows the state; `nodespot dv disable` stops the engine and keeps its settings. The command and the installer variable of 1.x keep working as aliases. In the installer, `NODESPOT_DV=1` runs it.
 
@@ -57,7 +57,7 @@ Digital Modes is one scrolling page in Settings (`#/settings/digital-modes`, no 
 
 > The native node has its own `echotest` mode (see docs/NATIVE_NODE.md) and the engine's `LOOP` mode described here is gone from the node.
 
-The Echo test is a local test with no network and no account: the engine records one transmission, waits about a second and plays it back through the bridge node as a received call from the pseudo callsign "ECHO TEST" (no talkgroup, no DMR ID). It proves the audio path of the node, USRP, the engine and the md380 vocoder in both directions. Its engine mode id is `LOOP`; it is always enabled while digital modes are enabled, so it has no Enable card, and a `LOOP` entry in an older `networks.json` is ignored. Not to be confused with the **BrandMeister Parrot** (TG 9990 on BrandMeister), a service of the real network that is called from the BrandMeister mode on the dashboard.
+The Echo test is a local test with no network and no account: the engine records one transmission, waits about a second and plays it back through the bridge node as a received call from the pseudo callsign "ECHO TEST" (no talkgroup, no DMR ID). It proves the audio path of the node, USRP, the engine and the software AMBE vocoder in both directions. Its engine mode id is `LOOP`; it is always enabled while digital modes are enabled, so it has no Enable card, and a `LOOP` entry in an older `networks.json` is ignored. Not to be confused with the **BrandMeister Parrot** (TG 9990 on BrandMeister), a service of the real network that is called from the BrandMeister mode on the dashboard.
 
 **Using it.** Settings, Digital Modes, *Audio*: press *Start echo test*, key up, talk, unkey, and you hear yourself back a second later. While it runs the dashboard card says "Echo test running" (it has no mode button there) and *Now calling* and *Last heard* show the playback as "Echo test". *Stop* switches back to the mode that was in effect before you started (the page remembers it; failing that, the last mode from `GET /api/dv/resume`, then the first enabled mode), and that mode's remembered talkgroup or reflector is tuned again, as when you switch modes on the dashboard. The Echo test is never remembered as the last mode, so a restart does not come back in it. Starting and stopping use `POST /api/dv/mode` (operator or admin).
 
@@ -135,11 +135,11 @@ On upgrade from a version before 2.0.0 the package starts the transient unit `no
 
 1. It deletes nodespot's own ini history copies of the old stack (`/var/lib/nodespot-dvstate-history` and the 1.x name of that directory).
 2. It waits until dpkg is idle, then stops and disables the old stack's units (`analog_bridge`, `mmdvm_bridge`, `netcheck`, `ysfgateway`, `p25gateway`, `nxdngateway`, `stfu`) that exist.
-3. It marks md380-emu and qemu-user-static as manually installed, simulates `apt-get purge` of the old stack's packages recorded in the marker, and refuses (removing nothing) if the simulation would remove anything else.
-4. It purges those packages, checks that md380-emu is still installed, and drops the purged names from the marker.
-5. The apt source and keyring stay, because md380-emu is installed from that repository and keeps getting its updates. md380-emu stays installed and working.
+3. It marks the software AMBE vocoder and qemu-user-static as manually installed, simulates `apt-get purge` of the old stack's packages recorded in the marker, and refuses (removing nothing) if the simulation would remove anything else.
+4. It purges those packages, checks that the software AMBE vocoder is still installed, and drops the purged names from the marker.
+5. The apt source and keyring stay, because the software AMBE vocoder is installed from that repository and keeps getting its updates. It stays installed and working.
 
-Nothing is removed that nodespot did not install, and md380-emu is never touched. A backup made on 1.x still restores (its ini files are ignored, see docs/BACKUP.md).
+Nothing is removed that nodespot did not install, and the software AMBE vocoder is never touched. A backup made on 1.x still restores (its ini files are ignored, see docs/BACKUP.md).
 
 ## Audit
 
@@ -185,7 +185,7 @@ YSF is a native reflector client for System Fusion reflectors (YSFReflector styl
 - The card is enable/disable only: there is no address or port. Enable it, then tune a reflector on the dashboard, picked from the YSF list. Nothing is linked when the engine starts. An address or port stored by an earlier 2.0 build is ignored and dropped.
 - Under "advanced": the poll period, the link timeout and the call end timeout.
 - Voice is received in **DN (V/D mode 2)** and in **Voice FR (VW)**; a call may use either. Your transmissions are always sent in DN. Wires-X is not supported.
-- VW is IMBE-coded and decoded by the built-in pure-Go IMBE codec (see "Voice codecs"); DN uses the md380-emu vocoder.
+- VW is IMBE-coded and decoded by the built-in pure-Go IMBE codec (see "Voice codecs"); DN uses the software AMBE vocoder.
 
 On the dashboard, choose YSF, pick a reflector from the list (or type a 5-digit id or `host:port`) and press Tune; unlink is `disconnect`. The card shows "Reflector not answering" (a warning) when the reflector has sent nothing back, not even a poll reply, for the link timeout (15 s by default), and clears it as soon as anything arrives.
 
@@ -222,8 +222,8 @@ To check your own level, tune the echo test (LOOP), transmit a few words, and re
 
 ## Voice codecs
 
-DMR, NXDN and YSF DN use AMBE+2 through the md380-emu vocoder; P25 and YSF Voice FR use IMBE, which the engine encodes and decodes itself in pure Go (no extra service). Every frame a network hands the bridge carries its codec, so one YSF call may be DN and the next VW. The bridge encodes your transmissions with the codec of the active network (P25: IMBE; everything else AMBE). A frame of the wrong length for its codec is dropped. IMBE is computed on the CPU of the node: a 20 ms frame (encode plus decode) takes well under a millisecond on a current x86 core. Measured on a Raspberry Pi 3B+ (arm64, Go build): encode plus decode about 2.4 ms per 20 ms frame (about 12% of one core), encode alone about 3.0 ms, decode alone about 0.85 ms, and barely changed (+3%) while also receiving DMR. The engine runs at most one IMBE encoder and one IMBE decoder at a time.
+DMR, NXDN and YSF DN use AMBE+2 through the software AMBE vocoder; P25 and YSF Voice FR use IMBE, which the engine encodes and decodes itself in pure Go (no extra service). Every frame a network hands the bridge carries its codec, so one YSF call may be DN and the next VW. The bridge encodes your transmissions with the codec of the active network (P25: IMBE; everything else AMBE). A frame of the wrong length for its codec is dropped. IMBE is computed on the CPU of the node: a 20 ms frame (encode plus decode) takes well under a millisecond on a current x86 core. Measured on a Raspberry Pi 3B+ (arm64, Go build): encode plus decode about 2.4 ms per 20 ms frame (about 12% of one core), encode alone about 3.0 ms, decode alone about 0.85 ms, and barely changed (+3%) while also receiving DMR. The engine runs at most one IMBE encoder and one IMBE decoder at a time.
 
-Codec2 3200 (used by M17) is also built in, in pure Go with no extra service. It works on the same 8 kHz, 20 ms frames as the USRP side (8 bytes per frame), so the bridge needs no resampling. A network that carries Codec2 reports `CodecC2`; the bridge encodes your transmissions to it and decodes what it receives to the node's audio, one encoder and one decoder at a time. Frames pass through PCM, so a Codec2 network works with the same node audio as any other. Measured on a Raspberry Pi 3B+ (arm64, Go build): encode about 314 microseconds and decode about 394 microseconds per 20 ms frame, that is about 1.6% plus 2.0% of one core per stream. `nodespot-dv bench -codec codec2` measures it on your machine (the default `-codec ambe` measures md380-emu).
+Codec2 3200 (used by M17) is also built in, in pure Go with no extra service. It works on the same 8 kHz, 20 ms frames as the USRP side (8 bytes per frame), so the bridge needs no resampling. A network that carries Codec2 reports `CodecC2`; the bridge encodes your transmissions to it and decodes what it receives to the node's audio, one encoder and one decoder at a time. Frames pass through PCM, so a Codec2 network works with the same node audio as any other. Measured on a Raspberry Pi 3B+ (arm64, Go build): encode about 314 microseconds and decode about 394 microseconds per 20 ms frame, that is about 1.6% plus 2.0% of one core per stream. `nodespot-dv bench -codec codec2` measures it on your machine (the default `-codec ambe` measures the software AMBE vocoder).
 
 Reference check: the Go Codec2 has a manual comparison against libcodec2 (c2enc/c2dec, speech samples from the Codec2 project). It is not part of normal CI. To run it, open the Actions tab, pick "Codec2 reference check" and use Run workflow. It reports bit-exact frames, differing parameter fields, decode SNR and a cross decode, to the job summary, and fails below 30 dB decode SNR or under 90% bit-exact frames (thresholds at the top of `cmd/c2check/main.go`).

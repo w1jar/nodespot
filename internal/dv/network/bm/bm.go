@@ -10,7 +10,7 @@
 // 60 ms, and a terminator. There is no super header and no talker alias
 // handling (DMR_EMBEDDED packets are ignored); a received super header is
 // still tolerated. TX audio packets are 27 bytes: three FEC coded 72-bit
-// AMBE+2 frames (internal/dv/dmr EncodeAMBE from the 49-bit md380 frames) per
+// AMBE+2 frames (internal/dv/dmr EncodeAMBE from the 49-bit AMBE frames) per
 // 60 ms. RX accepts the same 27 byte packets (decoded to 49 bits with
 // dmr.DecodeAMBE) and also 21 byte linear packets (three 49-bit frames).
 //

@@ -102,7 +102,7 @@
   }
   async function useEcho() {
     sw = true;
-    try { await api.select('echotest'); await refreshNode(); toast('Echo test is active. Key up, talk, and listen to the playback.'); } catch (e) { toastError(e); } finally { sw = false; }
+    try { await api.select('echotest'); await refreshNode(); toast('Parrot is active. Key up, talk, and listen to the playback.'); } catch (e) { toastError(e); } finally { sw = false; }
   }
 
   async function save(ev: Event) {
@@ -222,15 +222,15 @@
       {:else if saved}
         {@render gainSlider('txGainDb', 'Transmit gain')}
       {/if}
-      <p class="mt-1 text-xs text-muted">Listen on a handheld or run the echo test; set it so the tone is clear and as loud as other stations. There is no Auto-set here: the node cannot hear what it sends.</p>
+      <p class="mt-1 text-xs text-muted">Listen on a handheld or run the parrot; set it so the tone is clear and as loud as other stations. There is no Auto-set here: the node cannot hear what it sends.</p>
     </div>
     <div class="flex flex-wrap items-center justify-between gap-2">
       <button type="button" class="btn btn-sm" onclick={() => (step = 1)}>Back: receive</button>
       {#if !echoActive}
-        <button type="button" class="btn btn-sm" disabled={sw || !admin} onclick={useEcho}>Switch to echo test</button>
-      {:else}<span class="text-xs text-muted">The echo test is active. Pick another mode on the Modes page when done.</span>{/if}
+        <button type="button" class="btn btn-sm" disabled={sw || !admin} onclick={useEcho}>Switch to parrot</button>
+      {:else}<span class="text-xs text-muted">The parrot is active. Pick another mode on the Modes page when done.</span>{/if}
     </div>
-    {#if app.node?.echoTest}<p class="text-xs text-muted tabular-nums" data-testid="echo-report">Last echo test: {reportSummary(app.node.echoTest)}</p>{/if}
+    {#if app.node?.echoTest}<p class="text-xs text-muted tabular-nums" data-testid="echo-report">Last parrot: {reportSummary(app.node.echoTest)}</p>{/if}
   {/if}
 </section>
 

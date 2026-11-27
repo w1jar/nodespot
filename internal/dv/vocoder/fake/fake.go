@@ -1,4 +1,4 @@
-// Package fake is an in-process md380-emu stand-in: a UDP server with a
+// Package fake is an in-process stand-in for the software AMBE vocoder: a UDP server with a
 // deterministic codec, used by tests and `nodespot-dv bench -fake`.
 //
 // Codec: encode (320 bytes in) answers {0xA5, s0>>8, s0, 0, 0, 0, n} where s0
@@ -18,7 +18,7 @@ const (
 	ambeBytes = 7
 )
 
-// Server is the fake md380-emu.
+// Server is the fake software AMBE vocoder.
 type Server struct {
 	conn *net.UDPConn
 

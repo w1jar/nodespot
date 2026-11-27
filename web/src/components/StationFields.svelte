@@ -1,8 +1,8 @@
 <script lang="ts">
-  // The station form shared by the first-run setup and Settings: callsign, radio channel and tone, ID on or off.
+  // The station form shared by the first-run setup and Settings: callsign (can be hidden), radio channel and tone, ID on or off.
   import type { Station } from '../lib/types';
   import { CTCSS } from '../lib/station';
-  let { st = $bindable(), radio = true, idToggle = true, idPrefix = 'st' }: { st: Station; radio?: boolean; idToggle?: boolean; idPrefix?: string } = $props();
+  let { st = $bindable(), radio = true, callsign = true, idToggle = true, idPrefix = 'st' }: { st: Station; radio?: boolean; callsign?: boolean; idToggle?: boolean; idPrefix?: string } = $props();
   const id = (k: string) => `${idPrefix}-${k}`;
   const chk = 'size-4 accent-[var(--accent)]';
   let idOn = $state(st.id.enabled !== false);
@@ -10,10 +10,12 @@
 </script>
 
 <div class="space-y-3">
-  <div class="max-w-xs">
-    <label class="label" for={id('call')}>Station callsign</label>
-    <input id={id('call')} class="input font-mono uppercase" bind:value={st.callsign} autocomplete="off" placeholder="N0CALL" required />
-  </div>
+  {#if callsign}
+    <div class="max-w-xs">
+      <label class="label" for={id('call')}>Station callsign</label>
+      <input id={id('call')} class="input font-mono uppercase" bind:value={st.callsign} autocomplete="off" placeholder="N0CALL" required />
+    </div>
+  {/if}
   {#if radio}
     <div class="grid gap-3 sm:grid-cols-3">
       <div>

@@ -28,7 +28,7 @@ const DIAG_PLAN = {
     { name: 'audit.txt', desc: 'The last 200 audit log entries' },
   ],
   excluded: ['/etc/shadow and every other password file', 'Private keys and certificates', 'The nodespot database and session tokens', 'Saved WiFi networks'],
-  redacted: ['Mode passwords (AllStar, EchoLink, DMR masters)', 'nodespot secrets', 'WiFi pre-shared keys', 'Your callsign and public IP addresses (when masking is on)'],
+  redacted: ['Mode passwords (ASL, EchoLink, DMR masters)', 'nodespot secrets', 'WiFi pre-shared keys', 'Your callsign and public IP addresses (when masking is on)'],
 };
 const status = () => { const d = new Date(); return { ...host, now: d.toISOString(), clock: d.toString() }; };
 

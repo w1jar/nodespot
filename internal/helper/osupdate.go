@@ -43,9 +43,9 @@ const (
 	// output file, after a failed apt-get update.
 	StepAptUpdateCheck = "apt-update-check"
 
-	// OSWarnRepo is the warning shown when only the md380-emu repository
+	// OSWarnRepo is the warning shown when only the digital modes package repository
 	// could not be refreshed.
-	OSWarnRepo = "The digital modes package repository (md380-emu) could not be refreshed; other updates were checked normally."
+	OSWarnRepo = "The digital modes package repository could not be refreshed; other updates were checked normally."
 )
 
 // ErrAptBusy is returned by os-check when another apt or dpkg process holds
@@ -56,7 +56,7 @@ var ErrAptBusy = errors.New("apt is busy, try again later")
 // "upgrade" (never full-upgrade or dist-upgrade: nothing is removed and no
 // new package is pulled in; packages that would need that stay "kept back"),
 // keeping the local version of changed conffiles. A failed apt-get update
-// does not stop it when only the md380-emu repository failed (the helper's
+// does not stop it when only the digital modes package repository failed (the helper's
 // apt-update-check step decides); any other failure ends it with the exit
 // code of apt-get update. Nothing in it comes from a client.
 func (o *Ops) osUpgradeScript() string {
@@ -243,7 +243,7 @@ func aptUpdateRepoWarned(out, repoURL string) bool {
 
 // AptUpdateCheck is the apt-update-check step of the OS upgrade script: it
 // reads the saved output of the failed apt-get update and returns nil (after
-// printing a warning) when only the md380-emu repository failed.
+// printing a warning) when only the digital modes package repository failed.
 func (o *Ops) AptUpdateCheck(file string, w io.Writer) error {
 	f, err := os.Open(file)
 	if err != nil {

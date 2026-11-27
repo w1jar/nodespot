@@ -1,6 +1,6 @@
 // Package loopback is the echo test network (mode LOOP): it records the AMBE
 // frames of one transmission, waits, then plays them back as a received call
-// from the pseudo callsign "ECHO TEST", with no talkgroup. It proves both
+// from the pseudo callsign "PARROT", with no talkgroup. It proves both
 // audio directions on a live node and never touches a network.
 package loopback
 

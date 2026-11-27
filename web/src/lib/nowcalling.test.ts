@@ -27,13 +27,13 @@ test('mode titles and targets in the source labels', () => {
   assert.equal(sourceLabel({ ...base, kind: 'p25', target: '10100' }), 'P25 · 10100');
   assert.equal(sourceLabel({ ...base, kind: 'nxdn', target: '65000' }), 'NXDN · 65000');
   assert.equal(sourceLabel({ ...base, kind: 'ysf', target: 'YSF-TEST' }), 'YSF · YSF-TEST');
-  assert.equal(sourceLabel({ ...base, kind: 'allstar', target: '' }), 'AllStar');
+  assert.equal(sourceLabel({ ...base, kind: 'allstar', target: '' }), 'ASL');
   assert.equal(sourceShort(base), 'BrandMeister TG 91');
   assert.equal(sourceShort({ ...base, kind: 'm17', target: 'M17-XXX C' }), 'M17 M17-XXX C');
   assert.equal(sourceShort({ ...base, kind: 'm17', target: '' }), 'M17');
   assert.equal(sourceDetail(base), 'BrandMeister · TG 91 Example');
   assert.equal(sourceDetail({ ...base, targetName: '' }), 'BrandMeister · TG 91');
-  assert.equal(sourceDetail({ id: 'n', kind: 'allstar', start: base.start, active: true }), 'AllStar');
+  assert.equal(sourceDetail({ id: 'n', kind: 'allstar', start: base.start, active: true }), 'ASL');
 });
 
 test('main line leaves out what is unknown', () => {
