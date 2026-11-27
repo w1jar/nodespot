@@ -33,7 +33,7 @@ const (
 	// the playback.
 	DefaultDelay = time.Second
 	// Callsign is the pseudo callsign of the playback in the heard list.
-	Callsign = "ECHO TEST"
+	Callsign = "PARROT"
 	// queued is how many frames the playback keeps waiting for the node;
 	// the node takes one every 20 ms, so the playback follows its pace.
 	queued = 3
@@ -106,7 +106,7 @@ func New(env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
 		opt.Tick = audio.FrameDuration
 	}
 	m := &Mode{env: env, codec: codec, delay: time.Duration(ms) * time.Millisecond, opt: opt}
-	m.Init(mode.EchoTest, "Echo test", env.Clock())
+	m.Init(mode.EchoTest, "Parrot", env.Clock())
 	return m, nil
 }
 
@@ -129,7 +129,7 @@ func (m *Mode) Start(context.Context) error {
 		go m.tick(ctx, m.opt.Tick)
 	}
 	m.mu.Unlock()
-	m.SetTarget(&mode.Target{ID: "echo", Name: "Echo test"})
+	m.SetTarget(&mode.Target{ID: "echo", Name: "Parrot"})
 	m.SetState(mode.StateConnected, "talk to hear yourself"+m.codecNote(), "")
 	return nil
 }

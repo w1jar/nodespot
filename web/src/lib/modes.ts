@@ -5,7 +5,7 @@ import type { Favorite, Heard, LinkStats, ModeField, ModeInfo, NowCall, Station,
 export const MODE_ORDER = ['allstar', 'echolink', 'bm', 'dmr', 'tgif', 'ysf', 'p25', 'nxdn', 'm17', 'echotest'] as const;
 
 const TITLES: Record<string, string> = {
-  allstar: 'AllStar', echolink: 'EchoLink', bm: 'BrandMeister', dmr: 'DMR', tgif: 'TGIF', ysf: 'YSF', p25: 'P25', nxdn: 'NXDN', m17: 'M17', echotest: 'Echo test',
+  allstar: 'ASL', echolink: 'EchoLink', bm: 'BrandMeister', dmr: 'DMR', tgif: 'TGIF', ysf: 'YSF', p25: 'P25', nxdn: 'NXDN', m17: 'M17', echotest: 'Parrot',
 };
 
 /** The display name of a mode; the server's title wins when the list is loaded. */
@@ -304,7 +304,7 @@ export const ECHO_CODECS: { value: string; label: string }[] = [
   { value: 'imbe', label: 'IMBE (P25)' },
   { value: 'codec2', label: 'Codec 2 (M17)' },
   { value: 'gsm', label: 'GSM (EchoLink)' },
-  { value: 'ulaw', label: 'µ-law (AllStar)' },
+  { value: 'ulaw', label: 'µ-law (ASL)' },
 ];
 
 /** The echo test's saved codec ("plain" when none is stored or the stored one is unknown). */

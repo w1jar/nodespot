@@ -21,7 +21,7 @@ interface ModeDef { name: string; title: string; targetLabel: string; targetHelp
 const cs = (suffix?: string, required = true): Field => ({ key: 'callsign', label: suffix ? 'EchoLink callsign' : 'Callsign', kind: 'text', required, stationDefault: 'callsign', ...(suffix ? { stationSuffix: suffix } : {}), ...(required ? {} : { advanced: true }) });
 const pw = (key: string, label: string, required = true): Field => ({ key, label, kind: 'password', secret: true, required });
 const MODES: ModeDef[] = [
-  { name: 'allstar', title: 'AllStar', targetLabel: 'Node number', targetHelp: 'An AllStar node number, for example 1000.', targets: ['1000', '1037', '1185'],
+  { name: 'allstar', title: 'ASL', targetLabel: 'Node number', targetHelp: 'An ASL node number, for example 1000.', targets: ['1000', '1037', '1185'],
     fields: [{ key: 'node', label: 'Node number', kind: 'text', required: true, default: '1999' }, pw('password', 'Node password'), { key: 'server', label: 'Registration server', kind: 'text', advanced: true, default: 'register.example.net' }] },
   { name: 'echolink', title: 'EchoLink', targetLabel: 'Callsign or node', targetHelp: 'An EchoLink node number or callsign with -L or -R.', targets: ['N1CALL-L', '123456'],
     fields: [cs('-L'), pw('password', 'EchoLink password'), { key: 'location', label: 'Location text', kind: 'text', advanced: true }] },
@@ -37,7 +37,7 @@ const MODES: ModeDef[] = [
     fields: [cs(), { key: 'id', label: 'DMR ID', kind: 'number', required: true, stationDefault: 'dmrId' }] },
   { name: 'nxdn', title: 'NXDN', targetLabel: 'Talkgroup', targetHelp: 'An NXDN reflector talkgroup.', needsHost: true, targets: ['65000'],
     fields: [cs(), { key: 'id', label: 'NXDN ID', kind: 'number', required: true, stationDefault: 'nxdnId' }] },
-  { name: 'echotest', title: 'Echo test', targetLabel: 'Target', targetHelp: 'The echo test has no target.', targets: [],
+  { name: 'echotest', title: 'Parrot', targetLabel: 'Target', targetHelp: 'The parrot has no target.', targets: [],
     fields: [{ key: 'codec', label: 'Codec', kind: 'select', options: ['plain', 'ambe', 'imbe', 'codec2', 'gsm', 'ulaw'], default: 'plain', help: 'What the recording goes through before it is played back. Plain is the radio audio unchanged; ambe needs the vocoder.' },
       { key: 'playback_delay_ms', label: 'Playback delay (ms)', kind: 'number', advanced: true, default: '1000' }] },
   { name: 'm17', title: 'M17', targetLabel: 'Reflector and module', targetHelp: 'A reflector and module, for example M17-XXX C.', needsHost: true, targets: ['M17-XXX C'],

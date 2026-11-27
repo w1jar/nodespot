@@ -238,10 +238,10 @@ test('a favorite is active when its mode is active and the target matches', () =
   assert.equal(favoriteActive({ mode: 'ysf', target: 'ysf-test' }, 'ysf', { id: 'YSF-TEST' }), true);
 });
 
-test('echo test codec: choices, saved value and the values to save', () => {
+test('parrot codec: choices, saved value and the values to save', () => {
   assert.deepEqual(ECHO_CODECS.map((o) => o.value), ['plain', 'ambe', 'imbe', 'codec2', 'gsm', 'ulaw']);
-  assert.equal(ECHO_CODECS.find((o) => o.value === 'ulaw')?.label, 'µ-law (AllStar)');
-  const m = { name: 'echotest', title: 'Echo test', configured: true, active: false, settings: { values: { codec: 'AMBE', playback_delay_ms: '1500' } } } as ModeInfo;
+  assert.equal(ECHO_CODECS.find((o) => o.value === 'ulaw')?.label, 'µ-law (ASL)');
+  const m = { name: 'echotest', title: 'Parrot', configured: true, active: false, settings: { values: { codec: 'AMBE', playback_delay_ms: '1500' } } } as ModeInfo;
   assert.equal(echoCodec(m), 'ambe');
   assert.equal(echoCodec(undefined), 'plain');
   assert.equal(echoCodec({ ...m, settings: { values: { codec: 'bogus' } } }), 'plain');

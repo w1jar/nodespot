@@ -31,15 +31,15 @@ func init() { mode.Register(Spec()) }
 func Spec() mode.Spec {
 	return mode.Spec{
 		Name:        mode.AllStar,
-		Title:       "AllStar",
+		Title:       "ASL",
 		TargetLabel: "Node",
-		TargetHelp:  "The AllStar node number to link to.",
+		TargetHelp:  "The ASL node number to link to.",
 		Fields: []mode.Field{
 			{Key: KeyNode, Label: "Node number", Kind: mode.FieldText, Required: true,
-				Help: "Your AllStarLink node number."},
+				Help: "Your ASL node number."},
 			{Key: KeyPassword, Label: "Node password", Kind: mode.FieldPassword, Secret: true,
-				Help: "The node password from the AllStarLink portal. Needed to register."},
-			{Key: KeyRegister, Label: "Register with AllStarLink", Kind: mode.FieldBool, Default: "true", Advanced: true},
+				Help: "The node password from the ASL portal. Needed to register."},
+			{Key: KeyRegister, Label: "Register with ASL", Kind: mode.FieldBool, Default: "true", Advanced: true},
 			{Key: KeyRegisterURL, Label: "Registration URL", Kind: mode.FieldText, Default: register.DefaultURL, Advanced: true},
 			{Key: KeyIntervalS, Label: "Registration interval (s)", Kind: mode.FieldNumber, Default: "60", Advanced: true},
 			{Key: KeyLinkWaitS, Label: "Wait for registration (s)", Kind: mode.FieldNumber, Default: "90", Advanced: true,

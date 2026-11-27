@@ -117,7 +117,7 @@
     return run(async () => { await api.select(sel, targetBody(t, name ? { name } : {})); text = ''; noVoiceWarning(); }, `${title}: connecting to ${t}`, sel);
   };
   const activate = () => run(async () => { await api.select(sel); noVoiceWarning(); }, `${title} is active`, sel);
-  const startStop = () => (isActive ? run(() => api.select(''), 'Echo test stopped', '') : activate());
+  const startStop = () => (isActive ? run(() => api.select(''), 'Parrot stopped', '') : activate());
   const stop = () => run(() => api.select(''), 'No mode is active', '');
   const disconnect = () => run(() => api.disconnect(), 'Disconnected');
   async function tap(f: Favorite) { await connect(f.target, f.label !== f.target ? f.label : ''); }
@@ -166,7 +166,7 @@
     try {
       await api.saveMode('echotest', { values: echoCodecValues(info, v) });
       await refreshModes();
-      toast(`Echo test codec: ${ECHO_CODECS.find((o) => o.value === v)?.label ?? v}. The next recording uses it.`);
+      toast(`Parrot codec: ${ECHO_CODECS.find((o) => o.value === v)?.label ?? v}. The next recording uses it.`);
     } catch (e) { el.value = codec; toastError(e); } finally { codecBusy = false; }
   }
   // ---- The settings section: collapsible; a mode that is not ready opens it.
@@ -251,7 +251,7 @@
           {#if op && info.configured}
             <span class="ml-auto flex flex-wrap gap-2">
               {#if sel === 'echotest'}
-                <button class="btn btn-sm {isActive ? 'btn-bad-outline' : 'btn-primary'}" disabled={busy} onclick={startStop}><Power size={13} aria-hidden="true" />{isActive ? 'Stop echo test' : 'Start echo test'}</button>
+                <button class="btn btn-sm {isActive ? 'btn-bad-outline' : 'btn-primary'}" disabled={busy} onclick={startStop}><Power size={13} aria-hidden="true" />{isActive ? 'Stop parrot' : 'Start parrot'}</button>
               {:else if isActive}
                 <button class="btn btn-sm" disabled={busy} onclick={stop} title="Make no mode active: the radio goes idle"><Unplug size={13} aria-hidden="true" />Stop {title}</button>
               {:else}

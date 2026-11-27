@@ -78,13 +78,13 @@ const (
 const DefaultHomebrewPassword = "passw0rd"
 
 // EchoTestCall is the source callsign of the echo test's playback call (mode
-// LOOP, shown as "Echo test" in the panel). It is not a valid callsign (a space),
+// LOOP, shown as "Parrot" in the panel). It is not a valid callsign (no digit),
 // so it never collides with a station.
-const EchoTestCall = "ECHO TEST"
+const EchoTestCall = "PARROT"
 
 // EchoTestName is how the panel names that caller and the mode (Last heard,
 // Now calling).
-const EchoTestName = "Echo test"
+const EchoTestName = "Parrot"
 
 // IsEchoTest reports whether t is the echo test's playback call.
 func IsEchoTest(t Talk) bool { return t.Mode == ModeLoop && t.Dir == "rx" && t.Call == EchoTestCall }

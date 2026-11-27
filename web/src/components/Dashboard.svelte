@@ -43,7 +43,7 @@
     const a: { key: string; text: string; href: string }[] = [];
     if (node && !node.running) a.push({ key: 'node', text: `The node is not running${node.error ? `: ${node.error}` : ''}`, href: '/settings/system/node' });
     if (node?.mode?.state === 'error') a.push({ key: 'mode', text: `${modeTitle(node.active ?? '', app.modes)}: ${node.mode.error || node.mode.detail || 'error'}`, href: '/modes' });
-    if (node?.registration && !node.registration.registered && node.active === 'allstar') a.push({ key: 'reg', text: `AllStarLink registration: ${node.registration.lastError || 'not registered yet'}`, href: '/modes?mode=allstar' });
+    if (node?.registration && !node.registration.registered && node.active === 'allstar') a.push({ key: 'reg', text: `ASL registration: ${node.registration.lastError || 'not registered yet'}`, href: '/modes?mode=allstar' });
     return a;
   });
 

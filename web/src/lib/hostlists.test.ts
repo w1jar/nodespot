@@ -67,7 +67,7 @@ const st: HostListsStatus = {
   nodelist: { count: 100, updated: null, source: 'none', error: 'no nodelist URL configured' },
 };
 
-test('rows: AllStar nodes first, then the five lists; a missing list is empty', () => {
+test('rows: ASL nodes first, then the five lists; a missing list is empty', () => {
   const rows = listRows(st);
   assert.deepEqual(rows.map((r) => r.id), ['nodelist', 'dmr', 'ysf', 'p25', 'nxdn', 'm17']);
   assert.equal(rows[0].error, 'no nodelist URL configured');

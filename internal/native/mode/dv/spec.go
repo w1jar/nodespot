@@ -80,7 +80,7 @@ var slotField = mode.Field{Key: "slot", Label: "Timeslot", Kind: mode.FieldSelec
 var defs = []def{
 	{
 		ambe: true, name: mode.BM, title: "BrandMeister", ctlMode: ctl.ModeBM, login: true, target: targetTG,
-		label: "Talkgroup", help: "A BrandMeister talkgroup number. 9990 is the Parrot echo test.",
+		label: "Talkgroup", help: "A BrandMeister talkgroup number. 9990 is the Parrot.",
 		fields: []mode.Field{
 			dmrIDField,
 			callsignField(false),
@@ -125,7 +125,7 @@ var defs = []def{
 		},
 	},
 	{
-		ambe: true, name: mode.YSF, title: "System Fusion", ctlMode: ctl.ModeYSF, target: targetReflector,
+		ambe: true, name: mode.YSF, title: "YSF", ctlMode: ctl.ModeYSF, target: targetReflector,
 		label: "Reflector", help: "A reflector from your list, or host:port.",
 		fields: []mode.Field{
 			callsignField(true),

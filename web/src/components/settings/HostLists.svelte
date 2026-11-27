@@ -45,7 +45,7 @@
       </button>
     {/if}
   </div>
-  <p class="text-xs text-muted">The AllStar node list and the reflector and master lists the Modes page offers. They download by themselves about once a day.{#if wait > 0}{' '}The next manual refresh is allowed in {Math.ceil(wait / 60)} min.{/if}</p>
+  <p class="text-xs text-muted">The ASL node list and the reflector and master lists the Modes page offers. They download by themselves about once a day.{#if wait > 0}{' '}The next manual refresh is allowed in {Math.ceil(wait / 60)} min.{/if}</p>
   {#if st}
     <ul class="divide-y divide-line" data-testid="hostlists-rows">
       {#each rows as r (r.id)}

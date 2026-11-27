@@ -13,6 +13,7 @@ Release notes are taken from the section of the tag being released
 ### Changed
 - All of the SA818's values are in the Channel card: frequency, tone and squelch as before, plus volume (1 to 8, default 8), tail tone (leave as is, open or closed) and the three filters, which moved there from Timing and ID > Advanced. The card shows what the module was last programmed with, or "Unknown until programmed". Saving reprograms the module when any of these values changed, and so does a restart, not only when the channel changed.
 - The AMBE vocoder is now called the software AMBE vocoder everywhere in the web UI, the installer and the docs.
+- Web UI names: AllStar is now ASL, System Fusion is now YSF and the echo test is now Parrot (mode buttons, titles, messages and the Parrot's callsign in Last heard). Mode IDs, API fields and URLs are unchanged.
 
 ### Added
 - The install page has an "AMBE vocoder" option that adds `NODESPOT_VOCODER=1` to the install command, and lists `NODESPOT_VOCODER=1` with the other installer options.
