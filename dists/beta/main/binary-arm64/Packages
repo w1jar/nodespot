@@ -1,26 +1,5 @@
 Package: nodespot
 Architecture: arm64
-Version: 1.0.2
-Priority: optional
-Section: net
-Maintainer: nodespot <noreply@users.noreply.github.com>
-Installed-Size: 28607
-Depends: systemd, adduser, git
-Filename: pool/beta/a/nodespot/nodespot_1.0.2_arm64.deb
-Size: 8980568
-MD5sum: 7adbe9891918630a5b676dffc04a78e2
-SHA1: 5be9dfdb3a6c5d5cf7e92ba0d05d6fcd502cb718
-SHA256: fc7a6950276e64f490371b51097a27c1a774c1c49e0da42d1640a82af2a5ca2c
-SHA512: 9ff3faa1522bf0d79f85d31a7f2880b236391df95649030da99a1ce366c1230dc53a071e5743b19801e3f030e93187a065ddd8690c011d9a5b0c6b74de5a4f07
-Homepage: https://w1jar.github.io/nodespot/
-Description: Native radio node with a web control panel.
- One radio, one network mode at a time (AllStarLink, EchoLink or a digital
- mode), chosen and watched from a browser. The node (nodespot-node) runs on its
- own, without Asterisk; the panel talks to it over a local socket. A small
- root helper performs package updates and backups on request.
-
-Package: nodespot
-Architecture: arm64
 Version: 1.0.0
 Priority: optional
 Section: net
@@ -54,6 +33,27 @@ MD5sum: e85f2391e51d30c10e1006278a28d4ee
 SHA1: 3c3b731d535fd0789b1c32dd84859e16b2143d28
 SHA256: 73e20d29e9d130c2511101b16c8465054dfbf9a6cb717e7781dc15cdc333bdb2
 SHA512: 7b302713bb811ee4aa4a46e61ed15b68b40f2692f0a50db75e2dabb4433b657e90122cbca31f80f7fd5c4fcb4482e8f5a1bf7c577417f86c3c2c907c27b25866
+Homepage: https://w1jar.github.io/nodespot/
+Description: Native radio node with a web control panel.
+ One radio, one network mode at a time (AllStarLink, EchoLink or a digital
+ mode), chosen and watched from a browser. The node (nodespot-node) runs on its
+ own, without Asterisk; the panel talks to it over a local socket. A small
+ root helper performs package updates and backups on request.
+
+Package: nodespot
+Architecture: arm64
+Version: 1.0.2
+Priority: optional
+Section: net
+Maintainer: nodespot <noreply@users.noreply.github.com>
+Installed-Size: 28607
+Depends: systemd, adduser, git
+Filename: pool/main/a/nodespot/nodespot_1.0.2_arm64.deb
+Size: 8980568
+MD5sum: 7adbe9891918630a5b676dffc04a78e2
+SHA1: 5be9dfdb3a6c5d5cf7e92ba0d05d6fcd502cb718
+SHA256: fc7a6950276e64f490371b51097a27c1a774c1c49e0da42d1640a82af2a5ca2c
+SHA512: 9ff3faa1522bf0d79f85d31a7f2880b236391df95649030da99a1ce366c1230dc53a071e5743b19801e3f030e93187a065ddd8690c011d9a5b0c6b74de5a4f07
 Homepage: https://w1jar.github.io/nodespot/
 Description: Native radio node with a web control panel.
  One radio, one network mode at a time (AllStarLink, EchoLink or a digital
