@@ -14,7 +14,6 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -74,9 +73,6 @@ type Info struct {
 	OS *OSInfo `json:"os,omitempty"`
 }
 
-// ArmhfReason is the ApplyReason of a 32-bit (armhf) install.
-const ArmhfReason = "this is a 32-bit (armhf) system and nodespot is no longer built for it (ASL3 has no armhf packages); reinstall with Raspberry Pi OS Lite (64-bit) to get updates"
-
 // Errors.
 var (
 	// ErrUnavailable is returned when updates cannot be used at all.
@@ -115,10 +111,6 @@ type Manager struct {
 	// HelperTimeout bounds the live job status request of Info.
 	HelperTimeout time.Duration
 
-	// GOARCH is the architecture of the running binary (default
-	// runtime.GOARCH); "arm" is a 32-bit armhf install, which gets no updates.
-	GOARCH string
-
 	binVersion string // installed version from the binary, "" when not a package build
 
 	checkMu sync.Mutex // serialises latest.json fetches
@@ -136,7 +128,7 @@ type Manager struct {
 // is not a package version the helper's dpkg-query answer is used instead.
 // fetch may be nil (update checks disabled).
 func New(h Helper, installed string, fetch FetchFunc) *Manager {
-	m := &Manager{GOARCH: runtime.GOARCH, Helper: h, Fetch: fetch, FirstCheck: time.Minute, Interval: 6 * time.Hour, HelperTimeout: 5 * time.Second}
+	m := &Manager{Helper: h, Fetch: fetch, FirstCheck: time.Minute, Interval: 6 * time.Hour, HelperTimeout: 5 * time.Second}
 	if IsPackageVersion(installed) {
 		m.binVersion = strings.TrimSpace(installed)
 	}
@@ -222,11 +214,6 @@ func (m *Manager) compose(st helper.Status, herr error) Info {
 		in.ApplyReason = ptr(reasonFor(herr))
 	default:
 		in.Job, in.JobLog = st.Job, st.JobLog
-	}
-	if m.GOARCH == "arm" {
-		// latest.json is not per architecture, but the apt repository has no
-		// new armhf packages: an apply would end with "already newest".
-		in.ApplyReason = ptr(ArmhfReason)
 	}
 	if m.have && m.latestC == m.channelLocked() && debver.Valid(m.latest.Version) {
 		in.Candidate = m.latest.Version

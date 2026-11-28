@@ -84,24 +84,27 @@ type VocoderStatus struct {
 }
 
 // VocoderPlatform decides whether the vocoder can be installed: host codename
-// bookworm or trixie, architecture amd64, arm64 or armhf.
+// bookworm or trixie, architecture amd64 or arm64. A 32-bit (armhf) board is a
+// hotspot and network node only, with no software vocoder.
 func VocoderPlatform(codename, arch string) (bool, string) {
 	if codename != "bookworm" && codename != "trixie" {
 		return false, fmt.Sprintf("Debian %q is not supported (bookworm and trixie are)", codename)
 	}
 	switch arch {
-	case "amd64", "arm64", "armhf":
+	case "amd64", "arm64":
 		return true, ""
+	case "armhf":
+		return false, VocoderArmhfReason
 	}
-	return false, fmt.Sprintf("architecture %q is not supported (amd64, arm64 and armhf are)", arch)
+	return false, fmt.Sprintf("architecture %q is not supported (amd64 and arm64 are)", arch)
 }
 
+// VocoderArmhfReason is the status reason on a 32-bit (armhf) board.
+const VocoderArmhfReason = "This is a 32-bit board (armhf), used as a hotspot and network node: the software AMBE vocoder is not supported on 32-bit boards. Digital modes that need it (cross-mode) need a 64-bit OS."
+
 // vocoderPackages is the install set: the vocoder emulator (an ARM binary)
-// and, except on armhf where it runs natively, qemu user-mode emulation.
-func vocoderPackages(arch string) []string {
-	if arch == "armhf" {
-		return []string{vocoderPkg}
-	}
+// and qemu user-mode emulation. Only 64-bit hosts get here (VocoderPlatform).
+func vocoderPackages(_ string) []string {
 	return []string{vocoderPkg, vocoderQemuPkg}
 }
 

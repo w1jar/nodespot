@@ -42,9 +42,13 @@
 # If the vocoder cannot be installed (unsupported system, no network, apt error)
 # the installer prints a warning and still finishes successfully; install it later
 # from the Modes page. Not combined with NODESPOT_TAKEOVER=undo.
-# 64-bit only: arm64 and amd64. On a 32-bit system (dpkg architecture armhf,
-# including a 32-bit userland on a 64-bit kernel) the installer refuses before
-# anything is changed; reinstall with Raspberry Pi OS Lite (64-bit).
+# Architectures: arm64 and amd64 (64-bit), and armhf (32-bit, ARMv6 hard-float: the
+# Raspberry Pi Zero W and other 32-bit boards, including a 32-bit userland on a
+# 64-bit kernel). On armhf the installer prints a note: it is a hotspot and
+# network node only (digital modes and networks work; the software AMBE vocoder
+# and analog radio interfaces do not). armel (ARMv5) and anything else is refused
+# before anything is changed. A Raspberry Pi Zero 2 W or newer should use the
+# 64-bit OS.
 # nodespot runs its own node (nodespot-node): it does not need AllStarLink 3 or
 # Asterisk and never installs them.
 # Pre-flight: before anything is changed the installer refuses to run while
@@ -68,18 +72,22 @@ die() { printf '%s\n' "nodespot-install: error: $*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || die "run as root (for example: curl -fsSL $APT_URL/install.sh | sudo sh)"
 
 # ---8<--- arch-check (exercised by the Go tests in internal/pkgscripts; keep self-contained)
-# check_arch: succeeds on arm64 and amd64 (the dpkg architecture, i.e. the
-# userland); refuses everything else. A 32-bit userland on a 64-bit kernel
-# reports armhf too. Read-only; changes nothing.
+# check_arch: succeeds on arm64, amd64 and armhf (the dpkg architecture, i.e. the
+# userland); refuses everything else (armel, ARMv5, unknown). A 32-bit userland on
+# a 64-bit kernel reports armhf too. The binaries are built for ARMv6, which runs
+# on every armhf board. Read-only apart from the note it prints on armhf.
 check_arch() {
 	command -v dpkg >/dev/null 2>&1 || die "dpkg not found"
 	ARCH=$(dpkg --print-architecture)
 	case "$ARCH" in
 	arm64 | amd64) ;;
-	armhf | armel)
-		die "this system is 32-bit ($ARCH, kernel $(uname -m 2>/dev/null || echo unknown)). nodespot needs a 64-bit OS: reinstall with Raspberry Pi OS Lite (64-bit), then install nodespot again. Nothing was changed."
+	armhf)
+		printf '%s\n' "nodespot-install: note: this is a 32-bit system (armhf, kernel $(uname -m 2>/dev/null || echo unknown)). nodespot runs here as a hotspot and network node only: digital modes and networks are supported; the software AMBE vocoder (cross-mode) is not, and analog radio interfaces (USB sound cards, SA818 audio, ASL or EchoLink voice through a local radio) are not supported on 32-bit boards. A Raspberry Pi Zero 2 W or newer should use Raspberry Pi OS Lite (64-bit)."
 		;;
-	*) die "unsupported architecture '$ARCH' (supported: arm64, amd64)" ;;
+	armel)
+		die "this system is 32-bit ARMv5 ($ARCH, kernel $(uname -m 2>/dev/null || echo unknown)) and is not supported (supported: arm64, amd64, armhf). Nothing was changed."
+		;;
+	*) die "unsupported architecture '$ARCH' (supported: arm64, amd64, armhf)" ;;
 	esac
 }
 # --->8--- arch-check

@@ -64,10 +64,13 @@ func TestVocoderPinnedFingerprintFormat(t *testing.T) {
 
 func TestVocoderPlatform(t *testing.T) {
 	for _, c := range []string{"bookworm", "trixie"} {
-		for _, arch := range []string{"arm64", "amd64", "armhf"} {
+		for _, arch := range []string{"arm64", "amd64"} {
 			if ok, reason := VocoderPlatform(c, arch); !ok || reason != "" {
 				t.Errorf("%s %s: %v %q", c, arch, ok, reason)
 			}
+		}
+		if ok, reason := VocoderPlatform(c, "armhf"); ok || reason != VocoderArmhfReason || !strings.Contains(reason, "32-bit") {
+			t.Errorf("%s armhf: %v %q", c, ok, reason)
 		}
 		if ok, _ := VocoderPlatform(c, "riscv64"); ok {
 			t.Errorf("%s riscv64 accepted", c)
@@ -80,9 +83,6 @@ func TestVocoderPlatform(t *testing.T) {
 
 func TestVocoderPackages(t *testing.T) {
 	if got := vocoderPackages("arm64"); len(got) != 2 || got[0] != "md380-emu" || got[1] != "qemu-user-static" {
-		t.Fatalf("%v", got)
-	}
-	if got := vocoderPackages("armhf"); len(got) != 1 || got[0] != "md380-emu" {
 		t.Fatalf("%v", got)
 	}
 }
@@ -100,9 +100,6 @@ func TestVocoderScript(t *testing.T) {
 			t.Fatalf("%q missing or out of order in:\n%s", w, s)
 		}
 		at += i + 1
-	}
-	if strings.Contains(vocoderScript("armhf", DefaultVocoderDropin), "qemu") {
-		t.Error("armhf runs the vocoder natively")
 	}
 	if strings.Contains(s, "apt-get purge") || strings.Contains(s, "apt-get remove") || strings.Contains(s, "nodespot-dv") {
 		t.Error("the install job only installs the vocoder")

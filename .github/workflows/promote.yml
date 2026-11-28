@@ -73,6 +73,8 @@ jobs:
             echo "::warning::no deb assets on the GitHub release v$VERSION: nothing to compare with"
             exit 0
           fi
+          # the release carries one deb per architecture (arm64, amd64, armhf); an older
+          # release built before armhf was published has no armhf deb
           for f in rel/*.deb; do
             p=$(find apt-repo/pool -name "$(basename "$f")" | head -n 1)
             if [ -z "$p" ]; then

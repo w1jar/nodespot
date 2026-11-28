@@ -225,3 +225,23 @@ func TestRadioInfoOp(t *testing.T) {
 		t.Fatalf("detail = %+v", d)
 	}
 }
+
+func TestRadioInfoAudioUnsupportedOn32Bit(t *testing.T) {
+	e := newRadioEngine(t, quietConfig(), openInfo(radio.PresetURI, false), nil)
+	old := Is32Bit
+	t.Cleanup(func() { Is32Bit = old })
+
+	Is32Bit = false
+	if d := e.RadioInfo(); d.AudioUnsupported || d.AudioUnsupportedReason != "" {
+		t.Fatalf("64-bit: %+v", d)
+	}
+	Is32Bit = true
+	d := e.RadioInfo()
+	if !d.AudioUnsupported || !strings.Contains(d.AudioUnsupportedReason, "not supported on 32-bit boards") {
+		t.Fatalf("32-bit: %+v", d)
+	}
+	// Not a hard block: the presets and the resolved interface are still reported.
+	if len(d.Presets) != 3 || d.Resolved == nil {
+		t.Fatalf("detail = %+v", d)
+	}
+}

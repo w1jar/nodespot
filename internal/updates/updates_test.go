@@ -426,21 +426,3 @@ func TestDemoChannels(t *testing.T) {
 		t.Fatalf("%+v %v", in, err)
 	}
 }
-
-func TestArmhfInstallCannotApply(t *testing.T) {
-	ts := latestServer(t, `{"version":"0.2.10"}`, nil, nil)
-	for goarch, wantReason := range map[string]bool{"arm": true, "arm64": false, "amd64": false} {
-		m := New(&fh{st: helper.Status{Installed: "0.2.1", Job: "idle"}}, "0.2.1", HTTPLatest(ts.URL, nil))
-		m.GOARCH = goarch
-		in, err := m.Check(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := in.ApplyReason != nil; got != wantReason {
-			t.Errorf("%s: applyReason = %v", goarch, in.ApplyReason)
-		}
-		if wantReason && (!strings.Contains(*in.ApplyReason, "64-bit") || !in.Available) {
-			t.Errorf("%s: %+v", goarch, in)
-		}
-	}
-}

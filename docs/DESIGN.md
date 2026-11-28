@@ -14,7 +14,7 @@ Items marked **To verify** are assumptions that need confirmation on real hardwa
 | Easy install and update | One-line install, signed apt repo, updates through `apt upgrade`. |
 | Works with any configuration | Real nodes vary widely. The panel adapts to what is on disk; migration is optional. |
 
-**Targets.** Raspberry Pi 3, 4, 5 and Zero 2 W on Debian 12 (bookworm) or 13 (trixie) and Raspberry Pi OS, arm64, plus amd64. 64-bit only: armhf (32-bit) was dropped because ASL3 ships only arm64 and amd64 packages. A 32-bit install must be redone with Raspberry Pi OS Lite (64-bit); `install.sh` refuses on armhf.
+**Targets.** Raspberry Pi 3, 4, 5 and Zero 2 W on Debian 12 (bookworm) or 13 (trixie) and Raspberry Pi OS, arm64, plus amd64. 32-bit armhf (built with GOARM=6, so it runs on the Raspberry Pi Zero W and every other armhf board) is a hotspot and network node only: no software AMBE vocoder, no analog radio audio (the radio presets with audio show a warning). `install.sh` accepts armhf with a note and refuses armel (ARMv5).
 
 **Prior art.** AllScan (PHP: connects and manages favorite nodes; the main inspiration for nodespot's dashboard) and Allmon3 (ASL's monitor, widely used for public status pages). nodespot covers AllScan's role, coexists with Allmon3 and other AMI clients, and goes much further on configuration.
 
@@ -363,7 +363,7 @@ docs/
 | `asl3-menu` and `custom/` | How does `asl3-menu` consume `custom/` and the `;MENU:` comments? Should nodespot coexist with it, and what happens if both edit the same file? |
 | AMI clients | Exact config locations and formats of Allmon3 (believed `/etc/allmon3/`), AllScan and Supermon; whether `allmon.ini.php` is Allmon2/Supermon format as believed. Update their credentials automatically or only warn? |
 | Node list source | Source, format, size, and update cadence of the ASL node list for lookup; local caching and offline behavior. |
-| armhf support | Resolved: ASL3 publishes arm64 and amd64 only, so armhf was dropped (no new armhf builds; the armhf packages already in the apt repository stay indexed, frozen, so existing 32-bit installs see no errors but get no updates; the in-app update page says to reinstall 64-bit). |
+| armhf support | Resolved: armhf was dropped while the stack needed ASL3 (arm64 and amd64 only). The native node has no such limit, so armhf is back (1.0.3) as a hotspot and network node for the Raspberry Pi Zero W: GOARM=6 build, published, promoted and pruned like the other architectures; no vocoder and no analog audio. |
 | Minimum ASL3 version | Which ASL3 releases (and `app_rpt` output formats) are supported. |
 | Helper transport | Socket activation versus polkit/sudoers: which is simpler and more robust on bookworm and trixie. |
 | Multi-file atomicity | Is staged write plus snapshot rollback sufficient? |

@@ -400,20 +400,30 @@ func TestInstallArchAccepted(t *testing.T) {
 	}
 }
 
-func TestInstallArchRefusesArmhf(t *testing.T) {
-	for _, kernel := range []string{"armv7l", "aarch64"} { // 32-bit userland, 32- or 64-bit kernel
+func TestInstallArchAcceptsArmhfWithNote(t *testing.T) {
+	for _, kernel := range []string{"armv6l", "armv7l", "aarch64"} { // 32-bit userland, 32- or 64-bit kernel
 		out, log, err := archCheck(t, "armhf", kernel)
-		if err == nil {
-			t.Fatalf("armhf on %s accepted: %q", kernel, out)
+		if err != nil {
+			t.Fatalf("armhf on %s refused: %q (%v)", kernel, out, err)
 		}
-		for _, want := range []string{"64-bit", "Raspberry Pi OS Lite (64-bit)", "armhf"} {
+		for _, want := range []string{"32-bit", "hotspot", "not supported on 32-bit boards", "software AMBE vocoder", "ok"} {
 			if !strings.Contains(out, want) {
-				t.Errorf("message lacks %q: %q", want, out)
+				t.Errorf("armhf output lacks %q: %q", want, out)
 			}
 		}
 		if log != "dpkg --print-architecture\n" {
 			t.Errorf("dpkg calls = %q", log)
 		}
+	}
+}
+
+func TestInstallArchRefusesArmel(t *testing.T) {
+	out, _, err := archCheck(t, "armel", "armv5tel")
+	if err == nil {
+		t.Fatalf("armel accepted: %q", out)
+	}
+	if !strings.Contains(out, "armel") || !strings.Contains(out, "Nothing was changed") {
+		t.Errorf("message = %q", out)
 	}
 }
 

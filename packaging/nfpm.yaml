@@ -1,7 +1,7 @@
 # nfpm package definition (https://nfpm.goreleaser.com). Driven by `make deb`,
 # which exports:
 #   VERSION    Debian version (git tag without the leading "v", or 0.0.0+dev.N.g<sha> without any tag)
-#   ARCH       Debian architecture: arm64 or amd64
+#   ARCH       Debian architecture: arm64, amd64 or armhf (32-bit ARMv6 hard-float, built with GOARM=6)
 #   (@BUILD_DIR@ in contents is replaced by the Makefile with the directory
 #   holding the cross-compiled binaries; nfpm does not expand env vars there.)
 name: nodespot

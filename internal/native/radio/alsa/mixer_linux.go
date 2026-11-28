@@ -49,6 +49,9 @@ func OpenMixer(card int) (*Mixer, error) {
 
 // OpenMixerPath opens a control device node.
 func OpenMixerPath(path string) (*Mixer, error) {
+	if !Supported {
+		return nil, ErrUnsupported
+	}
 	fd, err := unix.Open(path, unix.O_RDWR|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, fmt.Errorf("alsa: open %s: %w", path, err)

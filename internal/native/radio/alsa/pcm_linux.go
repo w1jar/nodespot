@@ -71,6 +71,9 @@ type PCM struct {
 // is 0 it tries mono first and then stereo (CM108-family playback is stereo
 // only); Channels reports what was granted.
 func OpenPCM(path string, dir Direction, par Params) (*PCM, error) {
+	if !Supported {
+		return nil, ErrUnsupported
+	}
 	par = par.withDefaults()
 	tries := []int{par.Channels}
 	if par.Channels == 0 {

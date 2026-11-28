@@ -1,7 +1,7 @@
 <script lang="ts">
   // The radio interface: the preset picker, the detected chip and the pin settings (advanced, collapsed).
   import type { RadioInfo, Station } from '../lib/types';
-  import { COS_SOURCES, CTCSS_SOURCES, PTT_PINS, detectedLabel, findPreset, pickPreset, pinError, presetName, resolveInterface } from '../lib/radio';
+  import { COS_SOURCES, audioWarning, CTCSS_SOURCES, PTT_PINS, detectedLabel, findPreset, pickPreset, pinError, presetName, resolveInterface } from '../lib/radio';
   let { st = $bindable(), info, idPrefix = 'rp' }: { st: Station; info: RadioInfo; idPrefix?: string } = $props();
   const id = (k: string) => `${idPrefix}-${k}`;
   const chk = 'size-4 accent-[var(--accent)]';
@@ -10,6 +10,7 @@
   const iface = $derived(resolveInterface(st.radio, info.presets, info.shari));
   const found = $derived(detectedLabel(info));
   const bad = $derived(pinError(iface));
+  const warn32 = $derived(audioWarning(info, iface));
   // The picker shows "Automatic" for an empty preset, so a node saved before presets existed keeps its behavior.
   const auto = $derived(info.shari ? 'SHARI' : 'None');
   function onPreset(v: string) { pickPreset(st.radio, v); }
@@ -23,6 +24,7 @@
       {#each info.presets as p (p.name)}<option value={p.name}>{p.title}</option>{/each}
     </select>
     {#if preset}<p class="mt-1 text-xs text-muted">{preset.description}</p>{/if}
+    {#if warn32}<p class="mt-2 text-sm text-warn" role="alert" data-testid="audio-unsupported">{warn32}</p>{/if}
     <p class="mt-1 text-xs text-muted" data-testid="detected">{found ? `Detected: ${found}${info.product ? ', ' + info.product : ''}` : 'No USB radio interface detected.'}</p>
   </div>
   {#if iface?.audio}

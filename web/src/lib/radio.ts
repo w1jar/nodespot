@@ -95,3 +95,9 @@ export function detectedLabel(i: { chip?: string; usbId?: string } | undefined):
 
 /** True when a SHARI is among what was found (decides what automatic means). */
 export const isShari = (info: Pick<RadioInfo, 'shari'> | null | undefined): boolean => !!info?.shari;
+
+/** The warning to show for the picked preset on a 32-bit board, or ''. Only presets with audio (an analog radio interface) are affected; "None (radioless)" is fine. */
+export function audioWarning(info: Pick<RadioInfo, 'audioUnsupported' | 'audioUnsupportedReason'>, iface: RadioInterface | undefined): string {
+  if (!info.audioUnsupported || !iface?.audio) return '';
+  return info.audioUnsupportedReason || 'Analog radio interfaces are not supported on 32-bit boards.';
+}

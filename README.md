@@ -40,9 +40,10 @@ nodespot runs its own node (`nodespot-node`): one radio (a SHARI or another SA81
 
 ## Requirements
 
-- Debian 12 (bookworm) or Debian 13 (trixie), or Raspberry Pi OS 64-bit based on either. A fresh Raspberry Pi OS Lite 64-bit works.
+- Debian 12 (bookworm) or Debian 13 (trixie), or Raspberry Pi OS based on either. A fresh Raspberry Pi OS Lite 64-bit works.
 - No AllStarLink 3 or Asterisk: nodespot runs its own node. On a card that already runs ASL3, stop Asterisk (`sudo systemctl disable --now asterisk`) so the native node can use the radio.
-- A 64-bit system: an ARM board (arm64) or a PC (amd64). A Raspberry Pi Zero 2 W or newer running Raspberry Pi OS Lite (64-bit) is plenty. 32-bit (armhf) is not supported; on a 32-bit system the installer refuses before changing anything, so reinstall with the 64-bit OS.
+- A 64-bit system (recommended): an ARM board (arm64) or a PC (amd64). A Raspberry Pi Zero 2 W or newer running Raspberry Pi OS Lite (64-bit) is plenty and gets every feature.
+- A 32-bit ARM board (armhf), such as the original Raspberry Pi Zero W (ARMv6, single core, 512 MB) running Raspberry Pi OS Lite (32-bit), is supported as a hotspot and network node: digital modes and networks work. The software AMBE vocoder (cross-mode) is not available, and analog radio interfaces (USB sound cards, SA818 audio, ASL or EchoLink voice through a local radio) are not supported on 32-bit boards. The installer prints this note on armhf. A Raspberry Pi Zero 2 W or newer should use the 64-bit OS. ARMv5 (armel) is not supported.
 - Root access (sudo) for the installation.
 
 ## Install
@@ -90,7 +91,7 @@ curl -fsSL https://w1jar.github.io/nodespot/install.sh | sudo sh
 sudo nodespot admin setup-code
 ```
 
-Any Raspberry Pi that runs 64-bit Raspberry Pi OS works. 32-bit Raspberry Pi OS does not.
+Any Raspberry Pi that runs 64-bit Raspberry Pi OS works. On 32-bit Raspberry Pi OS (such as a Raspberry Pi Zero W) nodespot installs as a hotspot and network node, with no software vocoder and no analog radio audio; see Requirements.
 
 ### Digital modes at install
 
@@ -181,7 +182,7 @@ nodespot has its own built-in digital voice support, so a node can talk on digit
 - **YSF** (System Fusion) reflectors, **P25** and **NXDN** talkgroups. P25 and NXDN are tested against recorded traffic but not yet on air.
 - **Echo test**: a local test with no network and no account. You hear yourself back a second after you unkey, which proves the audio path.
 
-Enable digital modes in **Settings, Digital Modes** (or `sudo nodespot dv enable`, or `NODESPOT_DV=1` at install). Enter your callsign and DMR ID, then turn on and set up the networks you want on the **DV** page. `sudo nodespot dv status` shows the state and `sudo nodespot dv disable` stops the engine and keeps your settings. Enabling installs only the software AMBE vocoder. It needs a 64-bit OS (32-bit armhf is not supported).
+Enable digital modes in **Settings, Digital Modes** (or `sudo nodespot dv enable`, or `NODESPOT_DV=1` at install). Enter your callsign and DMR ID, then turn on and set up the networks you want on the **DV** page. `sudo nodespot dv status` shows the state and `sudo nodespot dv disable` stops the engine and keeps your settings. Enabling installs only the software AMBE vocoder. It needs a 64-bit OS: on a 32-bit board (armhf) the software AMBE vocoder is not supported and the page says so.
 
 On the **DV** page, the Digital Modes card shows the bridge node and its link, has a button for each enabled mode, a tune entry (a trailing `#` makes a private DMR call), favorites and an **Unlink** button, and the **Modes** panel opens each network's switch and settings. The **Dashboard** has a DV tile with the same **Unlink** button. **Now calling** (a red strip on every page) shows who is talking, with callsign, name, place, network, talkgroup and timeslot, and **Last heard** lists recent calls. The engine resumes in the last mode after a restart. More in [docs/DV.md](docs/DV.md).
 

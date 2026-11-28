@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"runtime"
 	"strings"
 	"time"
 
@@ -611,7 +612,24 @@ type RadioDetail struct {
 	// SA818Programmed is everything the channel and module values were last
 	// programmed to, from the same state file. Absent when unknown.
 	SA818Programmed *ProgrammedSA818 `json:"sa818Programmed,omitempty"`
+	// AudioUnsupported is true on a 32-bit board (armhf, such as the Raspberry
+	// Pi Zero W), where analog radio interfaces are not supported: a preset with
+	// audio is not blocked, but the pages warn. AudioUnsupportedReason is the
+	// text to show.
+	AudioUnsupported       bool   `json:"audioUnsupported,omitempty"`
+	AudioUnsupportedReason string `json:"audioUnsupportedReason,omitempty"`
 }
+
+// Is32Bit is true when this binary is a 32-bit ARM build (the armhf package,
+// GOARCH arm). A variable so tests can set it.
+var Is32Bit = runtime.GOARCH == "arm"
+
+// AudioUnsupported32 is the warning for an analog radio interface on a
+// 32-bit board. Without an audio interface (the None preset) the AllStarLink
+// and EchoLink modes still connect to their networks, but there is no local
+// radio to hear or key.
+const AudioUnsupported32 = "Analog radio interfaces (USB sound cards, SA818 audio, AllStarLink or EchoLink voice through a local radio) are not supported on 32-bit boards. " +
+	"Use a 64-bit OS (Raspberry Pi Zero 2 W or newer) for them. On this board, pick None (radioless): AllStarLink and EchoLink still connect to their networks, but no audio reaches a local radio."
 
 // ProgrammedSA818 is what the SA818 was last programmed with besides the
 // frequency and tone. Tail is absent when nodespot sent no tail command, so
@@ -640,6 +658,9 @@ func (e *Engine) RadioInfo() RadioDetail {
 	e.mu.Unlock()
 	d := RadioDetail{Info: e.info, Preset: r.Preset, Presets: radio.Presets(), RestartRequired: e.wiringChanged(r)}
 	d.Info.Present = !e.o.RadioAbsent
+	if Is32Bit {
+		d.AudioUnsupported, d.AudioUnsupportedReason = true, AudioUnsupported32
+	}
 	if iface, err := r.Interface(e.info.SHARI); err == nil {
 		d.Resolved = &iface
 	}

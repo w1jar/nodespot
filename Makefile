@@ -22,9 +22,9 @@ GIT_DESC    := $(shell git describe --tags --long --match 'v[0-9]*.[0-9]*.[0-9]*
 DEV_VERSION := $(if $(GIT_DESC),$(shell echo '$(GIT_DESC)' | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)-(g[0-9a-f]+)$$/\1+dev.\2.\3/'),0.0.0+dev.$(shell git rev-list --count HEAD 2>/dev/null || echo 0).g$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown))
 DEB_VERSION ?= $(if $(GIT_TAG),$(patsubst v%,%,$(GIT_TAG)),$(DEV_VERSION))
 DEB_LDFLAGS  = -s -w -X main.version=$(DEB_VERSION)
-ARCHES      := arm64 amd64
+ARCHES      := arm64 amd64 armhf
 
-.PHONY: print-version web build build-arm64 test vet demo clean deb deb-pkg debs
+.PHONY: print-version web build build-arm64 build-armhf test vet demo clean deb deb-pkg debs
 
 web:
 	cd web && npm ci && npm run build
@@ -39,6 +39,11 @@ build-arm64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/nodespot-linux-arm64 ./cmd/nodespot
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/nodespot-node-linux-arm64 ./cmd/nodespot-node
 
+# 32-bit: GOARM=6 (ARMv6 hard-float) runs on the Raspberry Pi Zero W and on every ARMv7 armhf board.
+build-armhf:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/nodespot-linux-armhf ./cmd/nodespot
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/nodespot-node-linux-armhf ./cmd/nodespot-node
+
 test:
 	go test -race ./...
 
@@ -50,7 +55,7 @@ vet:
 demo:
 	go run ./cmd/nodespot --demo --dev --config /dev/null
 
-# make deb ARCH=arm64|amd64  ->  dist/nodespot_<version>_<arch>.deb
+# make deb ARCH=arm64|amd64|armhf  ->  dist/nodespot_<version>_<arch>.deb
 deb: web
 	$(MAKE) deb-pkg ARCH=$(ARCH)
 
@@ -59,7 +64,8 @@ deb-pkg:
 	@case "$(ARCH)" in \
 	  arm64) goarch=arm64 ;; \
 	  amd64) goarch=amd64 ;; \
-	  *) echo "usage: make deb ARCH=arm64|amd64"; exit 2 ;; \
+	  armhf) goarch=arm; export GOARM=6 ;; \
+	  *) echo "usage: make deb ARCH=arm64|amd64|armhf"; exit 2 ;; \
 	esac; \
 	d=dist/build/$(ARCH); mkdir -p $$d; \
 	for c in nodespot nodespot-helper nodespot-node; do \
@@ -68,7 +74,7 @@ deb-pkg:
 	sed "s|@BUILD_DIR@|$$d|g" packaging/nfpm.yaml > $$d/nfpm.yaml; \
 	VERSION="$(DEB_VERSION)" ARCH="$(ARCH)" $(NFPM) package -f $$d/nfpm.yaml -p deb -t dist/
 
-# Both architectures -> dist/*.deb
+# All architectures -> dist/*.deb
 debs: web
 	@for a in $(ARCHES); do $(MAKE) deb-pkg ARCH=$$a || exit 1; done
 

@@ -1,6 +1,6 @@
 name: Release
 
-# Tag vX.Y.Z -> build the arm64 and amd64 debs, then publish them to the BETA suite of the
+# Tag vX.Y.Z -> build the arm64, amd64 and armhf (32-bit, ARMv6) debs, then publish them to the BETA suite of the
 # apt repository (the gh-pages branch of this repository, served by GitHub
 # Pages at ${APT_URL}; created by the first release if it does not exist), update
 # latest-beta.json and attach the debs to a GitHub pre-release. Nothing is
@@ -46,6 +46,13 @@ jobs:
       - run: go vet ./... && go test -race ./...
       - name: Build web and debs
         run: make debs
+      - name: Check that all three debs were built
+        run: |
+          for a in arm64 amd64 armhf; do
+            n=$(ls dist/nodespot_*_"$a".deb 2>/dev/null | wc -l)
+            [ "$n" -eq 1 ] || { echo "::error::expected exactly one $a deb in dist/, found $n"; exit 1; }
+            [ "$(dpkg-deb -f dist/nodespot_*_"$a".deb Architecture)" = "$a" ] || { echo "::error::the $a deb has the wrong Architecture"; exit 1; }
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: debs

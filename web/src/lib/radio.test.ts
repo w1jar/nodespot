@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { COS_SOURCES, CTCSS_SOURCES, hasSA818, pickPreset, pinError, radioBody, resolveInterface, presetName, detectedLabel } from './radio.ts';
+import { COS_SOURCES, CTCSS_SOURCES, hasSA818, pickPreset, pinError, radioBody, resolveInterface, presetName, detectedLabel, audioWarning } from './radio.ts';
 import type { RadioInterface, RadioPreset, Station } from './types.ts';
 
 const base = { audio: false, pttPin: 0, pttActiveLow: false, cos: 'none', cosActiveLow: false, ctcss: 'none', ctcssActiveLow: false, sa818: false };
@@ -73,4 +73,15 @@ test('tone input sources have their own wording and no always-open', () => {
   assert.equal(CTCSS_SOURCES.some((o) => o.value === 'always'), false);
   assert.deepEqual(CTCSS_SOURCES.slice(1).map((o) => o.value), ['gpio1', 'gpio2', 'gpio3', 'gpio4']);
   assert.equal(COS_SOURCES[0]!.label, 'None (squelch is not read)');
+});
+
+test('audio warning only for audio presets on a 32-bit board', () => {
+  const on = { audioUnsupported: true, audioUnsupportedReason: 'Analog radio interfaces are not supported on 32-bit boards.' };
+  assert.match(audioWarning(on, presets[0].defaults), /not supported on 32-bit boards/);
+  assert.match(audioWarning(on, presets[1].defaults), /32-bit/);
+  assert.equal(audioWarning(on, presets[2].defaults), '');
+  assert.equal(audioWarning(on, undefined), '');
+  assert.equal(audioWarning({}, presets[0].defaults), '');
+  assert.equal(audioWarning({ audioUnsupported: false }, presets[0].defaults), '');
+  assert.match(audioWarning({ audioUnsupported: true }, presets[0].defaults), /32-bit/);
 });

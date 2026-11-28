@@ -72,13 +72,13 @@ CODE_DIR=${CODE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}
 APT_URL=${APT_URL:-https://w1jar.github.io/nodespot}
 APT_URL=${APT_URL%/}
 KEEP=${KEEP:-5}
-ARCHES="arm64 amd64"
-# armhf is no longer built (ASL3 has no armhf packages). The armhf debs that
-# are already in the pool stay and stay indexed (frozen: nothing is added,
-# promoted or pruned for armhf), so existing 32-bit installs keep a valid
-# repository (no apt errors) and simply see no newer version.
-LEGACY_ARCHES="armhf"
-INDEX_ARCHES="$ARCHES $LEGACY_ARCHES"
+ARCHES="arm64 amd64 armhf"
+# armhf (32-bit, ARMv6 hard-float: Raspberry Pi Zero W and other 32-bit boards)
+# is published like the other architectures. Releases made while armhf was not
+# built have no armhf deb; promoting such a version still works (arm64 and
+# amd64 are required, armhf is moved when it is there).
+OPTIONAL_ARCHES="armhf"
+INDEX_ARCHES="$ARCHES"
 COMPONENT=main
 POOL_STABLE=pool/main/a/nodespot
 POOL_BETA=pool/beta/a/nodespot
@@ -126,9 +126,10 @@ add)
 		[ -e "$f" ] || continue
 		v=$(dpkg-deb -f "$f" Version)
 		arch=$(dpkg-deb -f "$f" Architecture)
-		case " $LEGACY_ARCHES " in
-		*" $arch "*)
-			echo "publish-apt: $f is $arch, which is no longer published; skipping it" >&2
+		case " $ARCHES " in
+		*" $arch "*) ;;
+		*)
+			echo "publish-apt: $f is $arch, which is not published; skipping it" >&2
 			continue
 			;;
 		esac
@@ -152,7 +153,10 @@ promote)
 		if [ -n "$(deb_of "$POOL_BETA" "$released" "$arch")" ]; then
 			moves=$((moves + 1))
 		elif [ -z "$(deb_of "$POOL_STABLE" "$released" "$arch")" ]; then
-			missing="$missing $arch"
+			case " $OPTIONAL_ARCHES " in
+			*" $arch "*) echo "publish-apt: note: $released has no $arch package (built before $arch was published)" >&2 ;;
+			*) missing="$missing $arch" ;;
+			esac
 		fi
 	done
 	if [ -n "$missing" ]; then
@@ -451,7 +455,7 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 <main class="wrap" id="top">
 <section class="hero">
 <h1>A native radio node with a web control panel</h1>
-<p class="lead">nodespot lets you connect, monitor and manage favorites with live status from any browser, and it can set up digital modes for you. It runs on Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS (arm64 and amd64; 64-bit only).</p>
+<p class="lead">nodespot lets you connect, monitor and manage favorites with live status from any browser, and it can set up digital modes for you. It runs on Debian 12 (bookworm), Debian 13 (trixie) and Raspberry Pi OS (64-bit arm64 and amd64, and 32-bit armhf for the Raspberry Pi Zero W).</p>
 <ul class="badges">
 <li class="badge">Latest release <b>@STABLE@</b></li>
 <li class="badge">Latest beta <b>@BETA@</b>@BETA_NOTE@</li>
@@ -465,7 +469,7 @@ footer{padding:8px 0 40px;font-size:13px;color:var(--muted)}
 <div class="cmd">
 <pre tabindex="0"><code id="cmd-default">curl -fsSL @APT_URL@/install.sh | sudo sh</code></pre><button type="button" class="copy" data-copy="cmd-default" aria-label="Copy command" title="Copy" hidden><svg class="i-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg><svg class="i-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
 </div>
-<p class="note">Run this on the node (over SSH or in a terminal). It works on plain Debian 12/13 or Raspberry Pi OS Lite 64-bit. nodespot runs its own node: it does not need AllStarLink 3 or Asterisk.</p>
+<p class="note">Run this on the node (over SSH or in a terminal). It works on plain Debian 12/13 or Raspberry Pi OS Lite (64-bit; on a Raspberry Pi Zero W or another 32-bit board it is a hotspot and network node, with no software vocoder and no analog radio audio). nodespot runs its own node: it does not need AllStarLink 3 or Asterisk.</p>
 <p class="note warn">On a freshly flashed card, wait for its first-boot setup to finish before you install. The installer checks this.</p>
 <p class="note">At the end the installer prints a one-time setup link. Open it to create the administrator or to restore a backup from an existing node. <code>sudo nodespot admin setup-code</code> shows the code again.</p>
 </section>

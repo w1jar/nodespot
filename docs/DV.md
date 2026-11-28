@@ -34,7 +34,7 @@ If the vocoder repository becomes unavailable, OS updates still work, with a war
 
 `nodespot dv status [--json]` shows the state; `nodespot dv disable` stops the engine and keeps its settings. The command and the installer variable of 1.x keep working as aliases. In the installer, `NODESPOT_DV=1` runs it.
 
-Supported: Debian bookworm and trixie on amd64 and arm64. **32-bit (armhf) systems are not supported** (ASL3 has no armhf packages): the status reason is `armhf_unsupported`, the page says to reinstall with a 64-bit OS, and enable is refused with `409 not_supported`.
+Supported: Debian bookworm and trixie on amd64 and arm64. On a **32-bit (armhf) board** (for example a Raspberry Pi Zero W) nodespot runs as a hotspot and network node only: the software AMBE vocoder is not supported there, the status is `supported: false` with a reason that says so, and installing it is refused with `409 not_supported`. A Raspberry Pi Zero 2 W or newer should use the 64-bit OS.
 
 ## Modes
 

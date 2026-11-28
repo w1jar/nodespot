@@ -52,6 +52,10 @@ func Open(cfg Config) (Radio, Info, error) {
 		}
 		return nil, info, derr
 	}
+	if !alsa.Supported {
+		// 32-bit board: the node runs without a radio (see alsa.Supported).
+		return nil, info, fmt.Errorf("%w: %v", ErrNoRadio, alsa.ErrUnsupported)
+	}
 	keyer, err := cm108.Open(cm108.Config{
 		SysRoot: cfg.SysRoot, DevRoot: cfg.DevRoot, BusPath: info.BusPath,
 		PTTGPIO: iface.PTTPin, PTTActiveLow: iface.PTTActiveLow,

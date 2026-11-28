@@ -3,6 +3,11 @@
 Release notes are taken from the section of the tag being released
 (`## [X.Y.Z]`) when the tag has no annotation.
 
+## [1.0.3] - 2026-11-28
+
+### Added
+- 32-bit armhf packages (ARMv6 hard-float, built with GOARM=6, so they run on the Raspberry Pi Zero W and on other 32-bit boards). They are for hotspot and network use only: digital modes and networks work, the software AMBE vocoder (cross-mode) is not supported, and analog radio interfaces (USB sound cards, SA818 audio, ASL or EchoLink voice through a local radio) are not supported on 32-bit boards. The installer accepts armhf and prints this note, the radio interface picker warns on 32-bit boards, and the apt repository publishes, promotes and prunes armhf like arm64 and amd64.
+
 ## [1.0.2] - 2026-11-27
 
 ### Fixed

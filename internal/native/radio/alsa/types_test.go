@@ -10,6 +10,9 @@ import (
 // both. These tests pin the field offsets and the request numbers.
 
 func TestStructLayout(t *testing.T) {
+	if !Supported {
+		t.Skip("64-bit layouts only")
+	}
 	var hw hwParams
 	var sw swParams
 	var xf xferi
@@ -55,6 +58,9 @@ func TestStructLayout(t *testing.T) {
 }
 
 func TestIoctlNumbers(t *testing.T) {
+	if !Supported {
+		t.Skip("64-bit layouts only")
+	}
 	// Values as seen in <sound/asound.h> on 64-bit Linux.
 	tests := []struct {
 		name string

@@ -207,6 +207,8 @@ export interface RadioInfo {
   interface: RadioInterface; preset: string; presets: RadioPreset[]; resolved?: RadioInterface; restartRequired?: boolean;
   sa818Filters?: Sa818Programmed;
   sa818Programmed?: Sa818Last;
+  /** True on a 32-bit board (armhf), where analog radio interfaces are not supported (not blocked: the pages warn). */
+  audioUnsupported?: boolean; audioUnsupportedReason?: string;
 }
 export interface Reading { RMSDb: number; PeakDb: number; Active: boolean; Clipped: number; Frames: number }
 /** GET and PUT /api/radio: the sound chip's levels. -1 means the chip has no such control. */
