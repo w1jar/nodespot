@@ -79,7 +79,9 @@ type Modem struct {
 	sent       [2][]dmr.Burst
 	aborts     [2]int
 	shortLC    [][]byte
-	freq       []byte
+	freq       []byte // pending: SET_FREQ stores it, like CIO::setFreq
+	tuned      []byte // what the ADF7021 is programmed with (CIO::ifConf)
+	prevMode   byte   // m_modemState_prev: the mode ifConf last ran for
 	vseq       [2]uint8
 	rxErr      *RXErrorModel
 	rxBursts   uint64
@@ -123,6 +125,7 @@ func (m *Modem) Serve(rw io.ReadWriteCloser) {
 	m.mu.Lock()
 	m.port = rw
 	m.configured, m.duplex, m.mode, m.tx = false, false, mmdvm.ModeIdle, false
+	m.tuned, m.prevMode = nil, mmdvm.ModeIdle
 	m.fifo = [2]int{}
 	m.vseq = [2]uint8{}
 	m.notifyLocked()
@@ -229,6 +232,11 @@ func (m *Modem) handle(w io.Writer, f mmdvm.Frame) {
 			return
 		}
 		m.mode = p[0]
+		// CSerialPort::setMode: ifConf only for a non-idle mode that differs
+		// from the last configured one; idle leaves that memory alone.
+		if m.mode != mmdvm.ModeIdle && m.mode != m.prevMode {
+			m.ifConf(m.mode)
+		}
 		if m.mode != mmdvm.ModeDMR {
 			m.tx = false
 			m.fifo = [2]int{}
@@ -325,7 +333,18 @@ func (m *Modem) setConfig(p []byte) mmdvm.Reason {
 		return mmdvm.ReasonBadData
 	}
 	m.configured, m.duplex, m.cc, m.mode = true, duplex, cc, initial
+	// CSerialPort::setConfig always runs ifConf for the first enabled mode
+	// (the fake knows DMR only).
+	if m.modes&0x02 != 0 {
+		m.ifConf(mmdvm.ModeDMR)
+	}
 	return 0
+}
+
+// ifConf mirrors CIO::ifConf: the pending frequency reaches the chip.
+func (m *Modem) ifConf(mode byte) {
+	m.tuned = append([]byte(nil), m.freq...)
+	m.prevMode = mode
 }
 
 // control is the control byte the modem would report for a burst it
@@ -447,7 +466,8 @@ type State struct {
 	FIFO       [2]int
 	Aborts     [2]int
 	ColorCode  uint8
-	Freq       []byte
+	Freq       []byte // pending, from SET_FREQ
+	Tuned      []byte // programmed into the chip
 	ShortLCs   int
 }
 
@@ -457,7 +477,7 @@ func (m *Modem) State() State {
 	defer m.mu.Unlock()
 	return State{Connected: m.port != nil, Opens: m.opens, Configured: m.configured,
 		Duplex: m.duplex, Mode: m.mode, TX: m.tx, FIFO: m.fifo, Aborts: m.aborts,
-		ColorCode: m.cc, Freq: append([]byte(nil), m.freq...), ShortLCs: len(m.shortLC)}
+		ColorCode: m.cc, Freq: append([]byte(nil), m.freq...), Tuned: append([]byte(nil), m.tuned...), ShortLCs: len(m.shortLC)}
 }
 
 // freqOK mirrors CIO::setFreq and checkZUMspot in MMDVM_HS (IO.cpp). The

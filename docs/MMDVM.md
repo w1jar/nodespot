@@ -423,6 +423,10 @@ The hat cannot hear a handheld in duplex until it transmits (see "Receive: duple
 
   - **Calibrate.** `sudo nodespot-node calibrate` tunes the receive offset against a handheld; see "Calibrate (receive offset)" below.
 
+### Retuning the radio
+
+`SET_FREQ` only stores the frequency: `CIO::setFreq` (IO.cpp) sets `m_frequency_rx` and `m_frequency_tx`. The ADF7021 is programmed only by `CIO::ifConf` (ADF7021.cpp), which also sets `m_modemState_prev`. `ifConf` runs from `CSerialPort::setConfig` (SerialPort.cpp, always, for the first enabled mode unless in a calibration state) and from `CSerialPort::setMode` only when the new mode is not idle and differs from `m_modemState_prev`. Going to idle does not call `ifConf` and does not reset `m_modemState_prev`, so idle then DMR after a DMR session does not reprogram the chip. To change frequency, send SET_FREQ followed by SET_CONFIG (the driver's startup and `Reopen` already do, in that order). The fake modem models this (`Tuned` in `fake.State`, `TunedRXFreq`).
+
 ## Calibrate (receive offset)
 
 Hotspot crystals drift, so a handheld on the exact channel can sound clean on one hat and break up on another. `nodespot-node calibrate` measures how many bit errors the modem corrects while a handheld talks, and helps pick the `rxOffsetHz` that gives the fewest. It only receives: RF power stays 0, simplex is forced, and nothing is sent to the network.
@@ -440,8 +444,8 @@ sudo nodespot-node calibrate -rxfreq 433500000 [-txfreq Hz] [-offset Hz] [-cc 1]
 - **Relative to the saved offset.** The sweep range is added to the offset already in the config (`rxOffsetHz`), so `-from -2000 -to 2000` covers 4 kHz around where you are. Points that the frequency check rejects (a banned range, a band edge) or that would put the offset beyond plus or minus 100000 Hz are skipped.
 - **BER.** Corrected bit errors in the FEC-protected AMBE bits of each voice burst, divided by the bits checked: 141 per burst (3 frames of 24 + 23 protected bits). The 25 unprotected bits per frame are not counted. A frame whose first code word cannot be corrected counts as 10 errors, so the figure saturates and is a relative measure, not a true channel BER. A burst with 30 or more errors is unusable and a call that is mostly lost or unusable is not scored. Lost bursts are found from timestamp gaps (60 ms per burst). Calls shorter than the minimum are ignored.
 - **Suggestion.** The lowest-BER point, then its contiguous neighbors within max(1 percentage point, 25% of the minimum); the suggestion is the middle of that run, rounded away from zero. It is flagged "edge" when the run touches the end of the sweep (widen the range) and "flat" when every point is good (any offset in the range works; nothing to tune).
-- **Retune.** `mmdvm.Driver.Retune` sends SET_MODE idle, SET_FREQ (power 0, the new RX and the same TX offset) and SET_MODE DMR inside the driver's session, without closing the port. A NAK is reported and the driver stays up. Whether the idle and DMR bracket is needed on the real hat is not verified; it is the safe sequence.
-- **Saving.** Only `rxOffsetHz` changes (and `txOffsetHz` is left as it was). The file is validated, written atomically and keeps its mode and owner, since the service runs as `nodespot-node` and the file is 0600.
+- **Retune.** `mmdvm.Driver.Retune` sends SET_MODE idle, SET_FREQ (power 0, the new RX and the same TX offset), SET_CONFIG (the same simplex RX-only config as setup) and SET_MODE DMR inside the driver's session, without closing the port. Each must be ACKed; a NAK is reported and the driver stays up. SET_CONFIG is what reaches the chip; idle then DMR alone left the old frequency (BER stayed flat on a real hat), see "Retuning the radio".
+
 - **Not included.** TX calibration and the firmware's own calibration modes (carrier, BER and RSSI tests) are not used. Transmit comes with M4.
 
 ### M4: DMR TX and duplex

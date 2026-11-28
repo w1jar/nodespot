@@ -246,6 +246,9 @@ func TestSetOffsetRetunes(t *testing.T) {
 	if rx, _ := r.m.RXFreq(); rx != baseRX+350 {
 		t.Errorf("modem rx %d", rx)
 	}
+	if rx, _ := r.m.TunedRXFreq(); rx != baseRX+350 {
+		t.Errorf("chip tuned to %d: SET_FREQ never reached it", rx)
+	}
 	if p, _ := r.m.RXPower(); p != 0 {
 		t.Errorf("RF power %d", p)
 	}

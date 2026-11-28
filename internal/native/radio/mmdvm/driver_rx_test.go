@@ -219,14 +219,18 @@ func TestRetune(t *testing.T) {
 	if got := h.m.State(); !bytes.Equal(got.Freq, mmdvm.SetFreq(f)[3:]) || got.Mode != mmdvm.ModeDMR {
 		t.Errorf("modem freq % X mode %d, want % X in DMR", got.Freq, got.Mode, mmdvm.SetFreq(f)[3:])
 	}
-	// Idle, new frequency, DMR again, after the first setup.
+	if !bytes.Equal(h.m.State().Tuned, mmdvm.SetFreq(f)[3:]) {
+		t.Errorf("tuned % X: the retune did not reach the chip", h.m.State().Tuned)
+	}
+	// Setup (freq, config, DMR), then idle, new frequency, config, DMR.
 	var seq []byte
 	for _, c := range h.m.Commands() {
-		if c.Cmd == mmdvm.CmdSetMode || c.Cmd == mmdvm.CmdSetFreq {
+		if c.Cmd == mmdvm.CmdSetMode || c.Cmd == mmdvm.CmdSetFreq || c.Cmd == mmdvm.CmdSetConfig {
 			seq = append(seq, c.Cmd)
 		}
 	}
-	want := []byte{mmdvm.CmdSetFreq, mmdvm.CmdSetMode, mmdvm.CmdSetMode, mmdvm.CmdSetFreq, mmdvm.CmdSetMode}
+	want := []byte{mmdvm.CmdSetFreq, mmdvm.CmdSetConfig, mmdvm.CmdSetMode,
+		mmdvm.CmdSetMode, mmdvm.CmdSetFreq, mmdvm.CmdSetConfig, mmdvm.CmdSetMode}
 	if !bytes.Equal(seq, want) {
 		t.Errorf("commands % X, want % X", seq, want)
 	}
@@ -316,4 +320,69 @@ func rxStart2(t *testing.T, mon func(mmdvm.RXEvent)) *harness {
 		s.Freq = rxFreq
 		s.RXMonitor = mon
 	})
+}
+
+// The firmware only stores SET_FREQ; idle then DMR does not reprogram the
+// chip (MMDVM_HS SerialPort.cpp setMode, IO.cpp setFreq). The driver's
+// Retune adds SET_CONFIG and does.
+func TestOldRetuneSequenceDoesNotTune(t *testing.T) {
+	m := fake.New(fake.Options{})
+	port, err := m.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer port.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	n := 0
+	send := func(b []byte) {
+		t.Helper()
+		n++
+		if _, err := port.Write(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Wait(ctx, func() bool { return len(m.Commands()) >= n }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f1 := mmdvm.Freq{RX: 441_000_000, TX: 446_000_000}
+	f2 := mmdvm.Freq{RX: 441_000_500, TX: 446_000_000}
+	cfg, err := mmdvm.SetConfig(1, mmdvm.Config{Modes: mmdvm.Modes{DMR: true}, ColorCode: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tuned := func() uint32 { rx, _ := m.TunedRXFreq(); return rx }
+	send(mmdvm.SetFreq(f1))
+	if tuned() != 0 {
+		t.Fatal("SET_FREQ alone tuned the chip")
+	}
+	send(cfg)
+	send(mmdvm.SetMode(mmdvm.ModeDMR))
+	if tuned() != f1.RX {
+		t.Fatalf("tuned %d after SET_CONFIG", tuned())
+	}
+	send(mmdvm.SetMode(mmdvm.ModeIdle))
+	send(mmdvm.SetFreq(f2))
+	send(mmdvm.SetMode(mmdvm.ModeDMR))
+	if tuned() != f1.RX {
+		t.Errorf("idle, SET_FREQ, DMR moved the chip to %d", tuned())
+	}
+	send(cfg)
+	if tuned() != f2.RX {
+		t.Errorf("SET_CONFIG left the chip on %d", tuned())
+	}
+}
+
+func TestRetuneTunesTheChip(t *testing.T) {
+	h := rxStart(t, fake.Options{})
+	h.waitOpen()
+	if rx, _ := h.m.TunedRXFreq(); rx != rxFreq.RX {
+		t.Fatalf("tuned %d after setup", rx)
+	}
+	if err := h.d.Retune(h.ctx, mmdvm.Freq{RX: 441_000_500, TX: 446_000_000}); err != nil {
+		t.Fatal(err)
+	}
+	if rx, _ := h.m.TunedRXFreq(); rx != 441_000_500 {
+		t.Errorf("tuned %d after Retune", rx)
+	}
 }

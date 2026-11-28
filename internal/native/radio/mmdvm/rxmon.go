@@ -53,7 +53,7 @@ type retuneReq struct {
 	done chan error
 }
 
-// Retune sends a new SET_FREQ to the open modem without reopening it. It is
+// Retune sends a new SET_FREQ (and SET_CONFIG, which programs it) to the open modem without reopening it. It is
 // for receive-only drivers (Settings.RXOnly); the RF power stays 0 whatever
 // f says. The modem goes idle, takes the frequency and returns to DMR mode,
 // so the transceiver is reprogrammed in a mode it expects. A frequency the
@@ -87,7 +87,14 @@ func (d *Driver) Retune(ctx context.Context, f Freq) error {
 // modem's replies. An error returned here ends the session; a NAK or a
 // missing reply is only the answer to the caller.
 func (d *Driver) doRetune(ctx context.Context, w *writer, frames <-chan Frame, rdErr <-chan error, r retuneReq) error {
-	steps := [][]byte{SetMode(ModeIdle), SetFreq(r.f), SetMode(ModeDMR)}
+	// SET_FREQ only stores the frequency; the chip is programmed by SET_CONFIG
+	// (CIO::ifConf), which idle then DMR alone would not trigger.
+	cfg, err := SetConfig(d.proto, d.s.Modem)
+	if err != nil {
+		r.done <- err
+		return nil
+	}
+	steps := [][]byte{SetMode(ModeIdle), SetFreq(r.f), cfg, SetMode(ModeDMR)}
 	var failed error
 	for i, b := range steps {
 		err := d.command(ctx, w, frames, rdErr, b)
@@ -109,6 +116,9 @@ func (d *Driver) doRetune(ctx context.Context, w *writer, frames <-chan Frame, r
 			return err
 		}
 		if i == 1 { // SET_FREQ refused: back to DMR on the old frequency
+			continue
+		}
+		if i == 2 { // SET_CONFIG refused: still try to listen again
 			continue
 		}
 		break

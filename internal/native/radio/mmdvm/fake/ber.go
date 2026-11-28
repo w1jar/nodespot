@@ -8,7 +8,7 @@ import (
 )
 
 // RXErrorModel makes the fake modem hear voice with bit errors that grow
-// with how far its receive frequency (the SET_FREQ value, offset included)
+// with how far its receive frequency (the SET_FREQ value, offset included, once SET_CONFIG or a mode change has programmed it)
 // is from the frequency the transmitter really is on, as a hat whose
 // crystal is off.
 //
@@ -62,6 +62,18 @@ func (m *Modem) RXFreq() (uint32, bool) {
 	return binary.LittleEndian.Uint32(m.freq[1:]), true
 }
 
+// TunedRXFreq is the receive frequency the modem is actually tuned to, in
+// Hz, and false before it is programmed. SET_FREQ alone does not change it:
+// see [Modem] and CIO::ifConf in MMDVM_HS.
+func (m *Modem) TunedRXFreq() (uint32, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.tuned) < 5 {
+		return 0, false
+	}
+	return binary.LittleEndian.Uint32(m.tuned[1:]), true
+}
+
 // RXPower is the RF power of the last SET_FREQ.
 func (m *Modem) RXPower() (byte, bool) {
 	m.mu.Lock()
@@ -75,10 +87,10 @@ func (m *Modem) RXPower() (byte, bool) {
 // errorsFor is the number of errors for the next voice burst. m.mu is held.
 func (m *Modem) errorsFor() int {
 	e := m.rxErr
-	if e == nil || len(m.freq) < 5 {
+	if e == nil || len(m.tuned) < 5 {
 		return 0
 	}
-	rx := int64(binary.LittleEndian.Uint32(m.freq[1:]))
+	rx := int64(binary.LittleEndian.Uint32(m.tuned[1:]))
 	d := rx - int64(e.CenterHz)
 	if d < 0 {
 		d = -d

@@ -24,9 +24,9 @@ func TestCorruptExactCount(t *testing.T) {
 
 func TestErrorModel(t *testing.T) {
 	m := New(Options{})
-	m.freq = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	m.tuned = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 	set := func(rx uint32) {
-		m.freq[1], m.freq[2], m.freq[3], m.freq[4] = byte(rx), byte(rx>>8), byte(rx>>16), byte(rx>>24)
+		m.tuned[1], m.tuned[2], m.tuned[3], m.tuned[4] = byte(rx), byte(rx>>8), byte(rx>>16), byte(rx>>24)
 	}
 	m.SetRXErrors(&RXErrorModel{CenterHz: 433_500_000, ErrsPerKHz: 8, MaxErrs: 10, DeadbandHz: 100})
 	for _, c := range []struct {
@@ -47,7 +47,7 @@ func TestErrorModel(t *testing.T) {
 func TestErrorModelNoiseIsDeterministic(t *testing.T) {
 	run := func() []int {
 		m := New(Options{})
-		m.freq = make([]byte, 14)
+		m.tuned = make([]byte, 14)
 		m.SetRXErrors(&RXErrorModel{CenterHz: 0, Noise: 2})
 		var out []int
 		for i := 0; i < 50; i++ {
