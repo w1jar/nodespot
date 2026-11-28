@@ -2,7 +2,7 @@ package dv
 
 import (
 	"context"
-
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -63,6 +63,8 @@ type job struct {
 	data  []byte
 	end   bool
 	start *network.CallHeader // the first frame of a transmission: StartTX first
+	raw   bool                // data is already coded (frame passthrough)
+	only  bool                // start only, no voice frame (SendHeader)
 }
 
 type sink struct {
@@ -101,9 +103,10 @@ type Mode struct {
 	ambe vocoder.AMBE
 	own  *vocoder.MD380 // closed on Stop when the mode made it
 
-	netEv chan netEvent
-	enc   chan job
-	dec   chan job
+	netEv  chan netEvent
+	enc    chan job
+	dec    chan job
+	frameC chan mode.FrameEvent
 
 	mu       sync.Mutex
 	gen      uint64
@@ -122,6 +125,10 @@ type Mode struct {
 	txSeq  uint32
 	txLast time.Time
 
+	// frames: received calls go to frameC as coded frames, not to the
+	// decoder (guarded by mu).
+	frames bool
+
 	// RX (network call), owned by the loop goroutine.
 	rxCall uint64 // the network's call id
 	rxID   uint64 // our call id
@@ -129,7 +136,10 @@ type Mode struct {
 	rxOn   bool
 }
 
-var _ mode.Mode = (*Mode)(nil)
+var (
+	_ mode.Mode      = (*Mode)(nil)
+	_ mode.FrameMode = (*Mode)(nil)
+)
 
 // New builds the DV mode name from its settings.
 func New(name string, env mode.Env, s mode.Settings, opt Options) (*Mode, error) {
@@ -163,7 +173,8 @@ func New(name string, env mode.Env, s mode.Settings, opt Options) (*Mode, error)
 		opt.Tick = audio.FrameDuration
 	}
 	m := &Mode{d: d, env: env, s: s.Clone(), cfg: cfg, id: id, opt: opt,
-		netEv: make(chan netEvent, 512), enc: make(chan job, 64), dec: make(chan job, 64)}
+		netEv: make(chan netEvent, 512), enc: make(chan job, 64), dec: make(chan job, 64),
+		frameC: make(chan mode.FrameEvent, 256)}
 	m.Init(d.name, d.title, env.Clock())
 	return m, nil
 }
@@ -450,13 +461,18 @@ func (m *Mode) encoder(ctx context.Context, n network.Network, ambe vocoder.AMBE
 					continue
 				}
 			}
+			if j.only {
+				continue
+			}
 			pcm := [vocoder.PCMSamples]int16(j.pcm)
 			f := network.VoiceFrame{Call: j.call, Seq: j.seq, Codec: j.codec}
-			switch j.codec {
-			case network.CodecIMBE:
+			switch {
+			case j.raw:
+				f.Data = j.data
+			case j.codec == network.CodecIMBE:
 				b := im.encode(j.call, &pcm)
 				f.Data = b[:]
-			case network.CodecC2:
+			case j.codec == network.CodecC2:
 				b := c2.encode(j.call, &pcm)
 				f.Data = b[:]
 			default:
@@ -557,7 +573,13 @@ func (m *Mode) onNet(ctx context.Context, ev netEvent) {
 		m.mu.Lock()
 		m.nextID++
 		m.rxOn, m.rxCall, m.rxID, m.rxLast = true, h.Call, m.nextID, now
+		frames, id := m.frames, m.rxID
 		m.mu.Unlock()
+		if frames {
+			hh := *h
+			hh.Call = id
+			m.pushFrame(mode.FrameEvent{Kind: mode.FrameHeader, Call: id, Header: hh})
+		}
 		tgt := h.Room
 		if tgt == "" && h.TG != 0 {
 			tgt = strconv.FormatUint(uint64(h.TG), 10)
@@ -570,9 +592,14 @@ func (m *Mode) onNet(ctx context.Context, ev netEvent) {
 		if ok {
 			m.rxLast = now
 		}
-		id := m.rxID
+		id, frames := m.rxID, m.frames
 		m.mu.Unlock()
 		if !ok || codecLen(f.Codec) == 0 || len(f.Data) != codecLen(f.Codec) {
+			return
+		}
+		if frames {
+			m.pushFrame(mode.FrameEvent{Kind: mode.FrameVoice, Call: id,
+				Frame: network.VoiceFrame{Call: id, Seq: f.Seq, Codec: f.Codec, Data: f.Data}})
 			return
 		}
 		select {
@@ -653,8 +680,12 @@ func (m *Mode) cutRX() {
 	m.mu.Lock()
 	was := m.rxOn
 	m.rxOn = false
+	frames, id := m.frames, m.rxID
 	m.mu.Unlock()
 	if was {
+		if frames {
+			m.pushFrame(mode.FrameEvent{Kind: mode.FrameEnd, Call: id})
+		}
 		m.TalkEnd()
 	}
 }
@@ -708,4 +739,129 @@ func (m *Mode) Status() mode.Status {
 		st.Detail = m.netDetail()
 	}
 	return st
+}
+
+// ---- coded-frame passthrough (mode.FrameMode) ----
+
+// Errors of the frame methods.
+var (
+	ErrNotStarted = errors.New("dv: mode is not started")
+	ErrNotLinked  = errors.New("dv: no link to transmit on")
+	ErrNoTX       = errors.New("dv: no transmission")
+	ErrCodec      = errors.New("dv: frame codec does not match the network")
+	ErrBusy       = errors.New("dv: transmit queue full")
+)
+
+// FrameCodec is the network's codec.
+func (m *Mode) FrameCodec() (network.Codec, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.n == nil {
+		return 0, false
+	}
+	return m.n.Codec(), true
+}
+
+// SetFrames switches received calls to RecvFrames (on) or to decoded audio.
+func (m *Mode) SetFrames(on bool) {
+	m.mu.Lock()
+	m.frames = on
+	m.mu.Unlock()
+}
+
+// RecvFrames carries received calls as coded frames while SetFrames(true).
+func (m *Mode) RecvFrames() <-chan mode.FrameEvent { return m.frameC }
+
+func (m *Mode) pushFrame(ev mode.FrameEvent) {
+	select {
+	case m.frameC <- ev:
+	default:
+	}
+}
+
+// SendHeader starts a transmission of coded frames. On a DMR network the
+// talkgroup and private flag of h are used when h.TG is set (the radio
+// user's choice); otherwise the mode's target supplies them. The source
+// is h.SrcID and h.Src when set, else the node's own.
+func (m *Mode) SendHeader(h network.CallHeader) error {
+	m.mu.Lock()
+	n := m.n
+	switch {
+	case n == nil:
+		m.mu.Unlock()
+		return ErrNotStarted
+	case m.pending || (m.target == nil && (h.TG == 0 || !m.d.login)):
+		m.mu.Unlock()
+		return ErrNotLinked
+	}
+	prev := m.tx
+	m.nextID++
+	id := m.nextID
+	m.tx, m.txSeq, m.txLast = id, 0, m.Now()
+	hdr := network.CallHeader{Call: id, Src: m.id.Callsign, SrcID: m.id.DMRID,
+		TG: m.nt.TG, Room: m.nt.Room, Slot: m.nt.Slot, Private: m.nt.Private}
+	if h.Src != "" {
+		hdr.Src = h.Src
+	}
+	if h.SrcID != 0 {
+		hdr.SrcID = h.SrcID
+	}
+	if h.TG != 0 && m.d.login {
+		hdr.TG, hdr.Private = h.TG, h.Private
+	}
+	m.mu.Unlock()
+	m.cutRX()
+	if prev != 0 {
+		select {
+		case m.enc <- job{call: prev, end: true}:
+		default:
+			go func() { _ = n.EndTX(prev) }()
+		}
+	}
+	select {
+	case m.enc <- job{call: id, start: &hdr, only: true}:
+		return nil
+	default:
+		m.mu.Lock()
+		if m.tx == id {
+			m.tx = 0
+		}
+		m.mu.Unlock()
+		return ErrBusy
+	}
+}
+
+// SendFrame queues one coded frame of the transmission.
+func (m *Mode) SendFrame(f network.VoiceFrame) error {
+	m.mu.Lock()
+	n := m.n
+	if n == nil {
+		m.mu.Unlock()
+		return ErrNotStarted
+	}
+	if m.tx == 0 {
+		m.mu.Unlock()
+		return ErrNoTX
+	}
+	codec := n.Codec()
+	if f.Codec != codec || len(f.Data) != codecLen(codec) {
+		m.mu.Unlock()
+		return ErrCodec
+	}
+	id, seq := m.tx, m.txSeq
+	m.txSeq++
+	m.txLast = m.Now()
+	m.mu.Unlock()
+	select {
+	case m.enc <- job{call: id, seq: seq, codec: codec, data: append([]byte(nil), f.Data...), raw: true}:
+		return nil
+	default:
+		return ErrBusy
+	}
+}
+
+// EndFrames ends the transmission.
+func (m *Mode) EndFrames() error {
+	m.EndTx()
+	return nil
 }

@@ -1,6 +1,6 @@
 # Replacing Pi-Star with nodespot on an MMDVM hat
 
-Design notes, 2026-11-27. Nothing here is built yet. Protocol details marked "to verify against MMDVM firmware source" are from memory and must be checked before code depends on them.
+Design notes, 2026-11-27. Nothing here is built yet. The MMDVM serial protocol section was checked against the MMDVMHost, MMDVM and MMDVM_HS sources. Remaining open items are listed in the Research list.
 
 ## Origin
 
@@ -86,7 +86,7 @@ Status: **have** means nodespot already has it, **M*n*** is the milestone below,
 
 - **Pi:** Raspberry Pi 3B+.
 - **Hat:** one dual-slot (duplex) MMDVM hat. The exact model is unknown; M2 identifies it from the GET_VERSION description string and any board and hardware info it reports, and shows it in Settings > Station > Radio. Which hat it is is something M2 finds out, not a question.
-- **Modem firmware:** 1.6.1, as reported. That number looks like the MMDVM_HS hotspot firmware line (the full-size MMDVM repeater firmware uses date versions). If so, it is a hotspot board on the MMDVM_HS firmware, and the protocol version it speaks (1 or 2) decides the GET_VERSION and GET_STATUS layouts. To verify against MMDVM firmware source: which MMDVM_HS release first answered with protocol version 2, and whether 1.6.1 does.
+- **Modem firmware:** 1.6.1, as reported. That number looks like the MMDVM_HS hotspot firmware line (the full-size MMDVM repeater firmware uses date versions). Upstream MMDVM_HS tops out at 1.6.0 and has always spoken protocol version 1, so 1.6.1 is probably a vendor or fork build. M2 reads the real protocol version from GET_VERSION: version 1 means the 14-byte GET_STATUS layout, version 2 the 20-byte one. The driver supports both.
 - **Radio:** Anytone AT-D868UV (DMR and analog handheld).
 
 All of the first milestones (M1 to M6) can be tested with that set and a dummy load. The AT-D868UV needs a codeplug with a hotspot channel: the hat's frequency, a color code matching the hat, the slot (slot 2 for simplex use, either for duplex), and a receive group list with the test talkgroups and Parrot (9990). This document never records the owner's frequencies, callsign or IDs; tests use placeholders such as N0CALL and DMR ID 1234567.
@@ -119,7 +119,7 @@ The hat is not PCM, so it does not fit `radio.Radio`. It gets a new interface be
 // package radio (sketch)
 type DigitalRadio interface {
 	Slots() int                                  // 1 simplex, 2 duplex
-	Run(ctx context.Context, sink network.Sink)  // RF RX: Header, Voice, End per slot
+	Run(ctx context.Context, sink network.Sink) error // RF RX: Header, Voice, End per slot
 	StartTX(h network.CallHeader) error          // h.Slot picks the slot
 	WriteVoice(f network.VoiceFrame) error       // 7-byte AMBE for DMR
 	EndTX(slot int) error
@@ -134,7 +134,7 @@ type DigitalRadio interface {
 
 ### Packages
 
-- `internal/native/radio/mmdvm`: the serial protocol (framing, commands, ACK and NAK, status polling, buffer flow control) and `DigitalRadio` for DMR. It uses `internal/dv/dmr` for bursts (`dmr.NewTX` with `MSSync: false` for base-station downlink, `dmr.NewRX` for the handheld's uplink; the sync choice is to verify on air). The serial port reuses the sa818 approach (termios, no CGO).
+- `internal/native/radio/mmdvm`: the serial protocol (framing, commands, ACK and NAK, status polling, buffer flow control) and `DigitalRadio` for DMR. It uses `internal/dv/dmr` for bursts (`dmr.NewTX` with `MSSync: false` for a duplex downlink, `dmr.NewRX` for the handheld's uplink; BS-sourced sync for a duplex hat's downlink and MS-sourced sync for a simplex hat; the uplink is always MS-sourced). The serial port reuses the sa818 approach (termios, no CGO).
 - `internal/native/radio/mmdvm/fake`: the fake modem.
 - `internal/native/rf`: the node's RF endpoint. It owns the slots, routes calls between the `DigitalRadio` and the modes, and runs contention, hang, timeouts and the loop guard.
 - A new radio preset, `mmdvm`, next to `shari`, `uri` and `none`. With it the node builds the RF endpoint instead of the PCM radio path.
@@ -148,14 +148,17 @@ handheld -> hat -> mmdvm (burst -> 3x AMBE + LC) -> rf endpoint -> network.Netwo
 network.Network -> rf endpoint -> mmdvm (AMBE -> bursts, LC, EMB) -> hat -> handheld
 ```
 
-This needs a pass-through hook in `mode/dv`: an optional interface the node prefers when the radio is digital and the codec matches:
+This needs a pass-through hook in `mode/dv`: an optional interface the node prefers when the radio is digital and the codec matches. It is declared in `internal/native/mode` (`mode.FrameMode`, a `Mode` with these methods) so the RF endpoint does not depend on `mode/dv`; `*dv.Mode` implements it:
 
 ```go
 type FrameMode interface {
+	Mode
+	FrameCodec() (network.Codec, bool) // the network's codec, once started
+	SetFrames(on bool)                 // received calls as frames (RecvFrames) or decoded audio (Recv)
 	SendHeader(h network.CallHeader) error
 	SendFrame(f network.VoiceFrame) error
 	EndFrames() error
-	RecvFrames() <-chan FrameEvent // header, voice or end, with the slot
+	RecvFrames() <-chan FrameEvent // header, voice or end
 }
 ```
 
@@ -172,15 +175,15 @@ The node rule is one active mode. A simplex hat keeps it: one slot, one mode. A 
 Notes on the networks:
 
 - The Homebrew client (`internal/dv/network/homebrew`) transmits on one slot (option `slot`, default 2, always 2 for TGIF). Per-slot networks need one client per slot, or a client change for both slots on one login. To decide in M5.
-- BrandMeister in nodespot uses Rewind as an Open DMR Terminal, which has no slot of its own (to verify). Mapping it to an RF slot is the RF endpoint's job. A Homebrew login to a BrandMeister master with a hotspot password is the fallback if Rewind is a poor fit for RF use.
+- BrandMeister in nodespot uses Rewind as an Open DMR Terminal, which has no slot of its own (still to verify). Mapping it to an RF slot is the RF endpoint's job. A Homebrew login to a BrandMeister master with a hotspot password is the fallback if Rewind is a poor fit for RF use.
 
 ## MMDVM serial protocol, first subset
 
-Everything in this section is to verify against MMDVM firmware source (MMDVM and MMDVM_HS `SerialPort.cpp`) and MMDVMHost `Modem.cpp`.
+Checked against the MMDVM and MMDVM_HS `SerialPort.cpp` and MMDVMHost `Modem.cpp`. Byte layouts and source citations are in the implementer's notes kept with the design work.
 
 ### Link
 
-- UART at 115200 baud, 8N1, no flow control (to verify; some boards use 460800).
+- UART at 115200 baud, 8N1, no flow control. MMDVM_HS and hats are fixed at 115200; full MMDVM repeater boards default to 460800, so the speed is a setting.
 - The modem only speaks when spoken to, except for unsolicited RX data and debug messages.
 
 ### Frame layout
@@ -192,47 +195,47 @@ byte 2     command
 byte 3..   payload
 ```
 
-Frames longer than 255 bytes use a two-byte length in later firmware (to verify; DMR frames never need it).
+Frames of 256 bytes or more use a long form: `E0 00 L cmd payload`, with total length L + 255 and a 4-byte header. MMDVM_HS does not support it, and DMR frames never need it.
 
 ### Commands needed first
 
 | Command | Value | Direction | Payload |
 | --- | --- | --- | --- |
-| GET_VERSION | 0x00 | host to modem, reply | Reply: protocol version, then (v1) a description string, or (v2) capabilities, CPU type, a 16-byte unique ID and the description |
-| GET_STATUS | 0x01 | host to modem, reply | Reply: enabled modes, current mode, flags (TX on, ADC overflow, RX overflow, TX overflow, lockout, DAC overflow, carrier detect), then free buffer space per mode, with DMR slot 1 and slot 2 separate. Layout differs between v1 and v2 |
-| SET_CONFIG | 0x02 | host to modem, ACK | Flags (RX and TX invert, PTT invert, debug), enabled modes, TX delay, initial mode, RX and TX levels, DMR color code, DMR delay, offsets and per-mode levels. Long and version specific; build it from firmware source, not memory |
-| SET_MODE | 0x03 | host to modem, ACK | Mode byte: idle 0, D-Star 1, DMR 2, YSF 3, P25 4, NXDN 5, POCSAG 6, M17 7 |
-| SET_FREQ | 0x04 | host to modem, ACK | RX and TX frequency in Hz (32-bit little endian each), RF power level, then optional POCSAG frequency. Hotspot boards only |
-| DMR_DATA1 / DMR_DATA2 | 0x18 / 0x1A | both | 1 byte of control (frame type and data type or voice sequence, sync flags) plus the 33-byte burst |
-| DMR_LOST1 / DMR_LOST2 | 0x19 / 0x1B | modem to host | Sync lost on that slot; the call ended without a terminator |
-| DMR_SHORTLC | 0x1C | host to modem, ACK | 9 bytes of short LC for the CACH, telling radios which slots are busy (duplex only) |
-| DMR_START | 0x1D | host to modem, ACK | 1 byte: 1 starts the duplex TDMA downlink, 0 stops it |
-| DMR_ABORT | 0x1E | host to modem, ACK | 1 byte slot number: drop that slot's queued TX |
-| ACK | 0x70 | modem to host | The acknowledged command byte |
-| NAK | 0x7F | modem to host | The command byte and a reason code |
+| GET_VERSION | 0x00 | host to modem, reply | Reply v1 (MMDVM_HS): protocol byte 1, then the description string. Reply v2 (MMDVM): protocol byte 2, capability bytes, CPU type, 16 bytes of unique ID, then the description |
+| GET_STATUS | 0x01 | host to modem, reply | Reply v1 is 14 bytes: enabled modes, current mode, flags, then free space per mode (D-Star, DMR slot 1, DMR slot 2, YSF, P25, NXDN, POCSAG, M17). Reply v2 is 20 bytes: current mode, flags (TX, ADC overflow, RX overflow, TX overflow, lockout, DAC overflow, carrier detect), then free space per mode. Space is in whole frames |
+| SET_CONFIG | 0x02 | host to modem, ACK | v1 is 26 bytes, v2 is 40. Flags (RX, TX and PTT invert, debug, simplex), enabled modes, TX delay in 10 ms units, initial mode, levels, DMR color code (0 to 15), DMR delay, DC offsets, hang times. The offsets are in the implementer's notes. NAK 4 if TX delay is over 50 or the initial mode is not enabled |
+| SET_MODE | 0x03 | host to modem, ACK | Mode byte: idle 0, D-Star 1, DMR 2, YSF 3, P25 4, NXDN 5, POCSAG 6, FM 10. The host does not send it at start-up; SET_CONFIG carries the initial mode, and the firmware switches to DMR itself when DMR data arrives |
+| SET_FREQ | 0x04 | host to modem, ACK | 17 bytes: a reserved zero, RX and TX frequency in Hz (32-bit little endian each), RF power (0 to 255), POCSAG frequency. Hotspot boards only; the full MMDVM firmware ACKs and ignores it |
+| DMR_DATA1 / DMR_DATA2 | 0x18 / 0x1A | both | 1 control byte plus the 33-byte burst (frame length 37). Modem to host, the control byte is 0x20 for voice sync, 1 to 5 for voice bursts B to F, and 0x40 plus the data type for data sync (terminator is 0x42). Host to modem, the firmware ignores it and the host sends 0x00. No ACK on success; NAK 5 when the FIFO is full |
+| DMR_LOST1 / DMR_LOST2 | 0x19 / 0x1B | modem to host | Sync lost on that slot (after 13 lost frames); the call ended without a terminator |
+| DMR_SHORTLC | 0x1C | host to modem | 9 bytes of short LC for the CACH, telling radios which slots are busy (duplex only). No ACK on success |
+| DMR_START | 0x1D | host to modem | 1 byte: 1 starts the duplex TDMA downlink, 0 stops it. No ACK on success; NAK 4 if the modem is not in DMR mode |
+| DMR_ABORT | 0x1E | host to modem | 1 byte slot number (1 or 2): drop that slot's queued TX. No ACK on success |
+| ACK | 0x70 | modem to host | The acknowledged command byte. Sent only for SET_CONFIG, SET_MODE, SET_FREQ and calibration |
+| NAK | 0x7F | modem to host | The command byte and a reason: 1 unknown command, 2 wrong state, 4 bad length or data, 5 no FIFO space, 6 duplex not supported by this build |
 | DEBUG1 to DEBUG5 | 0xF1 to 0xF5 | modem to host | Text and values; logged, never parsed |
 
 The 33-byte DMR burst inside DMR_DATA is the same burst `internal/dv/dmr` builds and parses (`dmr.Burst`), so no new air-interface code is needed for DMR.
 
 ### Duplex slot handling
 
-- On a duplex hat the host sends DMR_START 1 before the first TX and DMR_START 0 after the last slot goes idle plus the hang time. While started, the modem sends the TDMA downlink continuously and fills an idle slot itself (to verify that the firmware, not the host, sends idle bursts).
-- The host sends DMR_SHORTLC whenever a slot changes between idle, group and private, so radios see which slot is busy.
+- On a duplex hat the host sends DMR_START 1 before the first TX and DMR_START 0 after the last slot goes idle plus the hang time. While started, the modem sends the TDMA downlink continuously and fills an idle slot itself with an idle data burst carrying the color code. The host never sends idle bursts. The host also stops the stream by itself after its DMR TX hang timer (4 seconds in MMDVMHost).
+- The host sends DMR_SHORTLC whenever a slot changes between idle, group and private, so radios see which slot is busy. (M1 has the command builder only; the driver sends it from M5.)
 - Each slot has its own TX queue (DMR_DATA1, DMR_DATA2) and its own free-space count in GET_STATUS.
-- A simplex hat (duplex off in SET_CONFIG) uses slot 2 frames only and no DMR_START; the radio must be set to the same slot and color code (to verify which slot number the firmware expects for simplex).
+- A simplex hat (simplex flag in SET_CONFIG) uses DMR_DATA2 only, whatever the call's slot, and no DMR_START or DMR_SHORTLC. RX is also reported on DMR_DATA2, GET_STATUS shows slot 1 space as a fixed 10, and the host must send MS-sourced sync (a duplex hat takes BS-sourced).
 
 ### Timing
 
 - A DMR burst covers 30 ms of air time per slot, one burst every 60 ms per slot; a voice superframe is 6 bursts (360 ms) carrying 18 AMBE frames of 20 ms.
-- The modem buffers TX. The host keeps a small lead (about 2 to 3 bursts per slot), polls GET_STATUS about every 250 ms when idle and more often during TX, and never writes more than the reported free space.
+- The modem buffers TX. The host polls GET_STATUS every 250 ms (as MMDVMHost does), writes at most one frame per mode every 10 ms, and only while the reported free space is above 1, counting it down per frame written until the next status reply. A full FIFO gives NAK 5. nodespot also subtracts the frames written after a GET_STATUS was sent from the space its reply reports, so a reply in flight cannot overstate the space.
 - Network jitter is absorbed in the RF endpoint, not the modem: it waits for a short prebuffer before the header goes out and fills gaps with `dmr.SilenceAMBE`.
-- The host reads continuously. A missed ACK after about 1 s means the modem is gone: abort, close and reopen.
+- The host reads continuously. MMDVMHost waits for an ACK or NAK for up to 30 reads of 10 ms. If no status reply arrives for 2 seconds, the modem is treated as gone: close and reopen.
 
 ### Start-up sequence
 
 1. Open the UART and drain it.
-2. GET_VERSION, retrying for about 2 s (the modem may still be booting after a reset). Record the protocol version, description and hardware info.
-3. SET_FREQ (hotspot boards), then SET_CONFIG with DMR only and TX off unless TX is allowed (see Regulatory), then SET_MODE DMR.
+2. Wait about 2 s, then GET_VERSION, with up to 6 attempts spaced 1.5 s apart (the modem may still be booting after a reset). Record the protocol version, description and hardware info.
+3. SET_FREQ (hotspot boards), then SET_CONFIG with DMR only, and nothing else (SET_CONFIG has no TX-off flag, so TX inhibit is the host's: with TX not allowed the driver never sends DMR_START or DMR data, see Regulatory): the modem starts idle and switches to DMR when the first DMR frame arrives.
 4. Poll GET_STATUS.
 
 ## Routing and contention
@@ -256,8 +259,8 @@ The installer and the helper do the root work. `nodespot-node` stays a sandboxed
 The 3B+ has two UARTs: the full PL011 and the mini UART, whose baud rate follows the core clock. By default Bluetooth has the PL011 and the GPIO pins get the mini UART, which is unreliable for the modem. The hat needs the PL011 on GPIO 14 and 15.
 
 - `enable_uart=1` in `config.txt`.
-- `dtoverlay=disable-bt` to give the PL011 to the GPIO pins and turn Bluetooth off, or `dtoverlay=miniuart-bt` to keep Bluetooth on the mini UART (exact overlay names, and the old `pi3-` prefixed names on older images, to verify).
-- `systemctl disable hciuart` when Bluetooth is off.
+- `dtoverlay=pi3-disable-bt` (the name MMDVM_HS's build guide uses) to give the PL011 to the GPIO pins and turn Bluetooth off, or `dtoverlay=miniuart-bt` to keep Bluetooth on the mini UART. Current Raspberry Pi OS may use `disable-bt` instead (to verify).
+- `systemctl disable serial-getty@ttyAMA0.service` so no login prompt runs on the port, and `systemctl disable bluetooth.service` (and `hciuart` where present) when Bluetooth is off.
 - Remove `console=serial0,115200` from `cmdline.txt` so the kernel console does not talk to the modem.
 - A reboot is needed. The UI says so and offers it.
 - Then `/dev/serial0` links to `/dev/ttyAMA0` (to verify on the current Raspberry Pi OS).
@@ -269,7 +272,7 @@ The 3B+ has two UARTs: the full PL011 and the mini UART, whose baud rate follows
 
 ### GPIO reset
 
-Many hats wire the STM32 reset and boot pins to Pi GPIO (pins vary by board, to verify per board). A helper op pulses reset to recover a stuck modem. The node never touches GPIO itself.
+Many hats wire the STM32 boot and reset pins to Pi GPIO. The MMDVM_HS flash scripts use GPIO 20 for boot and GPIO 21 for reset on the MMDVM_HS hats and dual hat; other boards differ (for example 200 and 3 on one hotspot, 66 and 67 on another), so the pins are a per-board setting. A helper op pulses reset to recover a stuck modem. The node never touches GPIO itself.
 
 ### Firmware
 
@@ -349,6 +352,7 @@ Each milestone ends with a test on the owner's gear (Pi 3B+, the dual-slot hat, 
 - The fake modem on a pty.
 - `DigitalRadio`, the `rf` endpoint, the `FrameMode` hook in `mode/dv`, contention, hang, timeouts and the loop guard.
 - **Test:** unit tests plus an end-to-end test in CI: fake modem RX burst stream to a fake network and back, with AMBE bytes compared exactly; two calls on one slot (busy); RF wins; timeout; loop guard; abort on context cancel.
+- **As built:** `internal/native/radio` (`DigitalRadio`, `ModemStatus`), `internal/native/radio/mmdvm` (protocol, driver), `internal/native/radio/mmdvm/fake` (fake modem over an in-memory link or a pty), `internal/native/rf` (endpoint) and `mode.FrameMode` with `*dv.Mode` implementing it. Not wired into the config, UI, helper or packaging yet (no `mmdvm` preset). Routing details settled in M1: the hang is reserved per side (RF after an RF call, the network after a network call); an RF key-up takes a slot from a network call that is still in its prebuffer (3 frames) but not from one on the air; the loop guard applies after a call ends (while it is up the other side is busy anyway); TX timeout and frame timeout as above, with silence fill once the network falls behind the air by more than the prebuffer.
 
 ### M2: detect the hat, read version and status
 
@@ -392,15 +396,11 @@ Each milestone ends with a test on the owner's gear (Pi 3B+, the dual-slot hat, 
 - **Bench comparison:** the same hat under Pi-Star, for captures when our results differ. Bench only.
 - **Regression:** analog presets (`shari`, `uri`, `none`) unchanged; DV modes still work with PCM radios.
 
-## Research list (to verify)
+## Research list (still open)
 
-- MMDVM and MMDVM_HS firmware source: command values, SET_CONFIG layout, GET_VERSION and GET_STATUS for protocol 1 and 2, DMR_DATA control byte, frame length rules.
-- Which MMDVM_HS release introduced protocol version 2, and what 1.6.1 speaks.
-- Whether the firmware or the host fills idle duplex slots, and the simplex slot number.
-- UART speed for hotspot boards.
-- BS versus MS sync on the downlink and uplink for hotspots.
-- Raspberry Pi OS overlay names (`disable-bt`, `miniuart-bt`), the `serial0` link and the device class name for `DeviceAllow`.
-- Reset and boot GPIO pins for common hats.
+- What a "1.6.1" modem speaks. Upstream MMDVM_HS ends at 1.6.0 and protocol 1; M2 settles it on the real hat.
+- Raspberry Pi OS overlay names (`disable-bt` against `pi3-disable-bt`, `miniuart-bt`), the `serial0` link and the device class name for `DeviceAllow`.
+- Boot and reset GPIO pins for the owner's hat and other common hats (only the MMDVM_HS flash scripts' pins are known).
 - Whether Rewind can serve an RF hotspot well, or a Homebrew login to BrandMeister is better.
 - Band table per region.
 
