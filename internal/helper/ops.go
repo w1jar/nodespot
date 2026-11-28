@@ -42,6 +42,9 @@ type Ops struct {
 	// Svc holds the paths and timing of the services switch and the port 80
 	// move (sys_svc.go, sys_webport.go); the zero value means the defaults.
 	Svc SvcPaths
+	// RF holds the boot files and devices of rf-prepare and
+	// rf-device-check (sys_rf.go); the zero value means the defaults.
+	RF RFPaths
 	// Host info fallbacks of host-status (injectable for tests): the
 	// static hostname file, the kernel hostname and the PATH lookup.
 	HostnameFile string

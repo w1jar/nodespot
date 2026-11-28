@@ -273,7 +273,11 @@ func (e *Engine) SaveStation(st Station) error {
 // preset that was already chosen automatically changes nothing.
 func (e *Engine) wiringChanged(r RadioConfig) bool {
 	iface, err := r.Interface(e.info.SHARI)
-	return err != nil || iface != e.info.Interface || r.SA818Port != e.o.RadioConfig.SA818Port
+	if err != nil || iface != e.info.Interface || r.SA818Port != e.o.RadioConfig.SA818Port {
+		return true
+	}
+	// Any MMDVM setting reopens the modem with the new settings.
+	return iface.Preset == radio.PresetMMDVM && (e.o.Modem == nil || !r.MMDVM.Resolved().Equal(e.o.ModemConfig))
 }
 
 // hasSA818 reports whether the radio in use has an SA818 module to program.

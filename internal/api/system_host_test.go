@@ -211,3 +211,11 @@ func TestAuditEndpoint(t *testing.T) {
 func storeAudit(user, action, detail string) store.Audit {
 	return store.Audit{Username: user, Action: action, Detail: detail}
 }
+func (f *fakeSys) RFPrepare(context.Context) (helper.RFPrepareResult, error) {
+	f.rec("rf-prepare")
+	return helper.RFPrepareResult{Model: "Raspberry Pi 4 Model B Rev 1.5", Changes: []string{"Set enable_uart=1 under [all] in config.txt"},
+		RebootNeeded: true, Reasons: []string{"The boot settings changed"}}, nil
+}
+func (f *fakeSys) RFDeviceCheck(context.Context) (helper.RFDeviceCheck, error) {
+	return helper.RFDeviceCheck{Pi: true, Device: "/dev/serial0", LinkTarget: "ttyAMA0", Exists: true, NodeAccess: true}, nil
+}

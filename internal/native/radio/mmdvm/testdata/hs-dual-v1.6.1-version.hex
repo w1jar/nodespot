@@ -1,0 +1,11 @@
+# GET_VERSION reply from an MMDVM_HS dual hat (protocol 1, firmware 1.6.1),
+# read at 115200 baud from /dev/serial0. The firmware author credits are
+# replaced by "AUTHORS" and the chip's unique ID by 24 zeros; the length
+# byte is recomputed. Everything else is as received.
+e0 70 00 01 4d 4d 44 56 4d 5f 48 53 2d 76 31 2e
+36 2e 31 20 32 30 32 33 31 31 31 35 5f 57 50 53
+44 20 31 34 2e 37 34 35 36 4d 48 7a 20 64 75 61
+6c 20 41 44 46 37 30 32 31 20 46 57 20 62 79 20
+41 55 54 48 4f 52 53 2e 20 47 69 74 49 44 20 23
+37 65 31 36 30 39 39 00 30 30 30 30 30 30 30 30
+30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30

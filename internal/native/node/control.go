@@ -60,6 +60,8 @@ const (
 	OpRadioTune     = "radio_tune"   // {rxVolume?, txVolume?, rxBoost?} -> radio.Levels
 	OpRadioProg     = "radio_program"
 	OpRadioInfo     = "radio_info"           // -> RadioDetail
+	OpModemStatus   = "modem_status"         // -> ModemInfo (never the modem's unique ID)
+	OpModemReset    = "modem_reset"          // -> ModemInfo (closes and reopens the MMDVM modem)
 	OpTestTone      = "test_tone"            // {seconds?, stop?} -> Status (seconds 0: 5, at most 10)
 	OpAutosetRx     = "autoset_rx"           // {cancel?} -> AutosetStatus (starts, or cancels, the receive auto-set)
 	OpAutosetStat   = "autoset_status"       // -> AutosetStatus
@@ -325,6 +327,13 @@ func (s *Server) do(ctx context.Context, req Request) (any, error) {
 		return e.Levels(), nil
 	case OpRadioInfo:
 		return e.RadioInfo(), nil
+	case OpModemStatus:
+		return e.ModemInfo(), nil
+	case OpModemReset:
+		if err := e.ResetModem(); err != nil {
+			return nil, err
+		}
+		return e.ModemInfo(), nil
 	case OpTuningDismiss:
 		if err := e.DismissTuning(); err != nil {
 			return nil, err

@@ -52,6 +52,8 @@ type env struct {
 	ck   map[string]string // role -> cookie header
 	clk  *fakeClock        // with opts.schedules
 	eng  *schedules.Engine // with opts.schedules
+	// modem is the node's MMDVM modem (opts.modem).
+	modem node.Modem
 }
 
 type fakeClock struct {
@@ -87,6 +89,8 @@ type opts struct {
 	nodeCfg *node.Config
 	// radioid is the radioid.net list (nil: none).
 	radioid *radioid.Manager
+	// modem gives the node an MMDVM modem.
+	modem node.Modem
 }
 
 // testNodeConfig is a station with AllStar and BrandMeister set up, the ID
@@ -113,7 +117,7 @@ func (e *env) startNode(cfg *node.Config) {
 	if cfg == nil {
 		cfg = testNodeConfig()
 	}
-	rig, err := nodetest.Start(cfg, nodetest.Options{Dir: e.dir})
+	rig, err := nodetest.Start(cfg, nodetest.Options{Dir: e.dir, Modem: e.modem})
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -188,7 +192,7 @@ func newEnv(t *testing.T, o opts) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	e := &env{t: t, dir: dir, st: st, as: as, ck: map[string]string{}}
+	e := &env{t: t, dir: dir, st: st, as: as, ck: map[string]string{}, modem: o.modem}
 	if !o.noNode {
 		e.startNode(o.nodeCfg)
 		t.Cleanup(e.stopNode)
@@ -828,7 +832,7 @@ func TestRadioInfoAndPreset(t *testing.T) {
 	if c := e.do("admin", "GET", "/api/radio/info", nil, &d); c != 200 {
 		t.Fatal(c)
 	}
-	if len(d.Presets) != 3 || d.Presets[0].Name != "shari" || d.Interface.Preset == "" {
+	if len(d.Presets) != 4 || d.Presets[0].Name != "shari" || d.Interface.Preset == "" {
 		t.Fatalf("%+v", d)
 	}
 	// A bad preset is refused with the node's words; a good one is saved.

@@ -79,6 +79,8 @@ func run(args []string, stderr io.Writer) (code int) {
 	case err != nil:
 		log.Error("radio", "err", err)
 		return 1
+	case rinfo.Interface.Preset == radio.PresetMMDVM:
+		log.Info("radio preset mmdvm: the sound-chip radio is not used")
 	case rinfo.Present:
 		log.Info("radio interface", "preset", rinfo.Interface.Preset, "chip", rinfo.Chip, "usb", rinfo.USBID,
 			"ptt", rinfo.Interface.PTTPin, "cos", rinfo.Interface.COS, "sa818", rinfo.Interface.SA818)
@@ -110,10 +112,23 @@ func run(args []string, stderr io.Writer) (code int) {
 		stop()
 	}
 
-	e, err := node.New(cfg, node.Options{
+	// The mmdvm preset runs the MMDVM driver and its RF endpoint; the
+	// engine keeps the radioless PCM path.
+	opts := node.Options{
 		Radio: r, RadioAbsent: absent, RadioConfig: rc, RadioInfo: rinfo,
 		ConfigPath: *cfgPath, Log: log, RadioChanged: radioChanged,
-	})
+	}
+	if rinfo.Interface.Preset == radio.PresetMMDVM {
+		ms := cfg.Station.Radio.MMDVM.Resolved()
+		mctx, cancelModem := context.WithCancel(ctx)
+		mr := startModem(mctx, cfg, ms, log)
+		defer func() {
+			cancelModem()
+			mr.stop()
+		}()
+		opts.Modem, opts.ModemConfig = mr.d, ms
+	}
+	e, err := node.New(cfg, opts)
 	if err != nil {
 		log.Error("node", "err", err)
 		return 1

@@ -104,6 +104,7 @@ const iface = (preset: string, audio: boolean, o: Record<string, unknown>) => ({
 const presets = [
   { name: 'shari', title: 'SHARI', description: 'The SHARI board: a CM108B sound chip and an SA818 radio module. PTT on GPIO3, carrier from GPIO2 (volume down) present when high, no CTCSS input. The node programs the SA818.', defaults: iface('shari', true, { pttPin: 3, cos: 'gpio2', sa818: true }) },
   { name: 'uri', title: 'USB interface (URI-style)', description: 'A CM108 or CM119 USB interface wired to an external radio, such as a URI-style or RA-style board. PTT on GPIO3, carrier from GPIO2 (volume down) present when low, no CTCSS input. Set the frequency and tones on the radio.', defaults: iface('uri', true, { pttPin: 3, cos: 'gpio2', cosActiveLow: true }) },
+  { name: 'mmdvm', title: 'MMDVM hat (early preview)', description: 'An MMDVM hat on the Pi\'s UART (/dev/serial0). Early preview: the node detects the hat and shows its status; it does not receive or transmit on RF yet.', defaults: iface('mmdvm', false, {}) },
   { name: 'none', title: 'None (radioless)', description: 'No radio. The node links modes with no audio to or from a radio.', defaults: iface('none', false, {}) },
 ];
 const usbChip = radioPresent ? { chip: 'CM108B', usbId: '0d8c:0012', product: 'USB Audio Device' } : {};
@@ -114,6 +115,17 @@ const resolved = () => {
   const d = presets.find((x) => x.name === name)!.defaults;
   if (!d.audio) return { ...d };
   return { ...d, pttPin: r.pttGpio || d.pttPin, pttActiveLow: r.pttActiveLow ?? d.pttActiveLow, cos: r.cosSource || d.cos, cosActiveLow: r.cosActiveLow ?? d.cosActiveLow, ctcss: r.ctcssSource || d.ctcss, ctcssActiveLow: r.ctcssActiveLow ?? d.ctcssActiveLow, sa818: r.sa818 ?? d.sa818 };
+};
+// The MMDVM hat (mmdvm preset): an idle dual hat; Prepare the Pi flips piPrepared.
+let modemReopens = 0, piPrepared = false;
+const mockModem = () => {
+  const on = (station.radio as Record<string, any>).preset === 'mmdvm';
+  const base = { configured: on, running: on, connected: on, device: '/dev/serial0', baud: 115200, detectOnly: true, duplexCapable: false, duplex: true,
+    flags: { raw: 0, tx: false, rxOverflow: false, txOverflow: false, adcOverflow: false, dacOverflow: false, lockout: false, carrierDetect: false },
+    rxOverflows: 0, txOverflows: 0, space: [0, 0], reopens: modemReopens, naks: 0 };
+  if (!on) return base;
+  return { ...base, protocol: 1, description: 'MMDVM_HS-v1.6.1 20231115 14.7456MHz dual ADF7021 FW by AUTHORS. GitID #7e16099', board: 'MMDVM_HS', firmware: '1.6.1',
+    buildDate: '2023-11-15', duplexCapable: true, modes: ['dstar', 'dmr', 'ysf', 'p25', 'nxdn', 'pocsag', 'm17'], state: 'idle', space: [10, 25], lastStatus: new Date().toISOString() };
 };
 const started = new Date(Date.now() - 5 * 3600e3).toISOString();
 let active = 'allstar', target = '1000', state: 'idle' | 'connecting' | 'connected' = 'connected', since = new Date(Date.now() - 1800e3).toISOString();
@@ -515,6 +527,26 @@ export function mockApi(): Plugin {
           if (!isAdmin) return forbid();
           const r = resolved();
           return json(res, 200, { present: radioPresent && r.audio, detected: radioPresent, ...usbChip, shari: radioPresent, interface: r, preset: station.radio.preset ?? '', presets, resolved: r, ...(programmedFilters ? { sa818Filters: programmedFilters } : {}), ...(programmedSA818 ? { sa818Programmed: programmedSA818 } : {}) });
+        }
+        if (p === '/radio/modem' && m === 'GET') {
+          if (!isAdmin) return forbid();
+          return json(res, 200, mockModem());
+        }
+        if (p === '/radio/modem/reset' && m === 'POST') {
+          if (!isAdmin) return forbid();
+          if ((station.radio as Record<string, any>).preset !== 'mmdvm') return err(res, 409, 'node: no MMDVM modem is in use (the radio preset is not mmdvm)', 'node_refused');
+          modemReopens++;
+          return json(res, 200, mockModem());
+        }
+        if (p === '/radio/device-check' && m === 'GET') {
+          if (!isAdmin) return forbid();
+          return json(res, 200, { model: 'Raspberry Pi 4 Model B Rev 1.5', pi: true, device: '/dev/serial0', linkTarget: piPrepared ? 'ttyAMA0' : 'ttyS0', exists: true, owner: 'root', group: piPrepared ? 'nodespot-node' : 'dialout', mode: 'Dcrw-rw----', nodeAccess: piPrepared, uartEnabled: piPrepared, btDisabled: piPrepared, consoleOnUart: !piPrepared, consoleRunning: !piPrepared, rebootNeeded: false, problems: piPrepared ? [] : ['The Pi is not prepared for the hat yet (Prepare the Pi)'] });
+        }
+        if (p === '/radio/prepare' && m === 'POST') {
+          if (!isAdmin) return forbid();
+          const changes = piPrepared ? [] : ['Removed the serial console (console=serial0,115200) from cmdline.txt', 'Set enable_uart=1 and dtoverlay=disable-bt under [all] in config.txt', 'Stopped and disabled serial-getty@ttyAMA0.service'];
+          piPrepared = true;
+          return json(res, 200, { model: 'Raspberry Pi 4 Model B Rev 1.5', changes, units: [{ name: 'serial-getty@ttyAMA0.service', present: true, active: changes.length > 0, enabled: changes.length > 0, disabled: changes.length > 0 }, { name: 'hciuart.service', present: false, active: false, enabled: false, disabled: false }], rebootNeeded: changes.length > 0, reasons: changes.length ? ['The boot settings changed'] : [] });
         }
         if (p === '/radio/program' && m === 'POST') {
           if (!isAdmin) return forbid();

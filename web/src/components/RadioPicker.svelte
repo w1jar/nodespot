@@ -23,7 +23,7 @@
       {#each info.presets as p (p.name)}<option value={p.name}>{p.title}</option>{/each}
     </select>
     {#if preset}<p class="mt-1 text-xs text-muted">{preset.description}</p>{/if}
-    <p class="mt-1 text-xs text-muted" data-testid="detected">{found ? `Detected: ${found}${info.product ? ', ' + info.product : ''}` : 'No USB radio interface detected.'}</p>
+    {#if name !== 'mmdvm'}<p class="mt-1 text-xs text-muted" data-testid="detected">{found ? `Detected: ${found}${info.product ? ', ' + info.product : ''}` : 'No USB radio interface detected.'}</p>{/if}
   </div>
   {#if iface?.audio}
     <details class="rounded-md border border-border p-3">

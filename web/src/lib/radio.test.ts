@@ -74,3 +74,14 @@ test('tone input sources have their own wording and no always-open', () => {
   assert.deepEqual(CTCSS_SOURCES.slice(1).map((o) => o.value), ['gpio1', 'gpio2', 'gpio3', 'gpio4']);
   assert.equal(COS_SOURCES[0]!.label, 'None (squelch is not read)');
 });
+
+test('the mmdvm preset has no pins and keeps its modem settings', () => {
+  const ps: RadioPreset[] = [...presets, { name: 'mmdvm', title: 'MMDVM hat', description: '', defaults: iface('mmdvm', {}) }];
+  const i = resolveInterface({ preset: 'mmdvm', pttGpio: 4, sa818: true }, ps, true)!;
+  assert.equal(i.preset, 'mmdvm'); assert.equal(i.audio, false); assert.equal(i.pttPin, 0); assert.equal(hasSA818(i), false);
+  const out = radioBody({ preset: 'mmdvm', pttGpio: 4, cosSource: 'gpio1', mmdvm: { colorCode: 3, allowTx: false } }, ps, false);
+  assert.deepEqual(out, { preset: 'mmdvm', mmdvm: { colorCode: 3, allowTx: false } });
+  const r: R = { preset: 'mmdvm', mmdvm: { baud: 460800 } };
+  pickPreset(r, 'uri');
+  assert.equal(r.preset, 'uri'); assert.deepEqual(r.mmdvm, { baud: 460800 });
+});

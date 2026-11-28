@@ -255,6 +255,20 @@ func (c *Client) RadioInfo(ctx context.Context) (RadioDetail, error) {
 	return out, err
 }
 
+// ModemStatus reports the MMDVM modem.
+func (c *Client) ModemStatus(ctx context.Context) (ModemInfo, error) {
+	var out ModemInfo
+	err := c.Call(ctx, OpModemStatus, nil, &out)
+	return out, err
+}
+
+// ModemReset closes the MMDVM modem and opens it again.
+func (c *Client) ModemReset(ctx context.Context) (ModemInfo, error) {
+	var out ModemInfo
+	err := c.Call(ctx, OpModemReset, nil, &out)
+	return out, err
+}
+
 // RadioProgram writes the saved channel to the SA818.
 func (c *Client) RadioProgram(ctx context.Context) (Status, error) {
 	var out Status

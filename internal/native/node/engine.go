@@ -38,6 +38,10 @@ type Options struct {
 	// station changes the radio wiring. The radio is opened only once, so
 	// the daemon restarts itself to reopen it.
 	RadioChanged func()
+	// Modem is the MMDVM modem the daemon runs for the mmdvm preset, and
+	// ModemConfig the settings it was opened with. Nil for other presets.
+	Modem       Modem
+	ModemConfig MMDVMSettings
 	// Program programs the SA818 (default radio.ProgramSA818).
 	Program func(radio.Config, sa818.Settings) error
 	// ConfigPath is the config file; "" keeps changes in memory only.

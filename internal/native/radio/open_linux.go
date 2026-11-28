@@ -35,7 +35,7 @@ func Detect(cfg Config) (Info, error) {
 // [ProgramSA818].
 func Open(cfg Config) (Radio, Info, error) {
 	info, derr := Detect(cfg)
-	if derr != nil && !errors.Is(derr, ErrNoRadio) && cfg.Preset != PresetAuto && cfg.Preset != PresetNone {
+	if derr != nil && !errors.Is(derr, ErrNoRadio) && cfg.Preset != PresetAuto && cfg.Preset != PresetNone && cfg.Preset != PresetMMDVM {
 		return nil, info, derr
 	}
 	iface, err := Resolve(cfg.Preset, cfg.Overrides, info.SHARI)

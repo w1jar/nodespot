@@ -7,18 +7,23 @@
   import { stationBody, validateStation } from '../../lib/station';
   import { SA818_FILTER_KEYS, TAIL_CHOICES, filterOn, programmedText, sa818Body, sa818VolumeError, tailChoice, tailValue } from '../../lib/audio';
   import { hasSA818, isShari, pinError, radioBody, resolveInterface } from '../../lib/radio';
+  import { MMDVM_BAUDS, MMDVM_DEFAULT_DEVICE, isMMDVM, mmdvmConfig, mmdvmError, mmdvmForm } from '../../lib/mmdvm';
   import type { RadioInfo, Station } from '../../lib/types';
   import StationFields from '../StationFields.svelte';
   import RadioPicker from '../RadioPicker.svelte';
   import RadioTimers from './RadioTimers.svelte';
+  import ModemCard from './ModemCard.svelte';
 
   let st = $state<Station | null>(null), info = $state<RadioInfo | null>(null);
   let err = $state(''), busy = $state(false), prog = $state(false);
   const iface = $derived(st && info ? resolveInterface(st.radio, info.presets, isShari(info)) : undefined);
   // Without the info (an old node) the SA818 port decides, as before presets existed.
   const sa818 = $derived(info ? hasSA818(iface) : !!st?.radio.sa818Port);
+  // The MMDVM hat: its settings are edited in a form of their own (frequencies in MHz) and saved as radio.mmdvm.
+  const mmdvm = $derived(isMMDVM(iface?.preset ?? st?.radio.preset));
+  let mf = $state(mmdvmForm(undefined));
   async function load() {
-    try { const s = await api.station(); st = { ...s, radio: { ...s.radio }, id: { ...s.id } }; } catch (e) { toastError(e); }
+    try { const s = await api.station(); st = { ...s, radio: { ...s.radio }, id: { ...s.id } }; mf = mmdvmForm(s.radio.mmdvm); } catch (e) { toastError(e); }
     try { info = await api.radioInfo(); } catch { /* an old node has no info */ }
   }
   $effect(() => { load(); });
@@ -26,12 +31,13 @@
   async function save(ev: Event) {
     ev.preventDefault();
     if (!st) return;
-    err = validateStation(st, sa818) || (sa818 ? sa818VolumeError(st.radio.sa818Volume) : '') || (info ? pinError(iface) : '');
+    err = validateStation(st, sa818) || (sa818 ? sa818VolumeError(st.radio.sa818Volume) : '') || (info ? pinError(iface) : '') || (mmdvm ? mmdvmError(mf) : '');
     if (err) return;
     busy = true;
     try { const body = stationBody(st, sa818);
       if (sa818) body.radio = sa818Body(body.radio);
       if (info) body.radio = radioBody(body.radio, info.presets, isShari(info));
+      if (mmdvm) body.radio.mmdvm = mmdvmConfig(mf);
       await api.saveStation(body); await refreshNode(); await load(); toast('Radio settings saved'); } catch (e) { toastError(e); } finally { busy = false; }
   }
   const chk = 'mt-0.5 size-4 accent-[var(--accent)]';
@@ -43,6 +49,55 @@
     try { await api.radioProgram(); toast('Radio programmed'); } catch (e) { toastError(e); } finally { prog = false; }
   }
 </script>
+
+{#snippet modemFields()}
+  <div class="grid gap-3 sm:grid-cols-2">
+    <div>
+      <label class="label" for="rt-mm-device">Serial port</label>
+      <input id="rt-mm-device" class="input font-mono" bind:value={mf.device} placeholder={MMDVM_DEFAULT_DEVICE} autocomplete="off" spellcheck="false" />
+      <p class="mt-1 text-xs text-muted">Empty is {MMDVM_DEFAULT_DEVICE}, the Pi's UART on the GPIO header.</p>
+    </div>
+    <div>
+      <label class="label" for="rt-mm-baud">Baud rate</label>
+      <select id="rt-mm-baud" class="input" bind:value={mf.baud}>
+        {#each MMDVM_BAUDS as b (b)}<option value={b}>{b}</option>{/each}
+      </select>
+      <p class="mt-1 text-xs text-muted">Most hats answer at 115200.</p>
+    </div>
+    <div>
+      <label class="label" for="rt-mm-rx">Receive frequency (MHz)</label>
+      <input id="rt-mm-rx" class="input tabular-nums" type="number" inputmode="decimal" min="100" max="1000" step="0.0001" bind:value={mf.rxMHz} />
+    </div>
+    <div>
+      <label class="label" for="rt-mm-tx">Transmit frequency (MHz)</label>
+      <input id="rt-mm-tx" class="input tabular-nums" type="number" inputmode="decimal" min="100" max="1000" step="0.0001" bind:value={mf.txMHz} />
+    </div>
+    <div>
+      <label class="label" for="rt-mm-rxoff">Receive offset (Hz)</label>
+      <input id="rt-mm-rxoff" class="input tabular-nums" type="number" inputmode="numeric" min="-100000" max="100000" step="1" bind:value={mf.rxOffsetHz} placeholder="0" />
+    </div>
+    <div>
+      <label class="label" for="rt-mm-txoff">Transmit offset (Hz)</label>
+      <input id="rt-mm-txoff" class="input tabular-nums" type="number" inputmode="numeric" min="-100000" max="100000" step="1" bind:value={mf.txOffsetHz} placeholder="0" />
+    </div>
+    <div>
+      <label class="label" for="rt-mm-power">RF power (%)</label>
+      <input id="rt-mm-power" class="input tabular-nums" type="number" inputmode="numeric" min="0" max="100" step="1" bind:value={mf.rfPower} placeholder="0" />
+    </div>
+    <div>
+      <label class="label" for="rt-mm-cc">Color code</label>
+      <input id="rt-mm-cc" class="input tabular-nums" type="number" inputmode="numeric" min="0" max="15" step="1" bind:value={mf.colorCode} placeholder="1" />
+    </div>
+    <div>
+      <label class="label" for="rt-mm-gpio">Reset GPIO (optional)</label>
+      <input id="rt-mm-gpio" class="input tabular-nums" type="number" inputmode="numeric" min="0" max="1023" step="1" bind:value={mf.resetGpio} placeholder="Not wired" />
+    </div>
+  </div>
+  <p class="text-xs text-muted">The offsets trim the board's frequency error. Frequency, power and color code are stored for a later release; this preview does not send them to the hat.</p>
+  <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class={chk} bind:checked={mf.duplex} /><span>Duplex (both DMR time slots)<span class="block text-xs text-muted">For a dual hat. On by default.</span></span></label>
+  <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class={chk} bind:checked={mf.allowTx} data-testid="mm-allow-tx" /><span>Allow transmit<span class="block text-xs text-muted">Off by default, and turned off when a backup is restored. This preview never transmits, whatever this says.</span></span></label>
+  <p class="text-xs text-muted">Saving a change here restarts the node to reopen the modem.</p>
+{/snippet}
 
 {#if st && info}
   <section class="card space-y-3 p-4" aria-label="Interface">
@@ -81,6 +136,8 @@
           </div>
         </fieldset>
         <p class="text-xs text-muted" data-testid="sa818-programmed">{programmedText(info ?? undefined)}</p>
+      {:else if mmdvm}
+        {@render modemFields()}
       {:else}
         <p class="text-sm text-muted">The frequency and tone are set on the radio itself. Save to keep the interface settings above.</p>
       {/if}
@@ -93,6 +150,8 @@
     </form>
   </section>
 {/if}
+
+{#if st && mmdvm}<ModemCard />{/if}
 
 <RadioTimers onsaved={load} />
 

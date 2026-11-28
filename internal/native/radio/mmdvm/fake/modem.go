@@ -18,10 +18,13 @@ import (
 
 // Options configure a fake modem.
 type Options struct {
-	// Protocol is 1 or 2 (default 2).
+	// Protocol is 1 or 2 (default 1, as MMDVM_HS hats speak).
 	Protocol int
-	// Description is the version text (default "MMDVM_HS fake").
+	// Description is the version text (default [DefaultDescription]).
 	Description string
+	// Modes is the protocol 1 enabled-modes byte reported before
+	// SET_CONFIG (default 0xBF, as the hat in testdata reports).
+	Modes byte
 	// SimplexOnly refuses a duplex SET_CONFIG (NAK 6), like a
 	// single-transceiver hat.
 	SimplexOnly bool
@@ -33,6 +36,14 @@ type Options struct {
 	// Loopback sends every accepted transmit burst back as a received one.
 	Loopback bool
 }
+
+// DefaultDescription is a real MMDVM_HS dual-hat GET_VERSION text, with the
+// firmware author credits replaced.
+const DefaultDescription = "MMDVM_HS-v1.6.1 20231115_WPSD 14.7456MHz dual ADF7021 FW by AUTHORS. GitID #7e16099"
+
+// UDID1 is the placeholder unique ID the fake sends after the protocol 1
+// description: 24 hex digits, all zero.
+const UDID1 = "000000000000000000000000"
 
 // ErrNotConnected is returned when no host link is open.
 var ErrNotConnected = errors.New("fake: no host connected")
@@ -66,10 +77,13 @@ type Modem struct {
 // New returns a fake modem.
 func New(o Options) *Modem {
 	if o.Protocol == 0 {
-		o.Protocol = 2
+		o.Protocol = 1
 	}
 	if o.Description == "" {
-		o.Description = "MMDVM_HS fake"
+		o.Description = DefaultDescription
+	}
+	if o.Modes == 0 {
+		o.Modes = 0xBF
 	}
 	if o.Space <= 0 {
 		o.Space = 10
@@ -158,7 +172,10 @@ func (m *Modem) handle(w io.Writer, f mmdvm.Frame) {
 	switch f.Cmd {
 	case mmdvm.CmdGetVersion:
 		v := mmdvm.Version{Protocol: m.o.Protocol, Description: m.o.Description,
-			Cap1: 0x02, CPU: mmdvm.CPUST, UDID: []byte("0123456789ABCDEF")}
+			Cap1: 0x02, CPU: mmdvm.CPUST, UDID: make([]byte, mmdvm.UDIDLen)}
+		if m.o.Protocol == 1 {
+			v.UDID = []byte(UDID1)
+		}
 		b, err := mmdvm.EncodeVersion(v)
 		if err == nil {
 			reply(b)
@@ -167,7 +184,11 @@ func (m *Modem) handle(w io.Writer, f mmdvm.Frame) {
 		if m.o.AutoDrain {
 			m.fifo = [2]int{}
 		}
-		s := mmdvm.Status{Protocol: m.o.Protocol, EnabledModes: m.modes, Mode: m.mode,
+		modes := m.modes
+		if !m.configured {
+			modes = m.o.Modes
+		}
+		s := mmdvm.Status{Protocol: m.o.Protocol, EnabledModes: modes, Mode: m.mode,
 			DMRSpace1: m.o.Space - m.fifo[0], DMRSpace2: m.o.Space - m.fifo[1]}
 		if m.tx || m.fifo[0]+m.fifo[1] > 0 {
 			s.Flags |= mmdvm.FlagTX

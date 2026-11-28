@@ -3,6 +3,14 @@
 Release notes are taken from the section of the tag being released
 (`## [X.Y.Z]`) when the tag has no annotation.
 
+## [1.0.3] - 2026-11-28
+
+### Added
+- Early preview: an "MMDVM hat (early preview)" radio interface in Settings > Station > Radio, for an MMDVM hat on the Pi's GPIO header. This release only detects the hat: the node opens `/dev/serial0` (115200 baud by default), reads the board, firmware version, protocol and build date, and polls its status (state, flags, buffer overflows). It does not receive or transmit on RF yet; receive comes in a later release, and transmit after that. Allow transmit is off by default, has no effect in this preview, and is turned off whenever a backup is restored.
+- The radio page's MMDVM modem card shows the board (and whether it can run duplex), firmware, protocol, state, flags, overflow counts and the last error, with "Reset modem" (closes the serial port and opens it again) and "Prepare the Pi" for admins. Prepare the Pi removes the serial console from `cmdline.txt`, sets `enable_uart=1` and `dtoverlay=disable-bt` under `[all]` in `config.txt`, stops and disables `serial-getty@ttyAMA0` and `hciuart` where they exist, and says when a reboot is needed; running it again changes nothing. The card also checks `/dev/serial0` (where it points and whether the node can open it).
+- The modem settings (serial port, baud, duplex, receive and transmit frequency, offsets, RF power, color code, Allow transmit, reset GPIO) are saved with the station and included in backups. The frequency, power and color code are stored for a later release; this preview does not send them to the hat.
+- API: `GET /api/radio/modem`, `POST /api/radio/modem/reset`, `GET /api/radio/device-check` and `POST /api/radio/prepare` (admin). The modem's unique ID is never shown or returned.
+
 ## [1.0.2] - 2026-11-27
 
 ### Fixed

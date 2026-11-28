@@ -60,7 +60,11 @@ func TestResolveOverrides(t *testing.T) {
 	if got.SA818 {
 		t.Error("SA818 override ignored")
 	}
-	// The none preset ignores overrides.
+	// The mmdvm and none presets ignore overrides.
+	if got, err := Resolve(PresetMMDVM, Overrides{PTTPin: 9, COS: "bogus"}, false); err != nil ||
+		got.Preset != PresetMMDVM || got.Audio || got.PTTPin != 0 {
+		t.Errorf("mmdvm with overrides: %+v, %v", got, err)
+	}
 	got, err = Resolve(PresetNone, Overrides{PTTPin: 9, COS: "bogus"}, false)
 	if err != nil || got.Audio || got.PTTPin != 0 {
 		t.Errorf("none: %+v, %v", got, err)
@@ -114,7 +118,7 @@ func TestPresetList(t *testing.T) {
 			t.Errorf("%s does not resolve: %v", p.Name, err)
 		}
 	}
-	if !reflect.DeepEqual(names, []Preset{PresetSHARI, PresetURI, PresetNone}) {
+	if !reflect.DeepEqual(names, []Preset{PresetSHARI, PresetURI, PresetMMDVM, PresetNone}) {
 		t.Errorf("names = %v", names)
 	}
 	if _, ok := LookupPreset("x"); ok {

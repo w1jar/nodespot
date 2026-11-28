@@ -1,0 +1,5 @@
+# GET_STATUS reply from the same hat, idle, before SET_CONFIG, exactly as
+# received: modes 0xBF, idle, no flags, then the free space for D-Star,
+# DMR slot 1 (a fixed 10 until duplex is configured), DMR slot 2, YSF, P25,
+# NXDN, POCSAG and M17.
+e0 0e 01 bf 00 00 4c 0a 19 0c 06 1f 0e 1f

@@ -35,6 +35,8 @@ type Node interface {
 	RadioInfo(ctx context.Context) (node.RadioDetail, error)
 	RadioProgram(ctx context.Context) (node.Status, error)
 	RadioTuningDismiss(ctx context.Context) (node.Status, error)
+	ModemStatus(ctx context.Context) (node.ModemInfo, error)
+	ModemReset(ctx context.Context) (node.ModemInfo, error)
 	TestTone(ctx context.Context, seconds float64, stop bool) (node.Status, error)
 	Reload(ctx context.Context) (node.Status, error)
 	SearchDirectory(ctx context.Context, name, q string, limit int) (mode.DirResult, error)

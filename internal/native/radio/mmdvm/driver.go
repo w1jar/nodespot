@@ -46,6 +46,9 @@ var (
 	ErrClosed      = errors.New("mmdvm: driver closed")
 )
 
+// errReopen ends a session when Reopen is called.
+var errReopen = errors.New("mmdvm: reopen asked")
+
 // Settings configure a [Driver]. Zero durations and counts take the
 // defaults above.
 type Settings struct {
@@ -68,6 +71,10 @@ type Settings struct {
 	// SimplexSlot is the slot number a simplex modem's one slot has
 	// (default 2).
 	SimplexSlot int
+	// DetectOnly only identifies and watches the modem: GET_VERSION, then
+	// status polls. SET_FREQ and SET_CONFIG are not sent, nothing is sent
+	// at shutdown, and AllowTX is forced off, so the modem never keys up.
+	DetectOnly bool
 
 	StatusInterval  time.Duration
 	Inactivity      time.Duration // no status reply this long: close and reopen
@@ -120,6 +127,9 @@ func (s *Settings) defaults() {
 	}
 	s.Modem.Modes.DMR = true
 	s.Modem.InitialMode = ModeIdle
+	if s.DetectOnly {
+		s.AllowTX = false
+	}
 }
 
 // Driver runs an MMDVM modem as a [radio.DigitalRadio] for DMR.
@@ -143,6 +153,7 @@ type Driver struct {
 	closeOnce sync.Once
 	closed    chan struct{}
 	kick      chan struct{}
+	reopen    chan struct{}
 
 	mu      sync.Mutex
 	st      radio.ModemStatus
@@ -185,7 +196,7 @@ var _ radio.DigitalRadio = (*Driver)(nil)
 func New(s Settings) *Driver {
 	s.defaults()
 	d := &Driver{s: s, log: s.Logger, duplex: s.Modem.Duplex,
-		closed: make(chan struct{}), kick: make(chan struct{}, 1)}
+		closed: make(chan struct{}), kick: make(chan struct{}, 1), reopen: make(chan struct{}, 1)}
 	d.st.Duplex = d.duplex
 	for i := range d.rx {
 		d.rx[i].rx = dmr.NewRX()
@@ -232,6 +243,15 @@ func (d *Driver) Status() radio.ModemStatus {
 func (d *Driver) Close() error {
 	d.closeOnce.Do(func() { close(d.closed) })
 	return nil
+}
+
+// Reopen closes the modem and opens it again at once (a "reset" from the
+// UI). It does nothing when Run is not running.
+func (d *Driver) Reopen() {
+	select {
+	case d.reopen <- struct{}{}:
+	default:
+	}
 }
 
 func (d *Driver) poke() {
@@ -312,7 +332,7 @@ func (d *Driver) Abort() {
 	for i := range d.tx {
 		d.tx[i] = txSlot{}
 	}
-	d.abort = d.open
+	d.abort = d.open && !d.s.DetectOnly
 	d.mu.Unlock()
 	d.poke()
 }
@@ -360,21 +380,37 @@ func (d *Driver) Run(ctx context.Context, sink network.Sink) error {
 	d.rxMu.Lock()
 	d.sink = sink
 	d.rxMu.Unlock()
+	select { // a Reopen from before Run has nothing to reopen
+	case <-d.reopen:
+	default:
+	}
 	for {
 		err := d.session(ctx)
 		if ctx.Err() != nil {
 			return nil
 		}
-		d.log.Warn("mmdvm: modem closed", "err", err)
 		d.mu.Lock()
-		d.st.Error = err.Error()
 		d.st.Reopens++
+		if errors.Is(err, errReopen) {
+			d.st.Error = ""
+		} else {
+			d.st.Error = err.Error()
+		}
 		d.mu.Unlock()
+		if errors.Is(err, errReopen) {
+			d.log.Info("mmdvm: reopening the modem")
+			continue
+		}
+		d.log.Warn("mmdvm: modem closed", "err", err)
+		t := time.NewTimer(d.s.ReopenDelay)
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			return nil
-		case <-time.After(d.s.ReopenDelay):
+		case <-d.reopen:
+		case <-t.C:
 		}
+		t.Stop()
 	}
 }
 
@@ -424,7 +460,8 @@ func (d *Driver) session(ctx context.Context) error {
 	d.st.Error = ""
 	d.st.LastStatus = now
 	d.mu.Unlock()
-	d.log.Info("mmdvm: modem ready", "protocol", d.proto, "description", d.st.Description, "duplex", d.duplex)
+	d.log.Info("mmdvm: modem ready", "protocol", d.proto, "description", d.st.Description,
+		"duplex", d.duplex, "detectOnly", d.s.DetectOnly)
 
 	statusT := time.NewTicker(d.s.StatusInterval)
 	defer statusT.Stop()
@@ -439,6 +476,9 @@ func (d *Driver) session(ctx context.Context) error {
 		case <-ctx.Done():
 			d.shutdown(w)
 			return ctx.Err()
+		case <-d.reopen:
+			d.shutdown(w)
+			return errReopen
 		case err := <-rdErr:
 			return err
 		case f := <-frames:
@@ -554,11 +594,17 @@ func (d *Driver) startup(ctx context.Context, w *writer, frames <-chan Frame, rd
 	if !v.DMR() {
 		return fmt.Errorf("mmdvm: the modem (%s) has no DMR", v.Description)
 	}
+	b := ParseBoard(v.Description)
 	d.mu.Lock()
 	d.proto = v.Protocol
 	d.st.Protocol, d.st.Description = v.Protocol, v.Description
+	d.st.Board, d.st.Firmware, d.st.BuildDate = b.Name, b.Version, b.BuildDate
+	d.st.DuplexCapable = b.DuplexCapable
 	d.mu.Unlock()
 
+	if d.s.DetectOnly {
+		return nil
+	}
 	if d.s.Freq.RX != 0 || d.s.Freq.TX != 0 {
 		if err := d.command(ctx, w, frames, rdErr, SetFreq(d.s.Freq)); err != nil {
 			return err
@@ -656,6 +702,17 @@ func (d *Driver) onFrame(f Frame) {
 		}
 		d.space = [2]int{s.DMRSpace1 - int(d.written[0]-since[0]), s.DMRSpace2 - int(d.written[1]-since[1])}
 		d.st.Mode = int(s.Mode)
+		d.st.State = ModeName(s.Mode)
+		d.st.Flags = int(s.Flags)
+		if d.proto < 2 {
+			d.st.Modes = ModeNames(s.EnabledModes)
+		}
+		if s.Flags&FlagRXOverflow != 0 && !d.st.RXOverflow {
+			d.st.RXOverflows++
+		}
+		if s.Flags&FlagTXOverflow != 0 && !d.st.TXOverflow {
+			d.st.TXOverflows++
+		}
 		d.st.TX = s.TX()
 		d.st.ADCOverflow = s.Flags&FlagADCOverflow != 0 && d.proto >= 2
 		d.st.RXOverflow = s.Flags&FlagRXOverflow != 0
@@ -728,8 +785,12 @@ func (d *Driver) playout(w *writer) error {
 	return w.write(out...)
 }
 
-// shutdown stops transmission before the port closes.
+// shutdown stops transmission before the port closes. A detect-only
+// driver never configured the modem and sends nothing.
 func (d *Driver) shutdown(w *writer) {
+	if d.s.DetectOnly {
+		return
+	}
 	var out [][]byte
 	if d.duplex {
 		out = append(out, DMRAbort(1), DMRAbort(2), DMRStart(false))

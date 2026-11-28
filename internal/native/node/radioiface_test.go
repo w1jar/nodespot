@@ -149,7 +149,7 @@ func TestStatusAndRadioInfo(t *testing.T) {
 		t.Fatalf("status radio = %+v", st)
 	}
 	d := e.RadioInfo()
-	if d.Preset != "uri" || len(d.Presets) != 3 || d.Interface.PTTPin != 3 || !d.Interface.COSActiveLow || d.RestartRequired || d.Resolved == nil {
+	if d.Preset != "uri" || len(d.Presets) != 4 || d.Interface.PTTPin != 3 || !d.Interface.COSActiveLow || d.RestartRequired || d.Resolved == nil {
 		t.Fatalf("detail = %+v", d)
 	}
 	// Choosing another preset is a pending change.
@@ -221,7 +221,7 @@ func TestRadioInfoOp(t *testing.T) {
 	if err := json.Unmarshal(mustJSON(t, r.Data), &d); err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Presets) != 3 || d.Interface.Preset != radio.PresetSHARI {
+	if len(d.Presets) != 4 || d.Interface.Preset != radio.PresetSHARI {
 		t.Fatalf("detail = %+v", d)
 	}
 }

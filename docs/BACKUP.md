@@ -10,7 +10,7 @@ nodespot runs its own node (`nodespot-node`, see [NATIVE_NODE.md](NATIVE_NODE.md
 |---|---|---|---|
 | nodespot database | `/var/lib/nodespot/nodespot.db` | `nodespot/nodespot.db` | Always. Users (password hashes), roles, favorites per mode, schedules, settings, audit log. Snapshot with `VACUUM INTO`. Sessions are not restored (everyone logs in again). |
 | nodespot config file | `/etc/nodespot/nodespot.conf` | `nodespot/nodespot.conf` | Always. The web port (`listen` in `[server]`) is not restored: the node keeps its own. |
-| Node config | `/etc/nodespot/node.json` | `node/node.json` | When present. Station (callsign, radio, IDs, active mode) and the settings of every mode. The remembered targets (`tune.json`) are not part of the backup. Mode passwords are left out unless the person creating the backup asks for them (`parts.secrets`). |
+| Node config | `/etc/nodespot/node.json` | `node/node.json` | When present. Station (callsign, radio, IDs, active mode) and the settings of every mode. The remembered targets (`tune.json`) are not part of the backup. Mode passwords are left out unless the person creating the backup asks for them (`parts.secrets`). The MMDVM modem settings (`station.radio.mmdvm`) are included; a restore always turns their Allow transmit (`allowTx`) off. |
 | SA818 settings | `/etc/nodespot/sa818.json` | `node/sa818.json` | When present. The SA818 keeps its channel in its own memory, which cannot be read back; this file is the only copy. |
 | Update channel | suite in `/etc/apt/sources.list.d/nodespot.list` | manifest `channel` | Recorded and shown in the preview; not changed by a restore. |
 

@@ -9,8 +9,9 @@ Wants=network-online.target
 Type=simple
 User=nodespot-node
 Group=nodespot-node
-# The sound card (audio); the CM108 hidraw and the CH340 serial port get
-# group nodespot-node from 60-nodespot-node.rules.
+# The sound card (audio); the CM108 hidraw, the CH340 serial port and the
+# Pi's PL011 UART (ttyAMA0, the MMDVM hat) get group nodespot-node from
+# 60-nodespot-node.rules.
 SupplementaryGroups=audio
 ExecStart=/usr/libexec/nodespot/nodespot-node -config /etc/nodespot/node.json -socket /run/nodespot-node/control.sock
 ExecReload=/bin/kill -HUP $MAINPID
@@ -34,6 +35,7 @@ DevicePolicy=closed
 DeviceAllow=char-alsa rw
 DeviceAllow=char-hidraw rw
 DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyAMA rw
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes

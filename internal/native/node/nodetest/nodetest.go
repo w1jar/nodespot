@@ -44,6 +44,9 @@ type Options struct {
 	// OnBuild is called for every fake mode the engine builds.
 	OnBuild func(*modetest.Fake)
 	Log     *slog.Logger
+	// Modem, when set, is the MMDVM modem the engine reports (see
+	// [DemoModem]).
+	Modem node.Modem
 }
 
 // Start builds the engine from cfg (nil: an empty config), starts it and
@@ -68,6 +71,7 @@ func Start(cfg *node.Config, o Options) (*Rig, error) {
 	r.ConfigPath = filepath.Join(dir, "node.json")
 	e, err := node.New(cfg, node.Options{
 		Radio: r.Radio, ConfigPath: r.ConfigPath, Log: o.Log, StopTimeout: time.Second,
+		Modem: o.Modem, ModemConfig: cfg.Station.Radio.MMDVM.Resolved(),
 		// Like the real builder: an unknown mode or settings that fail
 		// the spec's check are refused.
 		Build: func(n string, env mode.Env, s mode.Settings) (mode.Mode, error) {

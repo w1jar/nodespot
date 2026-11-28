@@ -46,6 +46,21 @@ type ModemStatus struct {
 	Protocol int `json:"protocol,omitempty"`
 	// Description is the modem's own description of its board and firmware.
 	Description string `json:"description,omitempty"`
+	// Board, Firmware and BuildDate (YYYY-MM-DD) are read from the
+	// description, empty when it does not say.
+	Board     string `json:"board,omitempty"`
+	Firmware  string `json:"firmware,omitempty"`
+	BuildDate string `json:"buildDate,omitempty"`
+	// DuplexCapable is true when the board can run both slots (a dual-chip
+	// hotspot or a full-size modem).
+	DuplexCapable bool `json:"duplexCapable"`
+	// Modes names the modes the firmware has enabled (protocol 1 reports
+	// them in every status reply).
+	Modes []string `json:"modes,omitempty"`
+	// State names Mode ("idle", "dmr", ...).
+	State string `json:"state,omitempty"`
+	// Flags is the raw status flag byte.
+	Flags int `json:"flags"`
 	// Duplex is true when the modem runs both slots.
 	Duplex bool `json:"duplex"`
 	// Mode is the modem's current mode (MMDVM mode number).
@@ -59,6 +74,10 @@ type ModemStatus struct {
 	DACOverflow   bool `json:"dacOverflow,omitempty"`
 	Lockout       bool `json:"lockout,omitempty"`
 	CarrierDetect bool `json:"carrierDetect,omitempty"`
+	// RXOverflows and TXOverflows count the status replies that newly
+	// set the overflow flag.
+	RXOverflows uint64 `json:"rxOverflows"`
+	TXOverflows uint64 `json:"txOverflows"`
 	// Space is the free transmit buffer per slot (index 0 is slot 1), in
 	// frames, as last reported.
 	Space [2]int `json:"space"`

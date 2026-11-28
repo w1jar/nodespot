@@ -45,6 +45,7 @@ func (s *Server) nodeRoutes() {
 	m.HandleFunc("GET /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetGet))
 	m.HandleFunc("POST /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetStart))
 	m.HandleFunc("DELETE /api/radio/autoset", s.authed(store.RoleAdmin, s.handleAutosetCancel))
+	s.modemRoutes()
 	m.HandleFunc("POST /api/radio/tuning/dismiss", s.authed(store.RoleAdmin, s.handleTuningDismiss))
 	m.HandleFunc("POST /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestTone))
 	m.HandleFunc("DELETE /api/radio/tone", s.authed(store.RoleAdmin, s.handleTestToneStop))

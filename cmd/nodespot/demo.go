@@ -35,7 +35,7 @@ func demoNodeConfig() *node.Config {
 
 // startDemoNode runs a fake node (no network, no radio) on a socket in dir.
 func startDemoNode(dir string) (*nodetest.Rig, error) {
-	return nodetest.Start(demoNodeConfig(), nodetest.Options{Dir: dir})
+	return nodetest.Start(demoNodeConfig(), nodetest.Options{Dir: dir, Modem: &nodetest.DemoModem{}})
 }
 
 // demoCallers are the made-up stations that talk on the demo node.

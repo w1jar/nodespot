@@ -4,7 +4,7 @@ All-in-one multi-mode radio node for Raspberry Pi and mini PCs.
 
 nodespot continues the archived [aslcp](https://github.com/w1jar/aslcp) project (final release 2.4). It is a fresh start with new package, service and path names, and there is no upgrade path from aslcp: install nodespot fresh.
 
-nodespot runs its own node (`nodespot-node`): one radio (a SHARI or another SA818 interface) and one network mode at a time, AllStarLink, EchoLink or a digital mode (DMR, YSF, P25, NXDN). Whatever mode is active, its audio goes out on the radio; networks are never bridged to each other. It does not need Asterisk or AllStarLink 3 (ASL3) and never installs them. The web page picks the mode and target, shows who is calling, keeps favorites per mode, runs schedules, tunes the radio and backs up and restores the node.
+nodespot runs its own node (`nodespot-node`): one radio (a SHARI, another SA818 interface or a USB interface on an external radio; an MMDVM hat is detected as an early preview, with no RF yet) and one network mode at a time, AllStarLink, EchoLink or a digital mode (DMR, YSF, P25, NXDN). Whatever mode is active, its audio goes out on the radio; networks are never bridged to each other. It does not need Asterisk or AllStarLink 3 (ASL3) and never installs them. The web page picks the mode and target, shows who is calling, keeps favorites per mode, runs schedules, tunes the radio and backs up and restores the node.
 
 > nodespot is a new design. Parts of this README below the install section still describe the aslcp 2.x panel for ASL3 and are being rewritten.
 

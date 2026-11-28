@@ -6,3 +6,7 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d8c", GROUP="nodespot-node", MODE="0660"
 # The CH340 USB serial adapter (vendor 1a86, product 7523) that programs the
 # SA818 module.
 SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", GROUP="nodespot-node", MODE="0660"
+# The Raspberry Pi's PL011 UART (/dev/serial0 once the Pi is prepared), where
+# an MMDVM hat sits. ":=" because Raspberry Pi OS's 99-com.rules gives the
+# serial ports to group dialout later.
+SUBSYSTEM=="tty", KERNEL=="ttyAMA0", GROUP:="nodespot-node", MODE:="0660"

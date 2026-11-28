@@ -105,7 +105,7 @@ type Selection struct {
 // RadioConfig is the radio: which USB interface preset it is, the pins of
 // the sound chip and, when the interface has an SA818 module, its channel.
 type RadioConfig struct {
-	// Preset is "shari", "uri" or "none". Missing means the SHARI when one
+	// Preset is "shari", "uri", "mmdvm" or "none". Missing means the SHARI when one
 	// is detected, otherwise none (the behavior before presets existed).
 	Preset string `json:"preset,omitempty"`
 	// FrequencyMHz is the simplex channel. 0 leaves the module as it is.
@@ -151,6 +151,8 @@ type RadioConfig struct {
 	// SA818Tail is the SA818's tail tone: true opens it, false closes it.
 	// Unset sends nothing and leaves the module's own setting.
 	SA818Tail *bool `json:"sa818Tail,omitempty"`
+	// MMDVM is the MMDVM modem, used with the mmdvm preset.
+	MMDVM *MMDVMConfig `json:"mmdvm,omitempty"`
 }
 
 // SA818Filter is the SA818's three audio filters (AT+SETFILTER=emphasis,
@@ -493,6 +495,9 @@ func (c *Config) Normalize() {
 	for _, s := range []*string{&r.Preset, &r.COSSource, &r.CTCSSSource} {
 		*s = strings.ToLower(strings.TrimSpace(*s))
 	}
+	if r.MMDVM != nil {
+		r.MMDVM.Device = strings.TrimSpace(r.MMDVM.Device)
+	}
 	if a := c.Station.Active; a != nil {
 		a.Mode = strings.ToLower(strings.TrimSpace(a.Mode))
 		if a.Mode == "" {
@@ -539,6 +544,7 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("radio: %s must be 0 to 1", name))
 		}
 	}
+	errs = append(errs, r.MMDVM.validate()...)
 	if r.PTTGPIO < 0 || r.PTTGPIO > 4 {
 		errs = append(errs, errors.New("radio: PTT GPIO must be 1 to 4"))
 	} else if _, err := r.Interface(true); err != nil {

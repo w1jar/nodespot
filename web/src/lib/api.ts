@@ -1,6 +1,6 @@
 import type {
   About, BackupInfo, BackupSelection, Favorite, HostList, HostListsStatus, HostPatch, HostStatus, Heard, ManualAction, ModeInfo, ModeSettings, NodeJSON, NodeService,
-  AutosetStatus, InputLevel, NowCalling, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
+  AutosetStatus, InputLevel, ModemInfo, NowCalling, RFDeviceCheck, RFPrepareResult, RadioInfo, RadioLevels, RestoreApplyResult, RestoreResult, RestoreUpload, Schedule, ScheduleInput, SchedulesSnapshot,
   Settings, Station, SysLogs, SysNetwork, SysServices, SystemInfo, Target, TerminalSessionInfo, TerminalStatus, TerminalTicket, UpdateInfo, User,
   UserListStatus, Vocoder, HamDBStatus, DiagPlan, AuditPage, WifiScan, WifiState, NodeInfo, EchoSearch,
 } from './types';
@@ -149,6 +149,12 @@ export const api = {
   radioInput: () => req<InputLevel>('GET', '/radio/input'),
   radioInfo: () => req<RadioInfo>('GET', '/radio/info'),
   radioProgram: () => req<NodeJSON>('POST', '/radio/program'),
+  /** The MMDVM modem (mmdvm preset); reset closes its serial port and opens it again. Admin. */
+  modem: () => req<ModemInfo>('GET', '/radio/modem'),
+  modemReset: () => req<ModemInfo>('POST', '/radio/modem/reset'),
+  /** Frees the Pi's UART for an MMDVM hat; says whether a reboot is needed. Admin. */
+  radioPrepare: () => req<RFPrepareResult>('POST', '/radio/prepare'),
+  radioDeviceCheck: () => req<RFDeviceCheck>('GET', '/radio/device-check'),
   /** Keys the transmitter with a 1 kHz tone for `seconds` (1 to 10; unset is 5). Admin. */
   testTone: (seconds?: number) => req<NodeJSON>('POST', '/radio/tone', seconds ? { seconds } : undefined),
   stopTestTone: () => req<NodeJSON>('DELETE', '/radio/tone'),

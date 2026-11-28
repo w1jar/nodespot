@@ -23,6 +23,10 @@ const (
 	PresetURI Preset = "uri"
 	// PresetNone is a radioless node: no audio, no PTT.
 	PresetNone Preset = "none"
+	// PresetMMDVM is an MMDVM modem (an MMDVM_HS hat on the Pi's UART):
+	// a digital radio, with no sound chip. Its settings are under
+	// station.radio.mmdvm.
+	PresetMMDVM Preset = "mmdvm"
 )
 
 // Source and pin names, shared with the HID layer.
@@ -83,6 +87,13 @@ var presets = []PresetInfo{
 		Defaults: Interface{Preset: PresetURI, Audio: true, PTTPin: 3, COS: cm108.SourceGPIO2, COSActiveLow: true, CTCSS: cm108.SourceNone},
 	},
 	{
+		Name:  PresetMMDVM,
+		Title: "MMDVM hat (early preview)",
+		Description: "An MMDVM_HS hotspot hat on the Pi's serial port, for DMR. " +
+			"This release detects the hat and shows its board, firmware and status; it does not receive or transmit yet.",
+		Defaults: Interface{Preset: PresetMMDVM, COS: cm108.SourceNone, CTCSS: cm108.SourceNone},
+	},
+	{
 		Name:        PresetNone,
 		Title:       "None (radioless)",
 		Description: "No radio. The node links modes with no audio to or from a radio.",
@@ -126,8 +137,9 @@ func (o Overrides) Equal(p Overrides) bool {
 
 // Resolve applies overrides to a preset. PresetAuto resolves to the SHARI
 // when shari is true (a SHARI was detected) and to none otherwise. An unknown
-// preset or an impossible pin combination is an error. The none preset
-// ignores overrides: there is no interface to apply them to.
+// preset or an impossible pin combination is an error. The none and mmdvm
+// presets ignore overrides: there is no sound-chip interface to apply them
+// to.
 func Resolve(p Preset, ov Overrides, shari bool) (Interface, error) {
 	if p == PresetAuto {
 		p = PresetNone
@@ -137,10 +149,10 @@ func Resolve(p Preset, ov Overrides, shari bool) (Interface, error) {
 	}
 	info, ok := LookupPreset(p)
 	if !ok {
-		return Interface{}, fmt.Errorf("unknown radio preset %q (use shari, uri or none)", p)
+		return Interface{}, fmt.Errorf("unknown radio preset %q (use shari, uri, mmdvm or none)", p)
 	}
 	in := info.Defaults
-	if p == PresetNone {
+	if p == PresetNone || p == PresetMMDVM {
 		return in, nil
 	}
 	if ov.PTTPin != 0 {

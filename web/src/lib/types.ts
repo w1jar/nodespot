@@ -173,8 +173,10 @@ export interface Station {
   dmrId?: number; nxdnId?: number;
   radio: {
     frequencyMHz?: number; tone?: string; squelch?: number; narrow?: boolean; rxVolume?: number; txVolume?: number;
-    /** "", "shari", "uri" or "none"; empty is automatic. The settings below override the preset's; unset keeps the preset's. */
+    /** "", "shari", "uri", "mmdvm" or "none"; empty is automatic. The settings below override the preset's; unset keeps the preset's. */
     preset?: string;
+    /** The MMDVM modem, used with the mmdvm preset. */
+    mmdvm?: MMDVMConfig;
     pttGpio?: number; pttActiveLow?: boolean; cosSource?: string; cosActiveLow?: boolean;
     ctcssSource?: string; ctcssActiveLow?: boolean; sa818?: boolean; sa818Port?: string;
     /** Microphone boost of the sound chip, when it has the control. */
@@ -189,6 +191,30 @@ export interface Station {
   id: StationId;
   advanced: StationAdvanced;
   active?: { mode: string; target?: Target };
+}
+/** The MMDVM modem settings (station.radio.mmdvm). Unset values take the defaults: /dev/serial0 at 115200, duplex on, color code 1, transmit off. Frequencies in Hz. */
+export interface MMDVMConfig {
+  device?: string; baud?: number; duplex?: boolean;
+  rxFreqHz?: number; txFreqHz?: number; rxOffsetHz?: number; txOffsetHz?: number;
+  rfPower?: number; colorCode?: number; allowTx?: boolean; resetGpio?: number;
+}
+export interface ModemFlags { raw: number; tx: boolean; rxOverflow: boolean; txOverflow: boolean; adcOverflow: boolean; dacOverflow: boolean; lockout: boolean; carrierDetect: boolean }
+/** GET /api/radio/modem (admin): the MMDVM modem. It never carries the modem's unique ID. */
+export interface ModemInfo {
+  configured: boolean; running: boolean; connected: boolean; device: string; baud: number; detectOnly: boolean;
+  protocol?: number; description?: string; board?: string; firmware?: string; buildDate?: string;
+  duplexCapable: boolean; duplex: boolean; modes?: string[]; state?: string;
+  flags: ModemFlags; rxOverflows: number; txOverflows: number; space: [number, number];
+  lastStatus?: string; reopens: number; naks: number; lastError?: string;
+}
+export interface RFUnit { name: string; present: boolean; active: boolean; enabled: boolean; disabled: boolean; error?: string }
+/** POST /api/radio/prepare (admin). */
+export interface RFPrepareResult { model: string; changes: string[]; units: RFUnit[]; rebootNeeded: boolean; reasons?: string[] }
+/** GET /api/radio/device-check (admin): the hat's serial port. */
+export interface RFDeviceCheck {
+  model: string; pi: boolean; device: string; linkTarget?: string; exists: boolean; owner?: string; group?: string; mode?: string;
+  nodeAccess: boolean; uartEnabled: boolean; btDisabled: boolean; consoleOnUart: boolean; consoleRunning: boolean;
+  rebootNeeded: boolean; problems?: string[];
 }
 /** The settings of a radio interface (a preset's defaults, or what runs). */
 export interface RadioInterface {

@@ -117,6 +117,11 @@ func (o *Ops) planNode(rs *restoreSet, res *RestoreResult) ([]byte, error) {
 		cur, _ = parseNodeConfig(b)
 	}
 	res.MissingSecrets = append(res.MissingSecrets, mergeSecrets(c, cur)...)
+	// A restored node never transmits on an MMDVM modem until the owner
+	// turns Allow transmit on again on this node.
+	if m := c.Station.Radio.MMDVM; m != nil {
+		m.AllowTX = false
+	}
 	if err := c.Validate(); err != nil {
 		return nil, &backup.Error{Msg: "the node config in the backup is not valid: " + err.Error()}
 	}
