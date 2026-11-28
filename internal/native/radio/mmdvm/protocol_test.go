@@ -2,6 +2,7 @@ package mmdvm
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -43,7 +44,13 @@ func TestSetFreq(t *testing.T) {
 	})
 	got = SetFreq(Freq{RX: 438800000, TX: 438800000, Power: 50})
 	hexEq(t, "SET_FREQ half", got, []byte{0xE0, 0x11, 0x04, 0x00,
-		0x80, 0x8E, 0x27, 0x1A, 0x80, 0x8E, 0x27, 0x1A, 0x80, 0, 0, 0, 0})
+		0x80, 0x8E, 0x27, 0x1A, 0x80, 0x8E, 0x27, 0x1A, 0x80, 0x80, 0x8E, 0x27, 0x1A})
+	// POCSAG 0 is sent as TX: the firmware refuses a zero field.
+	got = SetFreq(Freq{RX: 441000000, TX: 433500000, Power: 100})
+	hexEq(t, "SET_FREQ pocsag 0", got, SetFreq(Freq{RX: 441000000, TX: 433500000, Power: 100, POCSAG: 433500000}))
+	if p := got[3:]; binary.LittleEndian.Uint32(p[10:]) != 433500000 {
+		t.Errorf("POCSAG field % X, want TX", p[10:])
+	}
 }
 
 func testConfig() Config {

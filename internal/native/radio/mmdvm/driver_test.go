@@ -3,6 +3,7 @@ package mmdvm_test
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"os"
 	"strings"
@@ -148,7 +149,7 @@ func cmdIndex(cmds []mmdvm.Frame, cmd byte, payload ...byte) int {
 func TestStartup(t *testing.T) {
 	for _, proto := range []int{1, 2} {
 		t.Run(map[int]string{1: "v1", 2: "v2"}[proto], func(t *testing.T) {
-			freq := mmdvm.Freq{RX: 438800000, TX: 438800000, Power: 100}
+			freq := mmdvm.Freq{RX: 441000000, TX: 438800000, Power: 100}
 			h := start(t, fake.Options{Protocol: proto, Description: "MMDVM_HS_Dual_Hat fake"}, func(s *mmdvm.Settings) {
 				s.Freq = freq
 			})
@@ -188,6 +189,37 @@ func TestStartup(t *testing.T) {
 				t.Errorf("status %+v", h.d.Status())
 			}
 		})
+	}
+}
+
+// With POCSAG unset the driver sends TX in that field, and the fake (which
+// range-checks like MMDVM_HS) ACKs, so SET_CONFIG follows.
+func TestStartupPOCSAGUnset(t *testing.T) {
+	h := start(t, fake.Options{}, func(s *mmdvm.Settings) {
+		s.Freq = mmdvm.Freq{RX: 441000000, TX: 433500000, Power: 100}
+	})
+	h.waitOpen()
+	h.waitModem(func(s fake.State) bool { return s.Configured })
+	i := cmdIndex(h.m.Commands(), mmdvm.CmdSetFreq)
+	if i < 0 {
+		t.Fatal("no SET_FREQ")
+	}
+	p := h.m.Commands()[i].Payload
+	if len(p) != 14 || binary.LittleEndian.Uint32(p[10:]) != 433500000 {
+		t.Errorf("SET_FREQ % X, want TX in the POCSAG field", p)
+	}
+}
+
+// A frequency MMDVM_HS refuses is NAKed, so the driver never gets as far as
+// SET_CONFIG.
+func TestStartupBadFreq(t *testing.T) {
+	h := start(t, fake.Options{}, func(s *mmdvm.Settings) {
+		s.Freq = mmdvm.Freq{RX: 400000000, TX: 400000000, Power: 100}
+	})
+	h.waitModem(func(fake.State) bool { return h.m.Count(mmdvm.CmdSetFreq) > 0 })
+	time.Sleep(50 * time.Millisecond)
+	if h.m.Count(mmdvm.CmdSetConfig) != 0 {
+		t.Error("SET_CONFIG sent after a NAKed SET_FREQ")
 	}
 }
 

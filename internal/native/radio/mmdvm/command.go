@@ -89,13 +89,20 @@ type Freq struct {
 	RX, TX uint32 // Hz
 	// Power is the RF level in percent, 0 to 100.
 	Power float64
-	// POCSAG is the POCSAG frequency in Hz; 0 is fine when POCSAG is off.
+	// POCSAG is the POCSAG transmit frequency in Hz. MMDVM_HS range-checks
+	// it like RX and TX and refuses 0, so [SetFreq] sends TX in its place
+	// when this is 0.
 	POCSAG uint32
 }
 
 // SetFreq is the SET_FREQ command (17 bytes). Only hotspot boards use it;
-// the full MMDVM firmware ACKs it and ignores the payload.
+// the full MMDVM firmware ACKs it and ignores the payload. A zero POCSAG
+// frequency is sent as TX, because MMDVM_HS NAKs (reason 4) a POCSAG field
+// outside its bands, 0 included.
 func SetFreq(f Freq) []byte {
+	if f.POCSAG == 0 {
+		f.POCSAG = f.TX
+	}
 	p := make([]byte, 14)
 	binary.LittleEndian.PutUint32(p[1:], f.RX)
 	binary.LittleEndian.PutUint32(p[5:], f.TX)

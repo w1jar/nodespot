@@ -8,6 +8,7 @@ package fake
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"sync"
@@ -33,6 +34,14 @@ type Options struct {
 	// AutoDrain empties the FIFOs before each GET_STATUS reply, as if the
 	// bursts had gone on the air. Without it tests call Drain.
 	AutoDrain bool
+	// AnyFrequency turns off the SET_FREQ checks below. By default the
+	// fake NAKs (reason 4) like an MMDVM_HS dual ADF7021 duplex board:
+	// rx or tx must be in a band, pocsag must be in a band, none of the
+	// three may be in a banned range, and rx and tx must be UHF.
+	AnyFrequency bool
+	// DualBand makes the fake a dual-band board, which accepts rx or tx
+	// below 420 MHz (the duplex board default does not).
+	DualBand bool
 	// Loopback sends every accepted transmit burst back as a received one.
 	Loopback bool
 }
@@ -206,7 +215,7 @@ func (m *Modem) handle(w io.Writer, f mmdvm.Frame) {
 		}
 		reply(mmdvm.Ack(f.Cmd))
 	case mmdvm.CmdSetFreq:
-		if len(p) < 9 {
+		if len(p) < 9 || (!m.o.AnyFrequency && !m.freqOK(p)) {
 			nak(mmdvm.ReasonBadData)
 			return
 		}
@@ -446,4 +455,33 @@ func (m *Modem) State() State {
 	return State{Connected: m.port != nil, Opens: m.opens, Configured: m.configured,
 		Duplex: m.duplex, Mode: m.mode, TX: m.tx, FIFO: m.fifo, Aborts: m.aborts,
 		ColorCode: m.cc, Freq: append([]byte(nil), m.freq...), ShortLCs: len(m.shortLC)}
+}
+
+// freqOK mirrors CIO::setFreq and checkZUMspot in MMDVM_HS (IO.cpp). The
+// payload is a pad byte, RX and TX (u32 LE), power, and optionally the
+// POCSAG frequency; the firmware uses TX when that field is omitted.
+func (m *Modem) freqOK(p []byte) bool {
+	u := func(i int) uint32 { return binary.LittleEndian.Uint32(p[i:]) }
+	rx, tx := u(1), u(5)
+	pocsag := tx
+	if len(p) >= 14 {
+		pocsag = u(10)
+	}
+	inBand := func(f uint32) bool {
+		return (f >= 144_000_000 && f < 148_000_000) || (f >= 219_000_000 && f < 225_000_000) ||
+			(f >= 420_000_000 && f < 475_000_000) || (f >= 842_000_000 && f < 950_000_000)
+	}
+	banned := func(f uint32) bool {
+		return (f >= 145_800_000 && f <= 146_000_000) || (f >= 435_000_000 && f <= 438_000_000)
+	}
+	if !inBand(rx) && !inBand(tx) || !inBand(pocsag) {
+		return false
+	}
+	if banned(rx) || banned(tx) || banned(pocsag) {
+		return false
+	}
+	if !m.o.DualBand && (rx < 420_000_000 || tx < 420_000_000) {
+		return false
+	}
+	return true
 }

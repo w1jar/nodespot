@@ -205,7 +205,7 @@ Frames of 256 bytes or more use a long form: `E0 00 L cmd payload`, with total l
 | GET_STATUS | 0x01 | host to modem, reply | Reply v1 is 14 bytes: enabled modes, current mode, flags, then free space per mode (D-Star, DMR slot 1, DMR slot 2, YSF, P25, NXDN, POCSAG, M17). Reply v2 is 20 bytes: current mode, flags (TX, ADC overflow, RX overflow, TX overflow, lockout, DAC overflow, carrier detect), then free space per mode. Space is in whole frames |
 | SET_CONFIG | 0x02 | host to modem, ACK | v1 is 26 bytes, v2 is 40. Flags (RX, TX and PTT invert, debug, simplex), enabled modes, TX delay in 10 ms units, initial mode, levels, DMR color code (0 to 15), DMR delay, DC offsets, hang times. The offsets are in the implementer's notes. NAK 4 if TX delay is over 50 or the initial mode is not enabled |
 | SET_MODE | 0x03 | host to modem, ACK | Mode byte: idle 0, D-Star 1, DMR 2, YSF 3, P25 4, NXDN 5, POCSAG 6, FM 10. The host does not send it at start-up; SET_CONFIG carries the initial mode, and the firmware switches to DMR itself when DMR data arrives |
-| SET_FREQ | 0x04 | host to modem, ACK | 17 bytes: a reserved zero, RX and TX frequency in Hz (32-bit little endian each), RF power (0 to 255), POCSAG frequency. Hotspot boards only; the full MMDVM firmware ACKs and ignores it |
+| SET_FREQ | 0x04 | host to modem, ACK | 17 bytes: a reserved zero, RX and TX frequency in Hz (32-bit little endian each), RF power (0 to 255), POCSAG frequency. Hotspot boards only; the full MMDVM firmware ACKs and ignores it. MMDVM_HS range-checks it, see SET_FREQ rules below |
 | DMR_DATA1 / DMR_DATA2 | 0x18 / 0x1A | both | 1 control byte plus the 33-byte burst (frame length 37). Modem to host, the control byte is 0x20 for voice sync, 1 to 5 for voice bursts B to F, and 0x40 plus the data type for data sync (terminator is 0x42). Host to modem, the firmware ignores it and the host sends 0x00. No ACK on success; NAK 5 when the FIFO is full |
 | DMR_LOST1 / DMR_LOST2 | 0x19 / 0x1B | modem to host | Sync lost on that slot (after 13 lost frames); the call ended without a terminator |
 | DMR_SHORTLC | 0x1C | host to modem | 9 bytes of short LC for the CACH, telling radios which slots are busy (duplex only). No ACK on success |
@@ -214,6 +214,17 @@ Frames of 256 bytes or more use a long form: `E0 00 L cmd payload`, with total l
 | ACK | 0x70 | modem to host | The acknowledged command byte. Sent only for SET_CONFIG, SET_MODE, SET_FREQ and calibration |
 | NAK | 0x7F | modem to host | The command byte and a reason: 1 unknown command, 2 wrong state, 4 bad length or data, 5 no FIFO space, 6 duplex not supported by this build |
 | DEBUG1 to DEBUG5 | 0xF1 to 0xF5 | modem to host | Text and values; logged, never parsed |
+
+#### SET_FREQ rules (verified on a dual ADF7021 hat, firmware 1.6.1)
+
+A SET_FREQ with a bad frequency is NAKed with reason 4 (bad length or data). The rules are in the MMDVM_HS source, `CIO::setFreq` and `CIO::checkZUMspot` in `IO.cpp` (band and ban limits in `IO.h`, payload parsing in `CSerialPort::setFreq` in `SerialPort.cpp`):
+
+- **Bands.** In 144 to 148 MHz, 219 to 225 MHz, 420 to 475 MHz or 842 to 950 MHz, minimum inclusive, maximum exclusive. RX and TX pass if either one is in a band. The POCSAG frequency must itself be in a band.
+- **Banned ranges.** 145.8 to 146.0 MHz and 435 to 438 MHz, both ends inclusive. RX, TX and the POCSAG frequency must all be outside them.
+- **POCSAG field is checked, and 0 is refused.** The 17-byte form always carries it, so a host that has no POCSAG frequency must still send a valid one. nodespot sends TX there when `Freq.POCSAG` is 0.
+- **Short form.** If the POCSAG field is omitted, the firmware uses TX as the POCSAG frequency. nodespot always sends the 17-byte form.
+- **Duplex board.** On a dual ADF7021 duplex board (not dual band), RX or TX below 420 MHz is also refused, so only UHF works. A dual-band board takes VHF or UHF.
+- **As built.** `mmdvm.SetFreq` sends TX in the POCSAG field when `Freq.POCSAG` is 0. The fake modem (`internal/native/radio/mmdvm/fake`) applies these checks by default and NAKs reason 4 like the hat (`Options.AnyFrequency` turns them off, `Options.DualBand` allows VHF); its tests use placeholder UHF frequencies outside the banned range. The node's frequency range check (`MinMMDVMFreqHz` to `MaxMMDVMFreqHz`, 100 to 1000 MHz) is only a sanity range, so the modem remains the judge of whether a band is allowed; the driver does not pre-check the bands.
 
 The 33-byte DMR burst inside DMR_DATA is the same burst `internal/dv/dmr` builds and parses (`dmr.Burst`), so no new air-interface code is needed for DMR.
 
