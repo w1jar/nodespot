@@ -76,6 +76,11 @@ type Config struct {
 	Prebuffer int
 	// SimplexSlot is the slot number of a one-slot radio (default 2).
 	SimplexSlot int
+	// ReceiveOnly makes the endpoint carry RF calls to the network only:
+	// network calls are not sent to the radio (they are ignored, so they
+	// neither take the slot nor fail on the radio). Use it with a radio
+	// that cannot transmit.
+	ReceiveOnly bool
 	// Tick is the housekeeping interval (20 ms).
 	Tick   time.Duration
 	Now    func() time.Time
@@ -135,6 +140,11 @@ type SlotStatus struct {
 	Timeouts uint64 `json:"timeouts"` // calls cut by the TX timeout
 	Filled   uint64 `json:"filled"`   // silence frames sent for missing network frames
 	Errors   uint64 `json:"errors"`   // radio or mode calls that failed
+	// NoMode counts RF calls dropped because no mode is linked to the slot.
+	NoMode uint64 `json:"noMode"`
+	// NetSkipped counts network calls ignored because the radio only
+	// receives (Config.ReceiveOnly).
+	NetSkipped uint64 `json:"netSkipped"`
 }
 
 type rfEvent struct {
@@ -508,6 +518,9 @@ func (e *Endpoint) onRF(ev rfEvent) {
 
 func (e *Endpoint) rfHeader(s *slot, h network.CallHeader, now time.Time) {
 	if s.m == nil {
+		s.st.NoMode++
+		e.log.Info("rf: RF call dropped: no mode on the slot can carry it", "slot", s.n, "src", h.SrcID, "tg", h.TG)
+		e.snap(s)
 		return
 	}
 	src := h.SrcID
@@ -618,6 +631,11 @@ func (e *Endpoint) onNet(i int, from <-chan mode.FrameEvent, ev mode.FrameEvent)
 
 func (e *Endpoint) netHeader(s *slot, call uint64, h network.CallHeader, now time.Time) {
 	src := h.SrcID
+	if e.cfg.ReceiveOnly {
+		s.st.NetSkipped++
+		e.snap(s)
+		return
+	}
 	switch {
 	case s.state != StateIdle && (s.state != StateHang || s.hangRF):
 		s.st.Busy++

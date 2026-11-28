@@ -78,3 +78,9 @@ test('collapseHeard: consecutive repeats become one row with a count; another st
   assert.equal(collapseHeard(one)[0].count, undefined);
   assert.equal(collapseHeard([rows[0], { ...rows[0], target: 'Node 2000' }]).length, 2);
 });
+
+test('rows heard on the radio carry the via RF tag', () => {
+  assert.equal(heardItems([h({ via: 'rf', slot: 2 })])[0].via, 'via RF');
+  assert.equal(heardItems([h()])[0].via, '');
+  assert.equal(callItems([c({ kind: 'bm', via: 'rf' })])[0].via, 'via RF');
+});

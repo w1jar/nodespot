@@ -25,14 +25,14 @@ func (h *heardLog) start(m string, t mode.Talker) {
 		c := &h.calls[i]
 		if c.Callsign == t.Callsign && c.ID == t.ID {
 			// The same talker again (an update): refresh the details.
-			c.Name, c.Place, c.Target = t.Name, t.Place, t.Target
+			c.Name, c.Place, c.Target, c.Via, c.Slot = t.Name, t.Place, t.Target, t.Via, t.Slot
 			return
 		}
 		h.finish(i, t.Since)
 	}
 	h.calls = append(h.calls, mode.Heard{
 		Mode: m, Callsign: t.Callsign, Name: t.Name, Place: t.Place,
-		ID: t.ID, Target: t.Target, Start: t.Since,
+		ID: t.ID, Target: t.Target, Via: t.Via, Slot: t.Slot, Start: t.Since,
 	})
 	if len(h.calls) > HeardMax {
 		h.calls = append([]mode.Heard(nil), h.calls[len(h.calls)-HeardMax:]...)

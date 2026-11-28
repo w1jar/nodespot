@@ -32,6 +32,34 @@ export function mmdvmForm(c: MMDVMConfig | undefined): MMDVMForm {
   };
 }
 
+const inBand = (f: number) => (f >= 144e6 && f < 148e6) || (f >= 219e6 && f < 225e6) || (f >= 420e6 && f < 475e6) || (f >= 842e6 && f < 950e6);
+const banned = (f: number) => (f >= 145.8e6 && f <= 146e6) || (f >= 435e6 && f <= 438e6);
+
+/** MHz as the node's messages print it: up to six decimals, no trailing zeros. */
+const mhz = (hz: number) => `${+(hz / 1e6).toFixed(6)} MHz`;
+
+/**
+ * Why the modem would refuse these frequencies (Hz, offsets already applied), or ''. Mirrors CheckFreq in
+ * internal/native/radio/mmdvm/freqcheck.go: the MMDVM_HS firmware's SET_FREQ limits. Bands are 144 to 148, 219 to 225, 420 to 475
+ * and 842 to 950 MHz; 145.8 to 146.0 and 435 to 438 MHz are banned; a dual-chip duplex hat (duplex on, the default) takes only UHF.
+ */
+export function mmdvmFreqError(rxHz: number, txHz: number, duplex: boolean): string {
+  for (const [name, f] of [['receive', rxHz], ['transmit', txHz]] as const) {
+    if (banned(f)) return `The ${name} frequency ${mhz(f)} is in a range the modem bans (145.8 to 146.0 and 435 to 438 MHz)`;
+    if (duplex && f < 420e6) return `The ${name} frequency ${mhz(f)} is below 420 MHz, and a dual-chip duplex hat takes only UHF`;
+  }
+  if (!inBand(txHz)) return `The transmit frequency ${mhz(txHz)} is in none of the bands the modem takes (144 to 148, 219 to 225, 420 to 475, 842 to 950 MHz)`;
+  return '';
+}
+
+/** The frequencies the node sends the modem (Hz, with the trim offsets; transmit defaults to receive), or null with no receive frequency. */
+export function mmdvmModemFreq(f: MMDVMForm): { rx: number; tx: number } | null {
+  if (blank(f.rxMHz) || !+f.rxMHz) return null;
+  const rx = Math.round(+f.rxMHz * 1e6);
+  const tx = !blank(f.txMHz) && +f.txMHz ? Math.round(+f.txMHz * 1e6) : rx;
+  return { rx: rx + (blank(f.rxOffsetHz) ? 0 : +f.rxOffsetHz), tx: tx + (blank(f.txOffsetHz) ? 0 : +f.txOffsetHz) };
+}
+
 /** An error text for the form, or ''. The node checks the same rules. */
 export function mmdvmError(f: MMDVMForm): string {
   const dev = f.device.trim();
@@ -46,7 +74,8 @@ export function mmdvmError(f: MMDVMForm): string {
   if (!blank(f.rfPower) && (!Number.isInteger(+f.rfPower) || +f.rfPower < 0 || +f.rfPower > 100)) return 'RF power must be 0 to 100%';
   if (!blank(f.colorCode) && (!Number.isInteger(+f.colorCode) || +f.colorCode < 0 || +f.colorCode > 15)) return 'The color code must be 0 to 15';
   if (!blank(f.resetGpio) && (!Number.isInteger(+f.resetGpio) || +f.resetGpio < 0 || +f.resetGpio > 1023)) return 'The reset GPIO must be 0 to 1023';
-  return '';
+  const hz = mmdvmModemFreq(f);
+  return hz ? mmdvmFreqError(hz.rx, hz.tx, f.duplex) : '';
 }
 
 /** The settings to save: empty fields and defaults are left out. */
@@ -65,6 +94,21 @@ export function mmdvmConfig(f: MMDVMForm): MMDVMConfig {
   if (f.allowTx) c.allowTx = true;
   if (!blank(f.resetGpio)) c.resetGpio = +f.resetGpio;
   return c;
+}
+
+/** The receive line of the modem card, from the node's rxState and rxCall; '' when it has nothing to say. */
+export function modemRXText(m: ModemInfo | null | undefined): string {
+  if (!m?.running) return '';
+  switch (m.rxState) {
+    case 'receiving': {
+      const c = m.rxCall;
+      return c ? `Receiving a call on slot ${c.slot}: ${c.src} → ${c.private ? 'private ' : ''}${c.dst}` : 'Receiving a call';
+    }
+    case 'listening': return 'Listening on slot 2';
+    case 'configured': return 'Configured, starting to listen';
+    case 'detect': return 'Not receiving: no receive frequency is set';
+    default: return '';
+  }
 }
 
 /** The status line of the modem card. */

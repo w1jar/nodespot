@@ -7,7 +7,7 @@
   import { stationBody, validateStation } from '../../lib/station';
   import { SA818_FILTER_KEYS, TAIL_CHOICES, filterOn, programmedText, sa818Body, sa818VolumeError, tailChoice, tailValue } from '../../lib/audio';
   import { hasSA818, isShari, pinError, radioBody, resolveInterface } from '../../lib/radio';
-  import { MMDVM_BAUDS, MMDVM_DEFAULT_DEVICE, isMMDVM, mmdvmConfig, mmdvmError, mmdvmForm } from '../../lib/mmdvm';
+  import { MMDVM_BAUDS, MMDVM_DEFAULT_DEVICE, isMMDVM, mmdvmConfig, mmdvmError, mmdvmForm, mmdvmModemFreq, mmdvmFreqError } from '../../lib/mmdvm';
   import type { RadioInfo, Station } from '../../lib/types';
   import StationFields from '../StationFields.svelte';
   import RadioPicker from '../RadioPicker.svelte';
@@ -40,6 +40,8 @@
       if (mmdvm) body.radio.mmdvm = mmdvmConfig(mf);
       await api.saveStation(body); await refreshNode(); await load(); toast('Radio settings saved'); } catch (e) { toastError(e); } finally { busy = false; }
   }
+  // The frequency rules as a live message (the node checks the same rules); nothing else changes while it shows.
+  const mmFreqMsg = $derived.by(() => { const hz = mmdvm ? mmdvmModemFreq(mf) : null; return hz ? mmdvmFreqError(hz.rx, hz.tx, mf.duplex) : ''; });
   const chk = 'mt-0.5 size-4 accent-[var(--accent)]';
   const FLAG_LABELS = { emphasis: 'Pre/de-emphasis', highPass: 'High-pass (removes PL tone)', lowPass: 'Low-pass' } as const;
   const FLAG_HELP = { emphasis: 'Off by default.', highPass: 'On by default.', lowPass: 'On by default.' } as const;
@@ -93,8 +95,9 @@
       <input id="rt-mm-gpio" class="input tabular-nums" type="number" inputmode="numeric" min="0" max="1023" step="1" bind:value={mf.resetGpio} placeholder="Not wired" />
     </div>
   </div>
-  <p class="text-xs text-muted">The offsets trim the board's frequency error. Frequency, power and color code are stored for a later release; this preview does not send them to the hat.</p>
-  <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class={chk} bind:checked={mf.duplex} /><span>Duplex (both DMR time slots)<span class="block text-xs text-muted">For a dual hat. On by default.</span></span></label>
+  <p class="text-xs text-muted">The offsets trim the board's frequency error. Set the receive frequency to listen. This preview receives only: it sends the hat the frequency with the transmit power at 0, so it never transmits.</p>
+  {#if mmFreqMsg}<p class="text-sm text-danger" role="alert" data-testid="mm-freq-error">{mmFreqMsg}. The node cannot save this until it is changed.</p>{/if}
+  <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class={chk} bind:checked={mf.duplex} /><span>Duplex (both DMR time slots)<span class="block text-xs text-muted">For a dual hat. On by default. Duplex receive needs transmit, which comes in a later release; for now the node listens in simplex on slot 2. A duplex hat takes UHF only.</span></span></label>
   <label class="flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" class={chk} bind:checked={mf.allowTx} data-testid="mm-allow-tx" /><span>Allow transmit<span class="block text-xs text-muted">Off by default, and turned off when a backup is restored. This preview never transmits, whatever this says.</span></span></label>
   <p class="text-xs text-muted">Saving a change here restarts the node to reopen the modem.</p>
 {/snippet}

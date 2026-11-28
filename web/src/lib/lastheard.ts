@@ -1,7 +1,7 @@
 // The rows of the Last heard table (LastHeardTable.svelte).
 // A call of any mode ends up in the same shape: callsign, mode, target, when, and the lookup links the callsign opens.
 import { modeTitle } from './modes.ts';
-import { placeText, qrzUrl, radioidUrl } from './nowcalling.ts';
+import { placeText, qrzUrl, radioidUrl, viaTag } from './nowcalling.ts';
 import type { Heard, NowCall } from './types';
 
 export interface HeardItem {
@@ -18,6 +18,8 @@ export interface HeardItem {
   start: number;
   /** How many consecutive transmissions of the same station on the same target the row stands for; absent for one. */
   count?: number;
+  /** "via RF" when the call came in over the radio (the MMDVM hat); '' for a network call. */
+  via: string;
   /** The caller's name and place for the muted second line under the callsign ("Pat Example · Springfield, XX"); '' when not known. */
   person: string;
   /** Tooltip for the row. */
@@ -58,6 +60,7 @@ export function heardItems(heard: Heard[] | undefined): HeardItem[] {
       target: targetCell(h.mode, h.target),
       at: parseAt(h.end || h.start),
       start: parseAt(h.start),
+      via: viaTag(h.via),
       person: personLine(h.name, h.place),
       title: h.id ? `ID ${h.id}` : undefined,
       qrz: lookupCall(call),
@@ -77,6 +80,7 @@ export function callItems(recent: NowCall[] | undefined): HeardItem[] {
       target: targetCell(c.kind, c.target),
       at: parseAt(c.end || c.start),
       start: parseAt(c.start),
+      via: viaTag(c.via),
       person: c.kind === 'allstar' ? (c.desc ?? '').trim() : personLine(c.first || c.name, placeText(c)),
       title: (c.targetName ?? '').trim() || undefined,
       qrz: lookupCall(call),

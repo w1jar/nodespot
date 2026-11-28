@@ -112,3 +112,34 @@ func TestTalkerLookup(t *testing.T) {
 		t.Fatalf("AllStar heard row: %+v", l)
 	}
 }
+
+// An RF talker (a handheld on the modem) is resolved by its DMR ID like a
+// network talker, and keeps its via-RF marker and slot in the node status
+// and in the last-heard list.
+func TestTalkerViaRF(t *testing.T) {
+	e := newEnv(t, opts{radioid: fakeRadioID(t)})
+	if c := e.do("op", "POST", "/api/select", map[string]string{"mode": "bm", "target": "91"}, nil); c != 200 {
+		t.Fatalf("select bm: %d", c)
+	}
+	f := e.fake(mode.BM)
+	f.KeyTalker(mode.Talker{ID: 1234568, Target: "91", Via: "rf", Slot: 2})
+	n := e.waitNode("the RF talker", func(n api.NodeJSON) bool { return talkerOf(n) != nil && talkerOf(n).ID == 1234568 })
+	if tk := talkerOf(n); tk.Callsign != "N1CALL" || tk.Via != "rf" || tk.Slot != 2 {
+		t.Fatalf("RF talker: %+v", tk)
+	}
+	time.Sleep(nowcalling.MinDuration + 50*time.Millisecond)
+	f.Unkey()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var l []mode.Heard
+		e.do("viewer", "GET", "/api/heard?limit=10", nil, &l)
+		if len(l) > 0 && l[0].ID == 1234568 && l[0].Callsign == "N1CALL" {
+			if l[0].Via != "rf" || l[0].Slot != 2 {
+				t.Fatalf("heard row: %+v", l[0])
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("no RF row in the last-heard list")
+}

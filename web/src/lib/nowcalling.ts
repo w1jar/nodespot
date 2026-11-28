@@ -57,19 +57,22 @@ function targetPart(c: NowCall): string {
   return t;
 }
 
-/** "AllStar", "BrandMeister · TG 91", "YSF · Room". The target name is left to sourceDetail. */
+/** The "via RF" tag of a call that came in over the radio; '' for a network call. */
+export const viaTag = (via: string | undefined): string => (via === 'rf' ? 'via RF' : '');
+
+/** "AllStar", "BrandMeister · TG 91", "YSF · Room". The target name is left to sourceDetail. A call heard on the hat adds "via RF". */
 export function sourceLabel(c: NowCall): string {
-  return [modeTitle(c.kind), targetPart(c)].filter(Boolean).join(' · ');
+  return [modeTitle(c.kind), targetPart(c), viaTag(c.via)].filter(Boolean).join(' · ');
 }
 
 /** The full source for the details sheet: "AllStar · 2001 Example hub", "BrandMeister · TG 91 Example". */
 export function sourceDetail(c: NowCall): string {
-  return [modeTitle(c.kind), [targetPart(c), (c.targetName ?? '').trim()].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+  return [modeTitle(c.kind), [targetPart(c), (c.targetName ?? '').trim()].filter(Boolean).join(' '), viaTag(c.via)].filter(Boolean).join(' · ');
 }
 
 /** The short form for the idle line: "AllStar", "BrandMeister TG 91". */
 export function sourceShort(c: NowCall): string {
-  return [modeTitle(c.kind), targetPart(c)].filter(Boolean).join(' ');
+  return [[modeTitle(c.kind), targetPart(c)].filter(Boolean).join(' '), viaTag(c.via)].filter(Boolean).join(' ');
 }
 
 export function qrzUrl(call: string | undefined): string {

@@ -92,3 +92,12 @@ test('strip state and idle line', () => {
   assert.equal(talk.mode, 'talking');
   assert.match(ariaLabel(talk, Date.parse(base.start) + 65000), /Now calling: N0CALL · Alex · Springfield, IL, BrandMeister · TG 91, 01:05/);
 });
+
+test('a call heard on the radio says via RF', () => {
+  const rf = { ...base, via: 'rf', slot: 2 };
+  assert.equal(sourceLabel(rf), 'BrandMeister · TG 91 · via RF');
+  assert.match(sourceDetail(rf), /TG 91 Example · via RF$/);
+  assert.equal(sourceShort(rf), 'BrandMeister TG 91 via RF');
+  assert.equal(sourceLabel(base), 'BrandMeister · TG 91');
+  assert.equal(sourceShort(base), 'BrandMeister TG 91');
+});

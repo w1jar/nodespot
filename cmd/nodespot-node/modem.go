@@ -10,25 +10,21 @@ import (
 	"github.com/w1jar/nodespot/internal/native/rf"
 )
 
-// modemSettings are the driver settings for the mmdvm preset. This release
-// only detects the modem: DetectOnly sends GET_VERSION and status polls,
-// never SET_FREQ or SET_CONFIG, and transmit stays inhibited in the driver
-// whatever Allow transmit says.
+// modemSettings are the driver settings for the mmdvm preset. With a
+// receive frequency the driver is set up to receive DMR in simplex and never
+// transmits (RXOnly: SET_FREQ with RF power 0, simplex SET_CONFIG, SET_MODE
+// DMR, and a write filter that drops every transmit frame). Without one it
+// only detects the modem: GET_VERSION and status polls. Transmit stays
+// inhibited whatever Allow transmit says; it comes in a later release.
 func modemSettings(m node.MMDVMSettings, log *slog.Logger) mmdvm.Settings {
-	rx := int64(m.RXFreqHz)
-	tx := int64(m.TXFreqHz)
-	if rx != 0 {
-		rx += int64(m.RXOffsetHz)
-	}
-	if tx != 0 {
-		tx += int64(m.TXOffsetHz)
-	}
+	rx, tx, receive := m.ModemFreq()
 	return mmdvm.Settings{
 		Port: m.Device, Baud: m.Baud,
-		Modem:      mmdvm.Config{Duplex: m.Duplex, ColorCode: uint8(m.ColorCode)},
-		Freq:       mmdvm.Freq{RX: uint32(rx), TX: uint32(tx), Power: float64(m.RFPower)},
+		Modem:      mmdvm.Config{Duplex: false, ColorCode: uint8(m.ColorCode)},
+		Freq:       mmdvm.Freq{RX: rx, TX: tx, Power: 0},
 		AllowTX:    false,
-		DetectOnly: true,
+		RXOnly:     receive,
+		DetectOnly: !receive,
 		Logger:     log,
 	}
 }
@@ -45,7 +41,7 @@ func startModem(ctx context.Context, cfg *node.Config, m node.MMDVMSettings, log
 	log = log.With("radio", "mmdvm")
 	d := mmdvm.New(modemSettings(m, log))
 	adv := cfg.Station.Advanced
-	ep := rf.New(d, rf.Config{Hang: adv.Hang(), TXTimeout: adv.TxTimeout(), Logger: log})
+	ep := rf.New(d, rf.Config{Hang: adv.Hang(), TXTimeout: adv.TxTimeout(), ReceiveOnly: true, Logger: log})
 	r := &modemRunner{d: d, ep: ep}
 	r.wg.Add(1)
 	go func() {
@@ -54,7 +50,11 @@ func startModem(ctx context.Context, cfg *node.Config, m node.MMDVMSettings, log
 			log.Error("mmdvm", "err", err)
 		}
 	}()
-	log.Info("mmdvm modem (detect only)", "device", m.Device, "baud", m.Baud)
+	if _, _, receive := m.ModemFreq(); receive {
+		log.Info("mmdvm modem (receive only, simplex)", "device", m.Device, "baud", m.Baud, "duplexConfigured", m.Duplex)
+	} else {
+		log.Info("mmdvm modem (detect only: no receive frequency set)", "device", m.Device, "baud", m.Baud)
+	}
 	return r
 }
 

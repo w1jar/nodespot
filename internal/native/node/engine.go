@@ -42,6 +42,10 @@ type Options struct {
 	// ModemConfig the settings it was opened with. Nil for other presets.
 	Modem       Modem
 	ModemConfig MMDVMSettings
+	// RF is the modem's RF endpoint. The engine links the active mode to
+	// it (when the mode carries AMBE frames) so RF calls reach the network
+	// as they are. Nil: no RF path.
+	RF RFLink
 	// Program programs the SA818 (default radio.ProgramSA818).
 	Program func(radio.Config, sa818.Settings) error
 	// ConfigPath is the config file; "" keeps changes in memory only.
@@ -85,6 +89,7 @@ type Engine struct {
 	tunes    map[string]Tune // what each mode reconnects to (see Tune)
 	autoStat AutosetStatus   // the last receive auto-set outcome
 	active   *instance
+	rfNote   string // why RF calls are not passed to the active mode ("" when they are)
 	since    time.Time
 	info     radio.Info
 	capture  atomic.Bool // the sound chip has a receive level control (see hasCaptureControl)
@@ -197,6 +202,7 @@ func (e *Engine) Close() error {
 	e.modes = map[string]*instance{}
 	e.active = nil
 	e.mu.Unlock()
+	e.syncRF(nil)
 	for _, in := range all {
 		e.closeInstance(in)
 	}
@@ -260,6 +266,9 @@ func (e *Engine) applyModes(c *Config) {
 	}
 	sort.Strings(names)
 	e.mu.Unlock()
+	if len(stale) > 0 {
+		e.syncRF(e.activeInstance())
+	}
 
 	for _, in := range stale {
 		e.closeInstance(in)
@@ -427,6 +436,9 @@ func (e *Engine) selectLocked(ctx context.Context, n string, t *mode.Target, per
 		e.resetRadioLocked()
 	}
 	e.mu.Unlock()
+	if old != in {
+		e.syncRF(nil)
+	}
 
 	if old != nil && old != in {
 		e.stopMode(old)
@@ -454,6 +466,7 @@ func (e *Engine) selectLocked(ctx context.Context, n string, t *mode.Target, per
 		e.since = e.now()
 	}
 	e.mu.Unlock()
+	e.syncRF(in)
 	if old != in {
 		e.hub.publish(Event{Kind: EventSelect, At: e.now(), Text: n})
 	}
@@ -617,4 +630,59 @@ type Calling struct {
 func (e *Engine) Subscribe() (<-chan Event, func()) {
 	c := e.hub.subscribe()
 	return c, func() { e.hub.unsubscribe(c) }
+}
+
+// RFLink is what the engine needs of the modem's RF endpoint: the slots it
+// has and a way to link a mode to one (nil unlinks). *rf.Endpoint is one.
+type RFLink interface {
+	Slots() []int
+	Link(slot int, m mode.FrameMode) error
+}
+
+func (e *Engine) activeInstance() *instance {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.active
+}
+
+// syncRF links the active mode to the RF endpoint, or unlinks it. RF calls
+// are carried to a mode that takes AMBE frames (the DMR networks:
+// BrandMeister, TGIF, other masters). Any other active mode (AllStar,
+// EchoLink, YSF, the parrot, M17) cannot take them: RF calls are dropped,
+// and rfNote says why. Passing RF calls across modes comes later.
+func (e *Engine) syncRF(in *instance) {
+	if e.o.RF == nil {
+		return
+	}
+	slots := e.o.RF.Slots()
+	if len(slots) == 0 {
+		return
+	}
+	slot := slots[len(slots)-1] // slot 2; the only slot of a simplex modem
+	note := ""
+	var fm mode.FrameMode
+	if in != nil {
+		var ok bool
+		if fm, ok = in.m.(mode.FrameMode); !ok {
+			note = "RF calls are not passed to " + in.name + ": it does not carry DMR AMBE frames. Select BrandMeister, TGIF or another DMR network."
+			fm = nil
+		}
+	}
+	if err := e.o.RF.Link(slot, fm); err != nil && in != nil && note == "" {
+		note = "RF calls are not passed to " + in.name + ": it does not carry DMR AMBE frames (" + err.Error() + "). Select BrandMeister, TGIF or another DMR network."
+	}
+	e.mu.Lock()
+	changed := e.rfNote != note
+	e.rfNote = note
+	e.mu.Unlock()
+	if note != "" && changed {
+		e.log.Info("rf: " + note)
+	}
+}
+
+// rfNoteText is why RF calls are dropped now, or "".
+func (e *Engine) rfNoteText() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.rfNote
 }

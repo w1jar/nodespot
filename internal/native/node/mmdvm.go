@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/w1jar/nodespot/internal/native/radio"
+	"github.com/w1jar/nodespot/internal/native/radio/mmdvm"
 )
 
 // MMDVM defaults.
@@ -99,6 +100,37 @@ func (m *MMDVMConfig) Resolved() MMDVMSettings {
 	return s
 }
 
+// ModemFreq is what the node sends the modem in SET_FREQ: the receive
+// frequency and the transmit frequency (the receive one when no transmit
+// frequency is set), each with its trim offset. receive is false when no
+// receive frequency is set: the node then only detects the modem.
+func (s MMDVMSettings) ModemFreq() (rx, tx uint32, receive bool) {
+	if s.RXFreqHz == 0 {
+		return 0, 0, false
+	}
+	t := s.TXFreqHz
+	if t == 0 {
+		t = s.RXFreqHz
+	}
+	return uint32(int64(s.RXFreqHz) + int64(s.RXOffsetHz)), uint32(int64(t) + int64(s.TXOffsetHz)), true
+}
+
+// Rules are the SET_FREQ rules of this board setting: a duplex setting
+// (the default, for a dual-chip hat) takes UHF only. A dual-chip hat set to
+// simplex is still refused below 420 MHz by the modem itself, which the
+// modem status then shows.
+func (s MMDVMSettings) Rules() mmdvm.FreqRules { return mmdvm.FreqRules{UHFOnly: s.Duplex} }
+
+// CheckFreq reports why the modem would refuse these frequencies, or nil.
+// The same rules are in web/src/lib/mmdvm.ts.
+func (s MMDVMSettings) CheckFreq() error {
+	rx, tx, ok := s.ModemFreq()
+	if !ok {
+		return nil
+	}
+	return mmdvm.CheckFreq(rx, tx, s.Rules())
+}
+
 // Equal reports whether two resolved settings are the same.
 func (s MMDVMSettings) Equal(o MMDVMSettings) bool {
 	g := func(p *int) int {
@@ -141,6 +173,11 @@ func (m *MMDVMConfig) validate() []error {
 			errs = append(errs, fmt.Errorf("MMDVM: %s offset must be -%d to %d Hz", name, MaxMMDVMOffsetHz, MaxMMDVMOffsetHz))
 		}
 	}
+	if res := m.Resolved(); len(errs) == 0 {
+		if err := res.CheckFreq(); err != nil {
+			errs = append(errs, fmt.Errorf("MMDVM: %w", err))
+		}
+	}
 	if m.RFPower != nil && (*m.RFPower < 0 || *m.RFPower > 100) {
 		errs = append(errs, errors.New("MMDVM: RF power must be 0 to 100%"))
 	}
@@ -174,9 +211,19 @@ type ModemInfo struct {
 	Connected bool   `json:"connected"`
 	Device    string `json:"device"`
 	Baud      int    `json:"baud"`
-	// DetectOnly: this release only identifies and watches the modem; it
-	// never configures it for RF or transmits.
+	// DetectOnly is true when no receive frequency is set: the node only
+	// identifies and watches the modem. Receive is true when it is set up
+	// to receive DMR (simplex, receive only; it never transmits in this
+	// release).
 	DetectOnly bool `json:"detectOnly"`
+	Receive    bool `json:"receive"`
+	// RXState is "" (not running), "detect", "configured" (set up, the
+	// modem not open yet), "listening" or "receiving".
+	RXState string `json:"rxState,omitempty"`
+	// RXCall is the call being received from RF.
+	RXCall *ModemCall `json:"rxCall,omitempty"`
+	// Notes are plain-words remarks for the operator.
+	Notes []string `json:"notes,omitempty"`
 
 	Protocol      int      `json:"protocol,omitempty"`
 	Description   string   `json:"description,omitempty"`
@@ -197,6 +244,15 @@ type ModemInfo struct {
 	Reopens    int       `json:"reopens"`
 	NAKs       uint64    `json:"naks"`
 	LastError  string    `json:"lastError,omitempty"`
+}
+
+// ModemCall is a call being received on the modem.
+type ModemCall struct {
+	Slot    int       `json:"slot"`
+	Src     uint32    `json:"src"`
+	Dst     uint32    `json:"dst"`
+	Private bool      `json:"private,omitempty"`
+	Since   time.Time `json:"since"`
 }
 
 // ModemFlags are the status flags the modem last reported.
@@ -220,12 +276,37 @@ func (e *Engine) ModemInfo() ModemInfo {
 	if e.o.Modem != nil {
 		cur = e.o.ModemConfig
 	}
+	rxHz, _, receive := cur.ModemFreq()
 	mi := ModemInfo{Configured: radio.Preset(r.Preset) == radio.PresetMMDVM, Running: e.o.Modem != nil,
-		Device: cur.Device, Baud: cur.Baud, DetectOnly: true}
+		Device: cur.Device, Baud: cur.Baud, DetectOnly: !receive, Receive: receive}
 	if e.o.Modem == nil {
 		return mi
 	}
 	s := e.o.Modem.Status()
+	switch {
+	case !receive:
+		mi.RXState = "detect"
+		mi.Notes = append(mi.Notes, "Set the receive frequency to start receiving. Until then the node only detects the modem.")
+	case !s.Open:
+		mi.RXState = "configured"
+	case s.RXCall != nil:
+		mi.RXState = "receiving"
+		c := s.RXCall
+		mi.RXCall = &ModemCall{Slot: c.Slot, Src: c.Src, Dst: c.Dst, Private: c.Private, Since: c.Since}
+	default:
+		mi.RXState = "listening"
+	}
+	if receive {
+		if cur.Duplex {
+			mi.Notes = append(mi.Notes, "Duplex receive needs transmit, which comes in a later release. For now the modem listens in simplex on slot 2.")
+		}
+		if !s.Open && s.DuplexCapable && rxHz < mmdvm.UHFMinHz {
+			mi.Notes = append(mi.Notes, "A dual-chip hat takes only UHF (420 MHz and up).")
+		}
+		if n := e.rfNoteText(); n != "" {
+			mi.Notes = append(mi.Notes, n)
+		}
+	}
 	mi.Connected = s.Open
 	mi.Protocol, mi.Description = s.Protocol, s.Description
 	mi.Board, mi.Firmware, mi.BuildDate = s.Board, s.Firmware, s.BuildDate

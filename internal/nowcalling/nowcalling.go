@@ -52,6 +52,11 @@ type Call struct {
 	// TargetName its name when a favorite knows it.
 	Target     string `json:"target,omitempty"`
 	TargetName string `json:"targetName,omitempty"`
+	// Via is "rf" for a talker on the node's own radio (a handheld on the
+	// MMDVM modem), empty for a network talker. Slot is the DMR slot of
+	// an RF call.
+	Via  string `json:"via,omitempty"`
+	Slot int    `json:"slot,omitempty"`
 	// Start is RFC 3339 UTC. End is empty while talking.
 	Start  string `json:"start"`
 	End    string `json:"end,omitempty"`
@@ -92,7 +97,7 @@ func id(m string, start time.Time, call string) string {
 
 // fromTalker builds a call from what the node reported.
 func fromTalker(m string, t mode.Talker, start time.Time) Call {
-	c := Call{Kind: m, Call: t.Callsign, Name: t.Name, Location: t.Place, Target: t.Target, start: start}
+	c := Call{Kind: m, Call: t.Callsign, Name: t.Name, Location: t.Place, Target: t.Target, Via: t.Via, Slot: t.Slot, start: start}
 	if t.ID != 0 {
 		c.DMRID = strconv.FormatUint(uint64(t.ID), 10)
 	}
@@ -164,7 +169,7 @@ func (t *Tracker) Seed(heard []mode.Heard) {
 		if h.End.IsZero() {
 			continue
 		}
-		c := fromTalker(h.Mode, mode.Talker{Callsign: h.Callsign, Name: h.Name, Place: h.Place, ID: h.ID, Target: h.Target}, h.Start)
+		c := fromTalker(h.Mode, mode.Talker{Callsign: h.Callsign, Name: h.Name, Place: h.Place, ID: h.ID, Target: h.Target, Via: h.Via, Slot: h.Slot}, h.Start)
 		c.End = h.End.UTC().Format(time.RFC3339)
 		if t.Resolve != nil {
 			t.Resolve(&c)

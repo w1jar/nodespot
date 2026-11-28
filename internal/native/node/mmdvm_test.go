@@ -70,7 +70,7 @@ func TestMMDVMConfigValidate(t *testing.T) {
 		want string
 	}{
 		{"defaults", MMDVMConfig{}, ""},
-		{"all set", MMDVMConfig{Device: "/dev/ttyAMA0", Baud: 115200, RXFreqHz: 123456000, TXFreqHz: 123456000,
+		{"all set", MMDVMConfig{Device: "/dev/ttyAMA0", Baud: 115200, RXFreqHz: 441000000, TXFreqHz: 446000000,
 			RXOffsetHz: -500, TXOffsetHz: 500, RFPower: ip(100), ColorCode: ip(15), ResetGPIO: ip(0)}, ""},
 		{"relative device", MMDVMConfig{Device: "serial0"}, "serial port"},
 		{"device outside /dev", MMDVMConfig{Device: "/etc/passwd"}, "serial port"},
@@ -79,6 +79,13 @@ func TestMMDVMConfigValidate(t *testing.T) {
 		{"rx freq", MMDVMConfig{RXFreqHz: 1000}, "receive frequency"},
 		{"tx freq", MMDVMConfig{TXFreqHz: 2000000000}, "transmit frequency"},
 		{"offset", MMDVMConfig{TXOffsetHz: 200000}, "transmit offset"},
+		{"vhf on a dual hat", MMDVMConfig{RXFreqHz: 144800000}, "below 420 MHz"},
+		{"vhf simplex", MMDVMConfig{RXFreqHz: 144800000, Duplex: bp(false)}, ""},
+		{"banned 70 cm", MMDVMConfig{RXFreqHz: 436000000}, "bans"},
+		{"banned 2 m", MMDVMConfig{RXFreqHz: 145900000, Duplex: bp(false)}, "bans"},
+		{"gap", MMDVMConfig{RXFreqHz: 300000000, Duplex: bp(false)}, "none of the bands"},
+		{"offset pushes into the ban", MMDVMConfig{RXFreqHz: 434950000, RXOffsetHz: 100000}, "bans"},
+		{"tx default is rx", MMDVMConfig{RXFreqHz: 441000000, TXOffsetHz: -100000}, ""},
 		{"power", MMDVMConfig{RFPower: ip(101)}, "RF power"},
 		{"color code", MMDVMConfig{ColorCode: ip(16)}, "color code"},
 		{"reset gpio", MMDVMConfig{ResetGPIO: ip(-1)}, "reset GPIO"},
@@ -101,7 +108,7 @@ func TestMMDVMConfigValidate(t *testing.T) {
 func TestMMDVMConfigLoads(t *testing.T) {
 	var c Config
 	raw := `{"version":1,"station":{"radio":{"preset":"mmdvm","mmdvm":{"device":"/dev/serial0","baud":115200,
-		"duplex":true,"rxFreqHz":123456000,"txFreqHz":123456000,"colorCode":1,"allowTx":false,"resetGpio":20}}}}`
+		"duplex":true,"rxFreqHz":441000000,"txFreqHz":446000000,"colorCode":1,"allowTx":false,"resetGpio":20}}}}`
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&c); err != nil {
@@ -110,7 +117,7 @@ func TestMMDVMConfigLoads(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if m := c.Station.Radio.MMDVM; m == nil || *m.ResetGPIO != 20 || m.RXFreqHz != 123456000 {
+	if m := c.Station.Radio.MMDVM; m == nil || *m.ResetGPIO != 20 || m.RXFreqHz != 441000000 {
 		t.Errorf("mmdvm %+v", m)
 	}
 }

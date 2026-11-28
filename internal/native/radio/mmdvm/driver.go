@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/w1jar/nodespot/internal/dv/dmr"
@@ -75,6 +76,19 @@ type Settings struct {
 	// status polls. SET_FREQ and SET_CONFIG are not sent, nothing is sent
 	// at shutdown, and AllowTX is forced off, so the modem never keys up.
 	DetectOnly bool
+	// RXOnly receives DMR in simplex and never transmits: SET_FREQ with RF
+	// power 0, SET_CONFIG in simplex with DMR only, SET_MODE DMR. AllowTX is
+	// forced off, Modem.Duplex is forced off (a duplex modem hears nothing
+	// from a radio until it transmits), and a write filter drops every
+	// DMR_DATA, DMR_START and DMR_SHORTLC frame, so no transmit byte ever
+	// reaches the port, whatever calls the driver gets.
+	RXOnly bool
+	// RXMonitor, when set, sees every received DMR burst (with the bit
+	// errors the FEC corrected), call start, call end and DMR_LOST, for
+	// tools such as the RX offset calibration. It is called with the
+	// driver's receive lock held, so it must return quickly and never call
+	// back into the driver. It changes nothing about how calls are handled.
+	RXMonitor func(RXEvent)
 
 	StatusInterval  time.Duration
 	Inactivity      time.Duration // no status reply this long: close and reopen
@@ -129,6 +143,12 @@ func (s *Settings) defaults() {
 	s.Modem.InitialMode = ModeIdle
 	if s.DetectOnly {
 		s.AllowTX = false
+		s.RXOnly = false
+	}
+	if s.RXOnly {
+		s.AllowTX = false
+		s.Modem.Duplex = false
+		s.Freq.Power = 0
 	}
 }
 
@@ -154,6 +174,7 @@ type Driver struct {
 	closed    chan struct{}
 	kick      chan struct{}
 	reopen    chan struct{}
+	retuneCh  chan retuneReq
 
 	mu      sync.Mutex
 	st      radio.ModemStatus
@@ -173,6 +194,10 @@ type Driver struct {
 	rx   [2]rxSlot
 	sink network.Sink
 	ids  uint64
+	// rxCall is the call being received, for the status.
+	rxCall *radio.RXCall
+
+	blocked atomic.Uint64 // transmit frames the RXOnly write filter dropped
 }
 
 type txSlot struct {
@@ -196,8 +221,10 @@ var _ radio.DigitalRadio = (*Driver)(nil)
 func New(s Settings) *Driver {
 	s.defaults()
 	d := &Driver{s: s, log: s.Logger, duplex: s.Modem.Duplex,
-		closed: make(chan struct{}), kick: make(chan struct{}, 1), reopen: make(chan struct{}, 1)}
+		closed: make(chan struct{}), kick: make(chan struct{}, 1), reopen: make(chan struct{}, 1),
+		retuneCh: make(chan retuneReq, 4)}
 	d.st.Duplex = d.duplex
+	d.st.Receive = s.RXOnly
 	for i := range d.rx {
 		d.rx[i].rx = dmr.NewRX()
 	}
@@ -235,9 +262,20 @@ func (d *Driver) slotNumber(i int) int {
 // Status is a snapshot of the modem.
 func (d *Driver) Status() radio.ModemStatus {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.st
+	st := d.st
+	d.mu.Unlock()
+	d.rxMu.Lock()
+	if d.rxCall != nil {
+		c := *d.rxCall
+		st.RXCall = &c
+	}
+	d.rxMu.Unlock()
+	return st
 }
+
+// BlockedTX counts the transmit frames the receive-only write filter
+// dropped. It stays 0 unless something asked the driver to transmit.
+func (d *Driver) BlockedTX() uint64 { return d.blocked.Load() }
 
 // Close stops Run. It does not wait for Run to return.
 func (d *Driver) Close() error {
@@ -446,7 +484,7 @@ func (d *Driver) session(ctx context.Context) error {
 		d.endAllRX()
 	}()
 
-	w := &writer{port: port}
+	w := &writer{port: port, rxOnly: d.s.RXOnly, blocked: &d.blocked, log: d.log}
 	if err := d.startup(ctx, w, frames, rdErr); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -474,11 +512,15 @@ func (d *Driver) session(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			d.shutdown(w)
+			d.shutdown(w, frames, rdErr)
 			return ctx.Err()
 		case <-d.reopen:
-			d.shutdown(w)
+			d.shutdown(w, frames, rdErr)
 			return errReopen
+		case r := <-d.retuneCh:
+			if err := d.doRetune(ctx, w, frames, rdErr, r); err != nil {
+				return err
+			}
 		case err := <-rdErr:
 			return err
 		case f := <-frames:
@@ -515,10 +557,30 @@ func (d *Driver) poll(w *writer) error {
 	return w.write(GetStatus())
 }
 
-type writer struct{ port io.Writer }
+type writer struct {
+	port io.Writer
+	// rxOnly drops every frame that can make the modem transmit.
+	rxOnly  bool
+	blocked *atomic.Uint64
+	log     *slog.Logger
+}
+
+// txCommand is true for the commands that carry or start a transmission.
+func txCommand(cmd byte) bool {
+	switch cmd {
+	case CmdDMRData1, CmdDMRData2, CmdDMRStart, CmdDMRShortLC:
+		return true
+	}
+	return false
+}
 
 func (w *writer) write(b ...[]byte) error {
 	for _, f := range b {
+		if w.rxOnly && len(f) > 2 && txCommand(f[2]) {
+			w.blocked.Add(1)
+			w.log.Warn("mmdvm: receive-only: transmit frame dropped", "cmd", CommandName(f[2]))
+			continue
+		}
 		if _, err := w.port.Write(f); err != nil {
 			return fmt.Errorf("mmdvm: write: %w", err)
 		}
@@ -607,6 +669,10 @@ func (d *Driver) startup(ctx context.Context, w *writer, frames <-chan Frame, rd
 	}
 	if d.s.Freq.RX != 0 || d.s.Freq.TX != 0 {
 		if err := d.command(ctx, w, frames, rdErr, SetFreq(d.s.Freq)); err != nil {
+			var nak *NAKError
+			if errors.As(err, &nak) {
+				return fmt.Errorf("%w (%s)", err, FreqHint())
+			}
 			return err
 		}
 	}
@@ -614,7 +680,15 @@ func (d *Driver) startup(ctx context.Context, w *writer, frames <-chan Frame, rd
 	if err != nil {
 		return err
 	}
-	return d.command(ctx, w, frames, rdErr, cfg)
+	if err := d.command(ctx, w, frames, rdErr, cfg); err != nil {
+		return err
+	}
+	if d.s.RXOnly {
+		// Receive needs the mode: the modem starts idle and a simplex
+		// modem only listens in DMR mode.
+		return d.command(ctx, w, frames, rdErr, SetMode(ModeDMR))
+	}
+	return nil
 }
 
 var errTimeout = errors.New("mmdvm: no reply")
@@ -787,7 +861,9 @@ func (d *Driver) playout(w *writer) error {
 
 // shutdown stops transmission before the port closes. A detect-only
 // driver never configured the modem and sends nothing.
-func (d *Driver) shutdown(w *writer) {
+// It waits (up to ReplyTimeout) for the modem's ACK of the final idle, so the
+// port is not closed on a command the modem has not taken yet.
+func (d *Driver) shutdown(w *writer, frames <-chan Frame, rdErr <-chan error) {
 	if d.s.DetectOnly {
 		return
 	}
@@ -795,8 +871,10 @@ func (d *Driver) shutdown(w *writer) {
 	if d.duplex {
 		out = append(out, DMRAbort(1), DMRAbort(2), DMRStart(false))
 	}
-	out = append(out, SetMode(ModeIdle))
-	_ = w.write(out...)
+	if len(out) > 0 {
+		_ = w.write(out...)
+	}
+	_ = d.command(context.Background(), w, frames, rdErr, SetMode(ModeIdle))
 }
 
 // ---- receive ----
@@ -814,6 +892,7 @@ func (d *Driver) onRX(f Frame) {
 	}
 	if f.Cmd == CmdDMRLost1 || f.Cmd == CmdDMRLost2 {
 		d.rxMu.Lock()
+		d.monitor(RXEvent{Kind: RXLost, Slot: d.slotNumber(i), Time: time.Now()})
 		d.endRXLocked(i)
 		d.rxMu.Unlock()
 		return
@@ -843,6 +922,7 @@ func (d *Driver) onRX(f Frame) {
 	r := &d.rx[i]
 	res := r.rx.Push(ft, v, &df.Burst)
 	r.last = now
+	d.monitor(RXEvent{Kind: RXBurst, Slot: d.slotNumber(i), Time: now, Voice: res.HasVoice, FECErrors: res.FECErrors})
 	if res.LCValid {
 		if r.active && (res.LC.Src != r.lc.Src || res.LC.Dst != r.lc.Dst || res.LC.FLCO != r.lc.FLCO) {
 			d.endRXLocked(i)
@@ -850,6 +930,10 @@ func (d *Driver) onRX(f Frame) {
 		if !r.active {
 			d.ids++
 			r.active, r.call, r.lc, r.seq = true, d.ids, res.LC, 0
+			d.rxCall = &radio.RXCall{Slot: d.slotNumber(i), Src: res.LC.Src, Dst: res.LC.Dst,
+				Private: res.LC.Private(), Since: now}
+			d.monitor(RXEvent{Kind: RXCallStart, Slot: d.slotNumber(i), Time: now,
+				Src: res.LC.Src, Dst: res.LC.Dst, Private: res.LC.Private()})
 			d.sinkHeader(network.CallHeader{Call: r.call, Src: strconv.FormatUint(uint64(res.LC.Src), 10),
 				SrcID: res.LC.Src, TG: res.LC.Dst, Slot: d.slotNumber(i), Private: res.LC.Private()})
 		}
@@ -886,6 +970,8 @@ func (d *Driver) endRXLocked(i int) {
 		return
 	}
 	r.active = false
+	d.rxCall = nil
+	d.monitor(RXEvent{Kind: RXCallEnd, Slot: d.slotNumber(i), Time: time.Now(), Src: r.lc.Src, Dst: r.lc.Dst})
 	if d.sink != nil {
 		d.sink.End(r.call)
 	}

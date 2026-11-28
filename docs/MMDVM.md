@@ -54,7 +54,7 @@ Status: **have** means nodespot already has it, **M*n*** is the milestone below,
 | DMR to BrandMeister | have (bm mode); RF side M3/M4 |
 | DMR to TGIF | have (tgif mode); RF side M3/M4 |
 | DMR to other Homebrew masters | have (dmr mode); RF side M3/M4 |
-| Duplex hat, two slots | M5 |
+| Duplex hat, two slots | M4 (a duplex hat hears nothing until it transmits) and M5 |
 | One network per slot (DMRGateway style) | M5 (fixed one network per slot); rewrite rules later |
 | DMR talkgroup changes from the radio (group call to a TG) | M4 |
 | BrandMeister Parrot (TG 9990) | have; RF test in M4 |
@@ -224,7 +224,7 @@ A SET_FREQ with a bad frequency is NAKed with reason 4 (bad length or data). The
 - **POCSAG field is checked, and 0 is refused.** The 17-byte form always carries it, so a host that has no POCSAG frequency must still send a valid one. nodespot sends TX there when `Freq.POCSAG` is 0.
 - **Short form.** If the POCSAG field is omitted, the firmware uses TX as the POCSAG frequency. nodespot always sends the 17-byte form.
 - **Duplex board.** On a dual ADF7021 duplex board (not dual band), RX or TX below 420 MHz is also refused, so only UHF works. A dual-band board takes VHF or UHF.
-- **As built.** `mmdvm.SetFreq` sends TX in the POCSAG field when `Freq.POCSAG` is 0. The fake modem (`internal/native/radio/mmdvm/fake`) applies these checks by default and NAKs reason 4 like the hat (`Options.AnyFrequency` turns them off, `Options.DualBand` allows VHF); its tests use placeholder UHF frequencies outside the banned range. The node's frequency range check (`MinMMDVMFreqHz` to `MaxMMDVMFreqHz`, 100 to 1000 MHz) is only a sanity range, so the modem remains the judge of whether a band is allowed; the driver does not pre-check the bands.
+- **As built.** `mmdvm.SetFreq` sends TX in the POCSAG field when `Freq.POCSAG` is 0. The fake modem (`internal/native/radio/mmdvm/fake`) applies these checks by default and NAKs reason 4 like the hat (`Options.AnyFrequency` turns them off, `Options.DualBand` allows VHF); its tests use placeholder UHF frequencies outside the banned range. The node's own sanity range (`MinMMDVMFreqHz` to `MaxMMDVMFreqHz`, 100 to 1000 MHz) is still checked first. M3 added a frequency-check helper, `mmdvm.CheckFreq(rx, tx, FreqRules)` (`freqcheck.go`), which says in plain words why the firmware would NAK: a banned range, a TX frequency in no band (the POCSAG field carries TX), or, with `UHFOnly`, a frequency below 420 MHz. `mmdvm.Accepts` is the firmware's own test, and the fake modem uses it, so a grid test keeps `CheckFreq` and the fake in step. The node applies `UHFOnly` when the `duplex` setting is on (the default, for a dual-chip hat), and saving settings with a frequency the helper rejects fails with that message. A dual-chip hat set to simplex with a VHF frequency passes the check and is still NAKed by the modem; the modem card then shows the NAK with the band hint. The same rules are mirrored in `web/src/lib/mmdvm.ts` and shown in the settings form as messages only. The helper pre-checks nothing on the wire: the driver still sends what the node tells it, and a NAK of SET_FREQ is reported with the band hint.
 
 The 33-byte DMR burst inside DMR_DATA is the same burst `internal/dv/dmr` builds and parses (`dmr.Burst`), so no new air-interface code is needed for DMR.
 
@@ -234,6 +234,24 @@ The 33-byte DMR burst inside DMR_DATA is the same burst `internal/dv/dmr` builds
 - The host sends DMR_SHORTLC whenever a slot changes between idle, group and private, so radios see which slot is busy. (M1 has the command builder only; the driver sends it from M5.)
 - Each slot has its own TX queue (DMR_DATA1, DMR_DATA2) and its own free-space count in GET_STATUS.
 - A simplex hat (simplex flag in SET_CONFIG) uses DMR_DATA2 only, whatever the call's slot, and no DMR_START or DMR_SHORTLC. RX is also reported on DMR_DATA2, GET_STATUS shows slot 1 space as a fixed 10, and the host must send MS-sourced sync (a duplex hat takes BS-sourced).
+
+#### Receive: duplex versus simplex (verified on the owner's hat)
+
+The firmware decides what it reports to the host from the duplex bit of SET_CONFIG, and the two cases differ a great deal:
+
+- **Duplex, hat not transmitting: nothing is received from a handheld.** With the duplex bit set, the main loop (`MMDVM_HS.cpp`, `loop()`) runs `CDMRIdleRX` while the hat is idle (`CIO::process()` in `IO.cpp` selects by state), and `CDMRIdleRX` (`DMRIdleRX.cpp`) reports only a data-sync CSBK wake-up that is MS-sourced and carries a matching color code. A voice call is decoded by `CDMRRX` only while the hat is transmitting its own downlink (DMR_START 1 and the TDMA stream running). So a duplex hat receives voice only after the host has answered the radio's wake-up by starting TX.
+- **Simplex: `CDMRDMORX` runs all the time.** With the simplex bit (0x80 in the SET_CONFIG flags byte) the main loop runs `CDMRDMORX`, which decodes MS-sourced voice, data and terminators at any time and reports them on DMR_DATA2, slot 2 only.
+
+Verified on the owner's dual ADF7021 hat, firmware 1.6.1, protocol 1: in duplex with the hat not transmitting, a handheld's call produced nothing on the serial port. In simplex a group call (placeholders: source 1234567, talkgroup 1) from the handheld on slot 2 reported:
+
+- 3 voice LC headers (control byte 0x41);
+- voice bursts with control 0x20 (voice sync, burst A), then 0x01 to 0x05 (bursts B to F), repeating;
+- a terminator with LC (control 0x42);
+- 118 bursts in 7.0 s, 60 ms apart;
+- 0 DMR_LOST, 0 RX buffer overflows, and 241 of 241 GET_STATUS requests answered;
+- at most 5 FEC bit errors in a burst, and the embedded LC decoded as a group call, FLCO 0, FID 0, service options 0.
+
+That is the exact shape `internal/dv/dmr` already produces and parses, so no new air-interface code was needed. The fake modem's `PlayCall` (`fake/rx.go`) replays a call in this shape, and like the firmware it hears nothing in duplex unless the host is transmitting.
 
 ### Timing
 
@@ -382,14 +400,54 @@ Each milestone ends with a test on the owner's gear (Pi 3B+, the dual-slot hat, 
   - **Backup.** The settings are in `node.json`; a restore sets `allowTx` to false.
   - **Not yet:** `rf-reset` (the GPIO pulse; `resetGpio` is stored only), a reboot button, RF receive (M3) and transmit (M4), the band table for frequencies, ESSID and slot settings.
 
-### M3: DMR RX on one slot
+### M3: DMR RX on one slot, in simplex (receive only)
 
-- SET_FREQ, SET_CONFIG and SET_MODE with TX off; RF RX to the slot's network.
+The hat cannot hear a handheld in duplex until it transmits (see "Receive: duplex versus simplex"), so M3 sets the hat up in simplex and receives only. Duplex moves to M4, together with transmit.
+
+- SET_FREQ (power 0), SET_CONFIG with the simplex bit and SET_MODE DMR, with TX off; RF RX on slot 2 to the active DMR network.
 - **Test:** AT-D868UV on the hotspot channel (placeholder frequency, matching color code, slot 2), group call to a test talkgroup. The call reaches BrandMeister or TGIF (seen on the network's own last-heard page) and shows in nodespot's Last heard as N0CALL 1234567 via RF. Record RX fixtures.
+- **As built:**
+  - **Driver.** `mmdvm.Settings.RXOnly` makes the driver configure and listen but never transmit: it forces `AllowTX` off, `Modem.Duplex` off and `Freq.Power` 0, sends SET_FREQ (TX offsets and all), SET_CONFIG with the simplex bit and then SET_MODE DMR, and starts the status poll. `DetectOnly` (the M2 mode) clears `RXOnly`. `Driver.StartTX` returns `ErrTXInhibited`, and the serial writer drops any DMR_DATA1, DMR_DATA2, DMR_START or DMR_SHORTLC frame with a warning and counts it (`BlockedTX()`); tests assert the counter stays 0 and that the fake modem saw no such frame. A NAK of SET_FREQ (a frequency the board refuses) is reported with the band hint and the driver reopens the port as before.
+  - **RX path.** `ModemStatus` gains `Receive` and `RXCall` (slot, source, destination, private, since). The driver decodes the burst stream into a call as before: header, voice, terminator, or DMR_LOST (the call ends as lost), and the AMBE frames go to the sink unchanged.
+  - **Endpoint.** `rf.Config.ReceiveOnly` ignores a call from the network: the call is dropped and counted (`NetSkipped`), nothing is queued for the modem. An RF call with no mode linked is counted (`NoMode`) and logged.
+  - **Engine.** `node.Options.RF` takes an `RFLink` (`Slots()` and `Link(slot, FrameMode)`), which `cmd/nodespot-node` fills with the endpoint. `Engine.syncRF` links slot 2 to the active mode when it is a `mode.FrameMode` that carries AMBE (BrandMeister, TGIF and DMR networks, `*dv.Mode`), and unlinks it whenever the active mode changes. With any other active mode (ASL, EchoLink, YSF, Parrot, M17, or none) RF calls are not passed on: the modem card says "RF calls are not passed to <mode>: ..." and the endpoint logs the call. Cross-mode bridging is M7.
+  - **Talker.** `dv.Mode` raises a talker for an RF call (`Via: "rf"`, `Slot`, the radio ID, the target talkgroup), so Now calling, Last heard and the API show it with a "via RF" tag. The callsign is left empty and filled in from the DMR ID by the existing radioid lookup.
+  - **Frequencies.** `ModemFreq()` applies the offsets (TX defaults to RX), and `CheckFreq()` runs when settings are saved (see "SET_FREQ rules").
+  - **UI.** The modem card shows the receive state (configured, listening on slot 2, or receiving a call on slot 2 with source and destination) and the duplex note ("Duplex receive needs transmit, which comes in a later release. For now the modem listens in simplex on slot 2."), and the notes the node adds (no frequency set, a UHF-only board, RF not passed to the active mode). The settings form shows the frequency rules as live messages.
+  - **Network checks and gaps (read from the code, not yet tried against a live network).**
+    - BrandMeister (Rewind): `StartTX` takes the call's TG, private flag and source from the header, needs a logged-in session, and ignores the slot (always real-time 1; whether BrandMeister maps slot 2 to this is unverified).
+    - Homebrew (TGIF and DMR networks): `StartTX` uses the network's own configured slot, not the RF slot.
+    - `dv.Mode.SendHeader` sends the RF call's talkgroup whether or not the node is subscribed to it. On BrandMeister and TGIF the talkgroup should be a static or dynamic subscription of the account for return traffic, which M3 does not play to RF in any case.
+    - Network-to-RF is off in M3 (`ReceiveOnly`).
+    - A dual-chip hat set to simplex with a VHF frequency is only caught by the modem's own NAK.
 
-### M4: DMR TX
+  - **Calibrate.** `sudo nodespot-node calibrate` tunes the receive offset against a handheld; see "Calibrate (receive offset)" below.
+
+## Calibrate (receive offset)
+
+Hotspot crystals drift, so a handheld on the exact channel can sound clean on one hat and break up on another. `nodespot-node calibrate` measures how many bit errors the modem corrects while a handheld talks, and helps pick the `rxOffsetHz` that gives the fewest. It only receives: RF power stays 0, simplex is forced, and nothing is sent to the network.
+
+```
+sudo nodespot-node calibrate [-sweep] [-from -2000 -to 2000 -step 250] [-config path] [-dev path] [-yes]
+sudo nodespot-node calibrate -rxfreq 433500000 [-txfreq Hz] [-offset Hz] [-cc 1] [-baud 115200] [-dev /dev/serial0] [-sweep ...]
+```
+
+- **Standalone form.** With `-rxfreq` (Hz, for example 433500000) no config is read, so it works on a Pi with no nodespot installed, only the hat on `/dev/serial0`. The modem is set up in simplex on that frequency (`-txfreq` defaults to it, and is checked with the same frequency rules), RF power 0, receive only, color code `-cc` (default 1), `-baud` (default 115200), starting at `-offset` Hz (default 0). It still needs root for the serial port. The service is stopped only if `nodespot-node.service` exists and is running; with no unit (or no systemctl) nothing is stopped or started. Saving is off: `s` and the end of a sweep print `standalone: set the RX offset to N Hz in Settings > Station > Radio` instead of writing a file, and a sweep never asks to save. `-txfreq`, `-offset`, `-cc` and `-baud` without `-rxfreq` are refused.
+
+- **Setup.** The `mmdvm` preset with a receive frequency (for example 433.500 MHz), a handheld on the hotspot channel with the same color code, slot 2. It must run as root because it stops `nodespot-node.service` (the node owns the serial port) and rewrites the config. The service is started again on exit, on every path except SIGKILL, and only if the command stopped it. The modem is put back to idle before the service starts.
+- **Manual mode** (default). Key up the handheld and watch the live BER (the last second), the call BER and the offset. Keys: `+` and `-` (or `=` and `_`) change the offset by 50 Hz, `]` and `[` by 500 Hz, `0` returns to the saved offset, `s` saves, `l` lists, `?` or `h` shows help, `q` or Ctrl-C quits. Each change retunes the modem at once.
+- **Sweep mode** (`-sweep`). The command steps the offset from `-from` to `-to` in `-step` Hz, asks you to key up for about 3 seconds at each point, and prints a table of BER, bursts and lost fraction. It then suggests an offset and asks whether to save it. With `-yes` the result is saved without a prompt, but only when the minimum is not at an edge of the sweep and the curve is not flat; otherwise nothing is saved. Ctrl-C once ends the sweep early and still shows the table and the prompt; a second Ctrl-C, SIGTERM or SIGHUP stops at once.
+- **Relative to the saved offset.** The sweep range is added to the offset already in the config (`rxOffsetHz`), so `-from -2000 -to 2000` covers 4 kHz around where you are. Points that the frequency check rejects (a banned range, a band edge) or that would put the offset beyond plus or minus 100000 Hz are skipped.
+- **BER.** Corrected bit errors in the FEC-protected AMBE bits of each voice burst, divided by the bits checked: 141 per burst (3 frames of 24 + 23 protected bits). The 25 unprotected bits per frame are not counted. A frame whose first code word cannot be corrected counts as 10 errors, so the figure saturates and is a relative measure, not a true channel BER. A burst with 30 or more errors is unusable and a call that is mostly lost or unusable is not scored. Lost bursts are found from timestamp gaps (60 ms per burst). Calls shorter than the minimum are ignored.
+- **Suggestion.** The lowest-BER point, then its contiguous neighbors within max(1 percentage point, 25% of the minimum); the suggestion is the middle of that run, rounded away from zero. It is flagged "edge" when the run touches the end of the sweep (widen the range) and "flat" when every point is good (any offset in the range works; nothing to tune).
+- **Retune.** `mmdvm.Driver.Retune` sends SET_MODE idle, SET_FREQ (power 0, the new RX and the same TX offset) and SET_MODE DMR inside the driver's session, without closing the port. A NAK is reported and the driver stays up. Whether the idle and DMR bracket is needed on the real hat is not verified; it is the safe sequence.
+- **Saving.** Only `rxOffsetHz` changes (and `txOffsetHz` is left as it was). The file is validated, written atomically and keeps its mode and owner, since the service runs as `nodespot-node` and the file is 0600.
+- **Not included.** TX calibration and the firmware's own calibration modes (carrier, BER and RSSI tests) are not used. Transmit comes with M4.
+
+### M4: DMR TX and duplex
 
 - Allow transmit, TX path, timeouts, abort.
+- Duplex: answer the radio's wake-up CSBK by starting TX (DMR_START 1), then receive on both slots while the hat transmits its downlink.
 - **Test:** into a dummy load, lowest power, AT-D868UV close by. Private call to Parrot 9990; the reply plays on the handheld. Then a group call from the network side to a talkgroup in the handheld's receive group list. Check the TX timeout and abort with a long call and by stopping the service mid-call.
 
 ### M5: second slot
@@ -428,6 +486,6 @@ Each milestone ends with a test on the owner's gear (Pi 3B+, the dual-slot hat, 
 ## Owner decisions
 
 1. **Networks:** all of the DMR networks nodespot already has: BrandMeister, TGIF and DMR - Other (Homebrew masters, including DMR+). Each slot can be linked to any of them.
-2. **Duplex:** the dual-slot hat runs duplex, with both slots in use. Simplex support can come later for single-slot hats.
+2. **Duplex:** the dual-slot hat runs duplex, with both slots in use. Because a duplex hat hears nothing from a handheld until it transmits, M3 receives in simplex and duplex arrives with transmit in M4.
 
 Smaller design choices (a CW ID on RF, a separate DMR hang time) are noted where they arise and decided when the milestone is built.

@@ -124,6 +124,9 @@ type Mode struct {
 	tx     uint64 // call id, 0 = none
 	txSeq  uint32
 	txLast time.Time
+	// rfTalk is true while the transmission is an RF call's (SendHeader)
+	// and its talker is shown.
+	rfTalk bool
 
 	// frames: received calls go to frameC as coded frames, not to the
 	// decoder (guarded by mu).
@@ -417,7 +420,12 @@ func (m *Mode) EndTx() {
 	id := m.tx
 	m.tx = 0
 	n := m.n
+	rfTalk := m.rfTalk
+	m.rfTalk = false
 	m.mu.Unlock()
+	if rfTalk {
+		m.TalkEnd()
+	}
 	if id == 0 {
 		return
 	}
@@ -811,6 +819,7 @@ func (m *Mode) SendHeader(h network.CallHeader) error {
 	}
 	m.mu.Unlock()
 	m.cutRX()
+	m.rfTalkStart(h, hdr)
 	if prev != 0 {
 		select {
 		case m.enc <- job{call: prev, end: true}:
@@ -823,12 +832,39 @@ func (m *Mode) SendHeader(h network.CallHeader) error {
 		return nil
 	default:
 		m.mu.Lock()
-		if m.tx == id {
-			m.tx = 0
+		failed := m.tx == id
+		if failed {
+			m.tx, m.rfTalk = 0, false
 		}
 		m.mu.Unlock()
+		if failed {
+			m.TalkEnd()
+		}
 		return ErrBusy
 	}
+}
+
+// rfTalkStart shows the RF call's talker (Via "rf"): the DMR ID and
+// talkgroup of the call, and the slot it came in on. The callsign is left
+// for the lookup by ID, as for a network talker with no callsign. A call
+// that follows another one ends it first, so each gets its own entry.
+func (m *Mode) rfTalkStart(h, hdr network.CallHeader) {
+	m.mu.Lock()
+	again := m.rfTalk
+	m.rfTalk = true
+	m.mu.Unlock()
+	if again {
+		m.TalkEnd()
+	}
+	tgt := hdr.Room
+	if tgt == "" && hdr.TG != 0 {
+		tgt = strconv.FormatUint(uint64(hdr.TG), 10)
+	}
+	call := ""
+	if h.Src != "" && h.Src != strconv.FormatUint(uint64(hdr.SrcID), 10) {
+		call = h.Src
+	}
+	m.TalkStart(mode.Talker{Callsign: call, ID: hdr.SrcID, Target: tgt, Via: "rf", Slot: h.Slot, Since: m.Now()})
 }
 
 // SendFrame queues one coded frame of the transmission.

@@ -486,7 +486,7 @@ func TestBackupRestoreBadParts(t *testing.T) {
 
 // The mmdvm settings come back with Allow transmit off.
 func TestBackupRestoreMMDVMTransmitOff(t *testing.T) {
-	const nj = `{"version":1,"station":{"callsign":"N0CALL","radio":{"preset":"mmdvm","mmdvm":{"device":"/dev/serial0","baud":115200,"duplex":false,"rxFreqHz":123456000,"txFreqHz":123456000,"colorCode":3,"allowTx":true,"resetGpio":20}}}}`
+	const nj = `{"version":1,"station":{"callsign":"N0CALL","radio":{"preset":"mmdvm","mmdvm":{"device":"/dev/serial0","baud":115200,"duplex":false,"rxFreqHz":441500000,"txFreqHz":441500000,"colorCode":3,"allowTx":true,"resetGpio":20}}}}`
 	src := newBkNode(t, nj)
 	hdr, files := src.create(BackupRequest{Secrets: true})
 	if !strings.Contains(string(files[backup.PathNodeConfig]), `"allowTx": true`) {
@@ -503,7 +503,7 @@ func TestBackupRestoreMMDVMTransmitOff(t *testing.T) {
 	}
 	m := c.Station.Radio.MMDVM
 	if c.Station.Radio.Preset != "mmdvm" || m == nil || m.AllowTX || m.ColorCode == nil || *m.ColorCode != 3 ||
-		m.Duplex == nil || *m.Duplex || m.ResetGPIO == nil || *m.ResetGPIO != 20 || m.RXFreqHz != 123456000 {
+		m.Duplex == nil || *m.Duplex || m.ResetGPIO == nil || *m.ResetGPIO != 20 || m.RXFreqHz != 441500000 {
 		t.Errorf("restored mmdvm %+v", m)
 	}
 }

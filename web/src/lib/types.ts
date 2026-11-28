@@ -27,7 +27,7 @@ export interface UpdatesBadge { nodespot: boolean; nodespotVersion: string; os: 
 /** The state of a mode's link. */
 export type ModeState = 'idle' | 'starting' | 'ready' | 'connecting' | 'connected' | 'error';
 export interface Target { id: string; name?: string; host?: string; port?: number; slot?: number; private?: boolean }
-export interface Talker { callsign?: string; name?: string; place?: string; id?: number; target?: string; since: string }
+export interface Talker { callsign?: string; name?: string; place?: string; id?: number; target?: string; since: string; via?: string; slot?: number }
 export interface Registration {
   registered: boolean; ready: boolean; publicIp?: string; dnsOk: boolean;
   lastAttempt?: string; lastSuccess?: string; since?: string; lastError?: string; httpStatus?: number;
@@ -206,7 +206,16 @@ export interface ModemInfo {
   duplexCapable: boolean; duplex: boolean; modes?: string[]; state?: string;
   flags: ModemFlags; rxOverflows: number; txOverflows: number; space: [number, number];
   lastStatus?: string; reopens: number; naks: number; lastError?: string;
+  /** True when a receive frequency is set and the node listens (simplex, slot 2). */
+  receive?: boolean;
+  /** "detect", "configured", "listening" or "receiving"; absent when the modem is not running. */
+  rxState?: 'detect' | 'configured' | 'listening' | 'receiving';
+  rxCall?: ModemCall;
+  /** Plain-words remarks for the operator. */
+  notes?: string[];
 }
+/** The call being received from RF. */
+export interface ModemCall { slot: number; src: number; dst: number; private?: boolean; since: string }
 export interface RFUnit { name: string; present: boolean; active: boolean; enabled: boolean; disabled: boolean; error?: string }
 /** POST /api/radio/prepare (admin). */
 export interface RFPrepareResult { model: string; changes: string[]; units: RFUnit[]; rebootNeeded: boolean; reasons?: string[] }
@@ -245,6 +254,7 @@ export interface RadioLevels {
 /** One row of GET /api/heard: who was heard on which mode. */
 export interface Heard {
   mode: string; callsign?: string; name?: string; place?: string; id?: number; target?: string;
+  /** "rf" when the call came in over the radio (the MMDVM hat), absent when it came from the network. */ via?: string; slot?: number;
   start: string; end?: string; durationNs?: number;
 }
 
@@ -368,6 +378,7 @@ export interface NowCall {
   /** The talkgroup, room or reflector, and its name when known. */
   target?: string; targetName?: string;
   /** Where the name and place came from when not the radioid.net list ("hamdb.org"). */ source?: string;
+  /** "rf" when the call came in over the radio (the MMDVM hat); slot is the DMR time slot. */ via?: string; slot?: number;
   start: string; end?: string; active: boolean;
 }
 export interface NowCalling { current: NowCall | null; recent: NowCall[] }

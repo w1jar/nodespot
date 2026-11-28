@@ -7,6 +7,9 @@
 // runs idle), serves the control API on /run/nodespot-node/control.sock and
 // logs to stderr. SIGHUP reloads the config; SIGINT and SIGTERM stop it.
 // Every exit path unkeys the transmitter.
+//
+// "nodespot-node calibrate" is a separate command (see calibrate.go): it
+// finds the best receive offset of an MMDVM modem.
 package main
 
 import (
@@ -45,6 +48,9 @@ const webUser = "nodespot"
 func main() { os.Exit(run(os.Args[1:], os.Stderr)) }
 
 func run(args []string, stderr io.Writer) (code int) {
+	if len(args) > 0 && args[0] == "calibrate" {
+		return runCalibrate(args[1:], os.Stdin, os.Stdout, stderr)
+	}
 	fs := flag.NewFlagSet("nodespot-node", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfgPath := fs.String("config", node.DefaultConfigPath, "config file")
@@ -127,6 +133,7 @@ func run(args []string, stderr io.Writer) (code int) {
 			mr.stop()
 		}()
 		opts.Modem, opts.ModemConfig = mr.d, ms
+		opts.RF = mr.ep
 	}
 	e, err := node.New(cfg, opts)
 	if err != nil {

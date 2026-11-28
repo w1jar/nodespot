@@ -89,6 +89,20 @@ type ModemStatus struct {
 	// did not fit in the host queue.
 	NAKs    uint64 `json:"naks"`
 	Dropped uint64 `json:"dropped"`
+	// Receive is true when the driver is set up to receive DMR in simplex
+	// and never transmit.
+	Receive bool `json:"receive,omitempty"`
+	// RXCall is the call being received from RF, nil when none.
+	RXCall *RXCall `json:"rxCall,omitempty"`
 	// Error is the last problem (open failure, no answer, a NAK).
 	Error string `json:"error,omitempty"`
+}
+
+// RXCall is a call being received from RF.
+type RXCall struct {
+	Slot    int       `json:"slot"`
+	Src     uint32    `json:"src"`
+	Dst     uint32    `json:"dst"`
+	Private bool      `json:"private,omitempty"`
+	Since   time.Time `json:"since"`
 }

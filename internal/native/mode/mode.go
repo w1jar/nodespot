@@ -63,12 +63,17 @@ const (
 
 // Talker is who is talking on the network now (or was, in Heard).
 type Talker struct {
-	Callsign string    `json:"callsign,omitempty"`
-	Name     string    `json:"name,omitempty"`
-	Place    string    `json:"place,omitempty"`
-	ID       uint32    `json:"id,omitempty"`     // DMR or NXDN radio id, when the network sends one
-	Target   string    `json:"target,omitempty"` // talkgroup or room the call is on
-	Since    time.Time `json:"since"`
+	Callsign string `json:"callsign,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Place    string `json:"place,omitempty"`
+	ID       uint32 `json:"id,omitempty"`     // DMR or NXDN radio id, when the network sends one
+	Target   string `json:"target,omitempty"` // talkgroup or room the call is on
+	// Via is "rf" when the talker is on this node's own radio (a handheld
+	// on the MMDVM modem) and empty when the network sent the call. Slot is
+	// the DMR slot of an RF call.
+	Via   string    `json:"via,omitempty"`
+	Slot  int       `json:"slot,omitempty"`
+	Since time.Time `json:"since"`
 }
 
 // EventKind says what an Event reports.
@@ -164,6 +169,8 @@ type Heard struct {
 	Place    string        `json:"place,omitempty"`
 	ID       uint32        `json:"id,omitempty"`
 	Target   string        `json:"target,omitempty"`
+	Via      string        `json:"via,omitempty"` // "rf": heard on the node's own radio
+	Slot     int           `json:"slot,omitempty"`
 	Start    time.Time     `json:"start"`
 	End      time.Time     `json:"end,omitempty"`
 	Duration time.Duration `json:"durationNs,omitempty"`

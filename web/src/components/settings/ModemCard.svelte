@@ -1,11 +1,11 @@
 <script lang="ts">
   // The MMDVM modem (the mmdvm preset): what the node found on the serial port, the Pi's serial setup, and the admin actions
   // "Prepare the Pi" (frees the UART for the hat) and "Reset modem" (closes the port and opens it again). Early preview: the
-  // node only detects the hat and watches its status; it does not receive or transmit yet.
+  // node sets up the hat in simplex and passes DMR calls heard from a handheld on slot 2 to the linked DMR network. It never transmits on RF yet.
   import { api } from '../../lib/api';
   import { isAdmin } from '../../lib/store.svelte';
   import { toast, toastError } from '../../lib/toast.svelte';
-  import { modemBoardText, modemFlagList, modemStateText, prepareText } from '../../lib/mmdvm';
+  import { modemBoardText, modemFlagList, modemRXText, modemStateText, prepareText } from '../../lib/mmdvm';
   import type { ModemInfo, RFDeviceCheck, RFPrepareResult } from '../../lib/types';
 
   const admin = $derived(isAdmin());
@@ -31,6 +31,7 @@
     busy = 'reset';
     try { m = await api.modemReset(); toast('Modem reopened'); } catch (e) { toastError(e); } finally { busy = ''; }
   }
+  const rx = $derived(modemRXText(m));
   const flags = $derived(modemFlagList(m?.flags));
   const reboot = $derived(!!prep?.rebootNeeded || !!chk?.rebootNeeded);
   const ok = $derived(!!m?.connected);
@@ -41,7 +42,7 @@
     <h2 class="text-base font-semibold">MMDVM modem</h2>
     <span class="badge" class:text-ok={ok} class:text-danger={!!m?.running && !ok} data-testid="modem-state">{modemStateText(m)}</span>
   </div>
-  <p class="text-xs text-muted">Early preview: the node identifies the hat and watches its status. It does not receive or transmit on RF yet.</p>
+  <p class="text-xs text-muted">Early preview: the node sets up the hat in simplex and passes DMR calls heard from a handheld on slot 2 to the linked DMR network. It never transmits on RF yet.</p>
 
   {#if m?.running}
     <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
@@ -51,6 +52,7 @@
         <dt class="text-muted">Firmware</dt><dd>{m.firmware || 'Unknown'}{m.buildDate ? `, built ${m.buildDate}` : ''}</dd>
         <dt class="text-muted">Protocol</dt><dd>{m.protocol ?? 'Unknown'}</dd>
         {#if m.modes?.length}<dt class="text-muted">Modes</dt><dd>{m.modes.join(', ')}</dd>{/if}
+        {#if rx}<dt class="text-muted">Receive</dt><dd data-testid="modem-rx" class:text-ok={m.rxState === 'receiving'}>{rx}</dd>{/if}
         <dt class="text-muted">State</dt><dd>{m.state || 'Unknown'}</dd>
         <dt class="text-muted">Flags</dt><dd>{flags.length ? flags.join(', ') : 'None'}</dd>
         <dt class="text-muted">Overflows</dt><dd class="tabular-nums">RX {m.rxOverflows}, TX {m.txOverflows}</dd>
@@ -58,6 +60,7 @@
       {#if m.reopens}<dt class="text-muted">Reopened</dt><dd class="tabular-nums">{m.reopens} time{m.reopens === 1 ? '' : 's'}</dd>{/if}
       {#if m.lastError}<dt class="text-muted">Last error</dt><dd class="text-danger" data-testid="modem-error">{m.lastError}</dd>{/if}
     </dl>
+    {#if m.notes?.length}<ul class="list-disc pl-5 text-xs text-muted" data-testid="modem-notes">{#each m.notes as n}<li>{n}</li>{/each}</ul>{/if}
   {:else if m?.configured}
     <p class="text-sm text-muted">Save the settings below; the node restarts to open the modem.</p>
   {/if}

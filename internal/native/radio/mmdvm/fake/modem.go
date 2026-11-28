@@ -81,6 +81,8 @@ type Modem struct {
 	shortLC    [][]byte
 	freq       []byte
 	vseq       [2]uint8
+	rxErr      *RXErrorModel
+	rxBursts   uint64
 }
 
 // New returns a fake modem.
@@ -366,6 +368,7 @@ func (m *Modem) Inject(b []byte) error { return m.send(b) }
 // InjectDMR sends one received burst on slot 1 or 2 with the given control
 // byte (see mmdvm.ParseControl).
 func (m *Modem) InjectDMR(slot int, control byte, b dmr.Burst) error {
+	m.applyErrors(control, &b)
 	return m.send(mmdvm.DMRData(slot, control, &b))
 }
 
@@ -467,21 +470,5 @@ func (m *Modem) freqOK(p []byte) bool {
 	if len(p) >= 14 {
 		pocsag = u(10)
 	}
-	inBand := func(f uint32) bool {
-		return (f >= 144_000_000 && f < 148_000_000) || (f >= 219_000_000 && f < 225_000_000) ||
-			(f >= 420_000_000 && f < 475_000_000) || (f >= 842_000_000 && f < 950_000_000)
-	}
-	banned := func(f uint32) bool {
-		return (f >= 145_800_000 && f <= 146_000_000) || (f >= 435_000_000 && f <= 438_000_000)
-	}
-	if !inBand(rx) && !inBand(tx) || !inBand(pocsag) {
-		return false
-	}
-	if banned(rx) || banned(tx) || banned(pocsag) {
-		return false
-	}
-	if !m.o.DualBand && (rx < 420_000_000 || tx < 420_000_000) {
-		return false
-	}
-	return true
+	return mmdvm.Accepts(rx, tx, pocsag, mmdvm.FreqRules{UHFOnly: !m.o.DualBand})
 }

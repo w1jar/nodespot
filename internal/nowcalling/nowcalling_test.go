@@ -116,3 +116,29 @@ func TestResolveAndRefill(t *testing.T) {
 		t.Fatal("refill without change emitted")
 	}
 }
+
+// An RF talker carries its via-RF marker and slot into the current call, the
+// recent list and the seed from the last-heard list.
+func TestViaRF(t *testing.T) {
+	tr, c, _ := newT()
+	tr.TalkStart(mode.BM, mode.Talker{ID: 1234567, Target: "91", Via: "rf", Slot: 2})
+	if cur := tr.Snapshot().Current; cur == nil || cur.Via != "rf" || cur.Slot != 2 || cur.DMRID != "1234567" {
+		t.Fatalf("current %+v", cur)
+	}
+	c.add(2 * time.Second)
+	tr.TalkEnd(mode.BM)
+	if r := tr.Snapshot().Recent; len(r) != 1 || r[0].Via != "rf" || r[0].Slot != 2 {
+		t.Fatalf("recent %+v", r)
+	}
+	tr2, _, _ := newT()
+	start := c.t.Add(-time.Minute)
+	tr2.Seed([]mode.Heard{{Mode: mode.BM, ID: 1234567, Target: "91", Via: "rf", Slot: 2, Start: start, End: start.Add(3 * time.Second)}})
+	if r := tr2.Snapshot().Recent; len(r) != 1 || r[0].Via != "rf" || r[0].Slot != 2 {
+		t.Fatalf("seeded %+v", r)
+	}
+	// A network talker has neither.
+	tr.TalkStart(mode.BM, mode.Talker{ID: 7654321, Target: "91"})
+	if cur := tr.Snapshot().Current; cur == nil || cur.Via != "" || cur.Slot != 0 {
+		t.Fatalf("network talker %+v", cur)
+	}
+}
